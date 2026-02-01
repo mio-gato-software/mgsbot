@@ -90,12 +90,16 @@ async function processConversation(
 
 	// In groups, add instruction for selective response
 	let effectiveSystemPrompt = systemPrompt;
-	if (isGroupChat(ctx) && !isBotMentionedOrRepliedTo(ctx, botInfo.id)) {
+	const willDefinitelyRespond =
+		!isGroupChat(ctx) || isBotMentionedOrRepliedTo(ctx, botInfo.id);
+	if (!willDefinitelyRespond) {
 		effectiveSystemPrompt += `\n\n## Group response rule\nThis is a group chat and you were NOT directly mentioned or replied to. Only respond if you have something genuinely relevant or useful to contribute. If you have nothing meaningful to add, respond with exactly: ${SILENCE_TOKEN}`;
 	}
 
-	// Show typing indicator
-	await ctx.replyWithChatAction("typing");
+	// Show typing indicator only when we know the bot will respond
+	if (willDefinitelyRespond) {
+		await ctx.replyWithChatAction("typing");
+	}
 
 	// Generate response
 	const responseText = await generateResponse(effectiveSystemPrompt, contents);
@@ -103,6 +107,11 @@ async function processConversation(
 	// Check for silence
 	if (responseText.trim() === SILENCE_TOKEN) {
 		return;
+	}
+
+	// Show typing now if we didn't before (bot decided to respond voluntarily)
+	if (!willDefinitelyRespond) {
+		await ctx.replyWithChatAction("typing");
 	}
 
 	// Save bot response to short-term
