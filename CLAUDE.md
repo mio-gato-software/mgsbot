@@ -4,13 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-andrordbot is a conversational Telegram bot built with **grammY** + **Google Gemini**, running on **Bun**. It features a 3-tier memory system (permanent, long-term, short-term) and responds naturally to text, voice notes, and audio files.
+andrordbot is a conversational Telegram bot built with **grammY** + **Google Gemini**, running on **Bun**. It features a 3-tier memory system (permanent, long-term, short-term) and responds naturally to text, voice notes, audio files, and photos/images.
 
 ## Commands
 
 ```bash
 bun install          # Install dependencies
-bun run index.ts     # Run the bot
+bun run start        # Run the bot
+bun run dev          # Run the bot in watch mode
 ```
 
 TypeScript is executed directly by Bun (no emit).
@@ -31,10 +32,10 @@ bun run format       # Format only
 index.ts                     ← Entry point: bot setup, handler registration, bot.start()
 src/
   types.ts                   ← TypeScript interfaces for memory structures
-  ai.ts                      ← GoogleGenAI instance, generateResponse(), transcribeAudio(), evaluateMemory()
+  ai.ts                      ← GoogleGenAI instance, generateResponse(), transcribeAudio(), describeImage(), evaluateMemory()
   memory.ts                  ← Read/write for all three memory tiers
   prompt.ts                  ← Prompt assembly: buildSystemPrompt(), buildContents()
-  handlers.ts                ← grammY handlers: onVoice(), onAudio(), onMessage()
+  handlers.ts                ← grammY handlers: onVoice(), onAudio(), onPhoto(), onMessage()
 memory/
   permanent.md               ← Manual config by bot creator (personality, rules, response behavior)
   long-term.json             ← Shared global memory, auto-managed
@@ -59,7 +60,7 @@ audios/                      ← Downloaded audio files
 
 ## Environment
 
-Requires a `.env` file with `BOT_TOKEN` (Telegram bot token) and `GOOGLE_GENAI_API_KEY` (Google GenAI API key).
+Requires a `.env` file with `BOT_TOKEN` (Telegram bot token), `GOOGLE_API_KEY` (Google GenAI API key), and optionally `NODE_ENV` (set to `development` for verbose logging in `ai.ts` and `handlers.ts`).
 
 ## Tech Stack
 
@@ -68,4 +69,5 @@ Requires a `.env` file with `BOT_TOKEN` (Telegram bot token) and `GOOGLE_GENAI_A
 - **AI:** Google GenAI (`@google/genai` ^1) — Gemini 3 Flash Preview
 - **Language:** TypeScript (strict mode, ESNext target, bundler module resolution)
 - **Source code language:** English (variables, functions, comments, file names)
+- **Linter/Formatter:** Biome (`@biomejs/biome` ^2.3.13)
 - **Bot conversational language:** Adapts to user (default Spanish, configured in `memory/permanent.md`)
