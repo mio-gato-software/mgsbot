@@ -113,6 +113,36 @@ export async function describeImage(
 	}
 }
 
+export async function analyzeYouTube(
+	videoUrl: string,
+	userQuestion?: string,
+): Promise<string> {
+	try {
+		const prompt = userQuestion
+			? `The user shared this YouTube video and said: "${userQuestion}". Watch the video and respond to what they said.`
+			: "The user shared this YouTube video. Briefly describe what the video is about in Spanish so you can reference it in conversation.";
+
+		const parts: Part[] = [
+			{ fileData: { fileUri: videoUrl } },
+			{ text: prompt },
+		];
+
+		if (isDev) console.log("[analyzeYouTube] URL:", videoUrl);
+
+		const response = await ai.models.generateContent({
+			model: MODEL,
+			contents: createUserContent(parts),
+		});
+
+		const text = response.text ?? "[video analysis failed]";
+		if (isDev) console.log("[analyzeYouTube] Result:", text.slice(0, 200));
+		return text;
+	} catch (error) {
+		console.error("[analyzeYouTube] Error:", error);
+		return "[video analysis failed]";
+	}
+}
+
 export async function generateResponse(
 	systemPrompt: string,
 	contents: Content[],

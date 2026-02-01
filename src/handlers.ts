@@ -1,5 +1,6 @@
 import type { Bot, Context } from "grammy";
 import {
+	analyzeYouTube,
 	describeImage,
 	evaluateMemory,
 	generateResponse,
@@ -214,6 +215,42 @@ async function downloadImage(
 	return { filePath, mimeType };
 }
 
+const YOUTUBE_REGEX =
+	/(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]+)/;
+
+function extractYouTubeUrl(
+	ctx: Context,
+): { url: string; remainingText: string } | null {
+	const text = ctx.message?.text ?? "";
+	const entities = ctx.message?.entities ?? [];
+
+	// Check URL entities first
+	for (const entity of entities) {
+		if (entity.type === "url" || entity.type === "text_link") {
+			const entityUrl =
+				entity.type === "text_link"
+					? (entity.url ?? "")
+					: text.slice(entity.offset, entity.offset + entity.length);
+			if (YOUTUBE_REGEX.test(entityUrl)) {
+				const remaining = (
+					text.slice(0, entity.offset) +
+					text.slice(entity.offset + entity.length)
+				).trim();
+				return { url: entityUrl, remainingText: remaining };
+			}
+		}
+	}
+
+	// Regex fallback
+	const match = text.match(YOUTUBE_REGEX);
+	if (match) {
+		const remaining = text.replace(match[0], "").trim();
+		return { url: match[0], remainingText: remaining };
+	}
+
+	return null;
+}
+
 export function registerHandlers(bot: Bot): void {
 	const botToken = bot.token;
 
@@ -282,6 +319,20 @@ export function registerHandlers(bot: Bot): void {
 		const text = ctx.message.text;
 		if (!text) return;
 		const userName = getUserDisplayName(ctx);
+
+		const yt = extractYouTubeUrl(ctx);
+		if (yt) {
+			const analysis = await analyzeYouTube(
+				yt.url,
+				yt.remainingText || undefined,
+			);
+			const content = yt.remainingText
+				? `[YouTube video from ${userName}, message: "${yt.remainingText}"]: ${analysis}`
+				: `[YouTube video from ${userName}]: ${analysis}`;
+			await processConversation(ctx, content, userName);
+			return;
+		}
+
 		await processConversation(ctx, text, userName);
 	});
 }
