@@ -8,7 +8,12 @@ export async function buildSystemPrompt(
 ): Promise<string> {
 	const permanent = await loadPermanent();
 
-	let systemPrompt = permanent;
+	const now = new Date().toLocaleString("es-DO", {
+		timeZone: "America/Santo_Domingo",
+		dateStyle: "full",
+		timeStyle: "short",
+	});
+	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (hora de República Dominicana)`;
 
 	if (relevantMemories.length > 0) {
 		const memoriesText = relevantMemories

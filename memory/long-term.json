@@ -4,7 +4,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalized interaction.",
     "createdAt": 1769958731356,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 5
   },
   {
@@ -12,7 +12,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "User identification for personalized interaction.",
     "createdAt": 1769961564905,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -20,7 +20,7 @@
     "content": "Eliaquín Encarnación's sister has a habit of drinking baking soda daily for stomach issues.",
     "context": "The user shared this personal family information when asking for health advice.",
     "createdAt": 1769961048145,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -28,7 +28,7 @@
     "content": "Eliaquín has a sister who habitually drinks baking soda for stomach issues.",
     "context": "Relevant health-related family context; the bot advised against this due to risks like high blood pressure and kidney damage.",
     "createdAt": 1769960219287,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -36,7 +36,7 @@
     "content": "Tiene una hermana que consume bicarbonato de sodio diariamente para problemas estomacales por costumbre.",
     "context": "Información familiar y de salud relevante para futuras referencias o consejos.",
     "createdAt": 1769959792013,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -44,7 +44,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "The user identified themselves and the bot addressed them by this name.",
     "createdAt": 1769955362677,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -52,7 +52,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769955423608,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -60,7 +60,7 @@
     "content": "El usuario se llama Eliaquín Encarnación.",
     "context": "Identificación personal para futuras interacciones.",
     "createdAt": 1769956347141,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -68,7 +68,7 @@
     "content": "Su equipo favorito de béisbol son los Leones del Escogido.",
     "context": "Interés deportivo clave para personalización.",
     "createdAt": 1769956347141,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -76,7 +76,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769958322759,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -84,7 +84,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalization.",
     "createdAt": 1769959696020,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
   },
   {
@@ -92,15 +92,23 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification for personalized communication.",
     "createdAt": 1769958660427,
-    "lastAccessed": 1769961584727,
+    "lastAccessed": 1769961763415,
     "importance": 4
+  },
+  {
+    "id": "mem_1769961773434_icx4r5",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Basic user identification.",
+    "createdAt": 1769961773434,
+    "lastAccessed": 1769961773434,
+    "importance": 3
   },
   {
     "id": "mem_1769961594344_9u2xbc",
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "User identification for personalized interaction.",
     "createdAt": 1769961594344,
-    "lastAccessed": 1769961594344,
+    "lastAccessed": 1769961763415,
     "importance": 3
   },
   {
@@ -108,7 +116,7 @@
     "content": "The bot is acting in a persona of a Dominican lawyer ('abogada') who uses informal slang and a sassy tone.",
     "context": "Maintaining persona consistency in future interactions.",
     "createdAt": 1769961594344,
-    "lastAccessed": 1769961594344,
+    "lastAccessed": 1769961763415,
     "importance": 3
   },
   {
@@ -328,11 +336,19 @@
     "importance": 3
   },
   {
+    "id": "mem_1769961773434_tvn89k",
+    "content": "Eliaquín is testing and providing the bot with new capabilities, specifically related to time synchronization and message formatting.",
+    "context": "Indicates the user's role as someone who configures or develops the bot's features.",
+    "createdAt": 1769961773434,
+    "lastAccessed": 1769961773434,
+    "importance": 2
+  },
+  {
     "id": "mem_1769961594344_8bs6u2",
     "content": "The eagle emoji (🦅) is a signature element of the bot's current persona.",
     "context": "Stylistic preference mentioned during testing.",
     "createdAt": 1769961594344,
-    "lastAccessed": 1769961594344,
+    "lastAccessed": 1769961763415,
     "importance": 2
   },
   {
@@ -379,22 +395,6 @@
     "id": "mem_1769959792013_7m9ope",
     "content": "Tiene interés en la programación, específicamente en las diferencias entre Rust y TypeScript.",
     "context": "Intereses técnicos y profesionales.",
-    "createdAt": 1769959792013,
-    "lastAccessed": 1769960212262,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769959792013_qcvnr6",
-    "content": "Muestra interés por la exploración espacial y la llegada del hombre a Marte.",
-    "context": "Temas de interés personal.",
-    "createdAt": 1769959792013,
-    "lastAccessed": 1769960212262,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769959792013_1belxb",
-    "content": "Utiliza expresiones coloquiales dominicanas (ej. 'Ke lo ke').",
-    "context": "Estilo de comunicación y trasfondo cultural.",
     "createdAt": 1769959792013,
     "lastAccessed": 1769960212262,
     "importance": 2
