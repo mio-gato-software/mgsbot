@@ -4,12 +4,15 @@ import { generateResponse } from "./ai.ts";
 import type {
 	ConversationMessage,
 	LongTermMemoryEntry,
+	MemberFactExtraction,
+	MemberMemory,
 	ShortTermMemory,
 } from "./types.ts";
 
 const PERMANENT_PATH = "./memory/permanent.md";
 const LONG_TERM_PATH = "./memory/long-term.json";
 const SHORT_TERM_DIR = "./memory/short-term";
+const MEMBER_MEMORY_PATH = "./memory/members.json";
 
 const SUMMARIZE_THRESHOLD = 30;
 const SUMMARIZE_COUNT = 15;
@@ -193,6 +196,66 @@ export async function addMessageToShortTerm(
 	}
 
 	await saveShortTerm(memory);
+}
+
+// --- Member Memory ---
+
+function normalizeName(name: string): string {
+	return name
+		.toLowerCase()
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "");
+}
+
+export async function loadMemberMemory(): Promise<MemberMemory> {
+	try {
+		const data = await readFile(MEMBER_MEMORY_PATH, "utf-8");
+		return JSON.parse(data) as MemberMemory;
+	} catch {
+		return {};
+	}
+}
+
+async function saveMemberMemory(data: MemberMemory): Promise<void> {
+	await writeFile(MEMBER_MEMORY_PATH, JSON.stringify(data, null, 2));
+}
+
+export async function addMemberFacts(
+	facts: MemberFactExtraction[],
+): Promise<void> {
+	if (facts.length === 0) return;
+	const data = await loadMemberMemory();
+	const now = Date.now();
+
+	for (const fact of facts) {
+		const normalizedNew = normalizeName(fact.member);
+
+		// Find existing member key by normalized comparison
+		let existingKey: string | undefined;
+		for (const key of Object.keys(data)) {
+			if (normalizeName(key) === normalizedNew) {
+				existingKey = key;
+				break;
+			}
+		}
+
+		const memberKey = existingKey ?? fact.member;
+		if (!data[memberKey]) {
+			data[memberKey] = [];
+		}
+
+		// Find existing fact with the same key
+		const existingIndex = data[memberKey].findIndex((f) => f.key === fact.key);
+		const newFact = { key: fact.key, content: fact.content, updatedAt: now };
+
+		if (existingIndex >= 0) {
+			data[memberKey][existingIndex] = newFact;
+		} else {
+			data[memberKey].push(newFact);
+		}
+	}
+
+	await saveMemberMemory(data);
 }
 
 // --- Initialization ---

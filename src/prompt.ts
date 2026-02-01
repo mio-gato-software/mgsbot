@@ -1,10 +1,15 @@
 import type { Content } from "@google/genai";
 import { loadPermanent } from "./memory.ts";
-import type { LongTermMemoryEntry, ShortTermMemory } from "./types.ts";
+import type {
+	LongTermMemoryEntry,
+	MemberMemory,
+	ShortTermMemory,
+} from "./types.ts";
 
 export async function buildSystemPrompt(
 	relevantMemories: LongTermMemoryEntry[],
 	previousSummary: string,
+	memberMemory: MemberMemory,
 ): Promise<string> {
 	const permanent = await loadPermanent();
 
@@ -20,6 +25,22 @@ export async function buildSystemPrompt(
 			.map((m) => `- ${m.content} (context: ${m.context})`)
 			.join("\n");
 		systemPrompt += `\n\n## Long-term memories\nThings you remember from past interactions:\n${memoriesText}`;
+	}
+
+	const memberNames = Object.keys(memberMemory);
+	if (memberNames.length > 0) {
+		let memberSection =
+			"\n\n## Lo que sabes de los miembros\nEsta información es contexto interno. NO la recites ni repitas. Úsala solo cuando sea orgánicamente relevante.";
+		for (const name of memberNames) {
+			const facts = memberMemory[name];
+			if (facts.length > 0) {
+				memberSection += `\n### ${name}`;
+				for (const fact of facts) {
+					memberSection += `\n  - ${fact.content}`;
+				}
+			}
+		}
+		systemPrompt += memberSection;
 	}
 
 	if (previousSummary) {

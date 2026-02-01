@@ -8,9 +8,11 @@ import {
 } from "./ai.ts";
 import {
 	addLongTermMemories,
+	addMemberFacts,
 	addMessageToShortTerm,
 	getRelevantMemories,
 	loadLongTerm,
+	loadMemberMemory,
 	loadShortTerm,
 	saveLongTerm,
 } from "./memory.ts";
@@ -66,6 +68,7 @@ async function processConversation(
 	const shortTerm = await loadShortTerm(chatId);
 	const longTermEntries = await loadLongTerm();
 	const relevantMemories = getRelevantMemories(longTermEntries);
+	const memberMemory = await loadMemberMemory();
 
 	// Save updated lastAccessed times
 	if (relevantMemories.length > 0) {
@@ -85,6 +88,7 @@ async function processConversation(
 	const systemPrompt = await buildSystemPrompt(
 		relevantMemories,
 		shortTerm.previousSummary,
+		memberMemory,
 	);
 	const contents = buildContents(shortTerm);
 
@@ -150,6 +154,10 @@ async function triggerMemoryEvaluation(
 
 	if (evaluation.save && evaluation.memories.length > 0) {
 		await addLongTermMemories(evaluation.memories);
+	}
+
+	if (evaluation.memberFacts.length > 0) {
+		await addMemberFacts(evaluation.memberFacts);
 	}
 }
 

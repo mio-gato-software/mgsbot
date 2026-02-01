@@ -233,15 +233,20 @@ export async function generateResponse(
 export async function evaluateMemory(
 	recentMessages: string,
 ): Promise<MemoryEvaluation> {
-	const prompt = `Analyze the following conversation excerpt. Determine if there is any information worth remembering long-term (facts about users, preferences, important events, decisions made, etc.).
+	const prompt = `Analiza el siguiente extracto de conversación. Haz dos cosas:
 
-Respond ONLY with valid JSON in this exact format:
-{"save": boolean, "memories": [{"content": "what to remember", "context": "why it matters", "importance": N}]}
+1. **Memorias generales**: información compartida que vale la pena recordar a largo plazo (hechos, preferencias, eventos importantes, decisiones, etc.).
+2. **Hechos por miembro**: datos personales sobre personas específicas mencionadas en la conversación (eventos de vida, trabajo, preferencias, logros, relaciones, etc.). Usa un key corto en español para cada hecho (ej: "estado-civil", "empleo", "telefono", "hobby", "mascota"). Si un hecho actualiza algo previo, usa el mismo key para reemplazarlo.
 
-Where importance is 1-5 (1=trivial, 5=critical).
-If nothing is worth remembering, respond with: {"save": false, "memories": []}
+Miembros conocidos: Eliaquin, Jey, Wispe, Brenda, Gil, Alejandro, Bonny.
 
-Conversation:
+Responde SOLO con JSON válido en este formato exacto:
+{"save": boolean, "memories": [{"content": "qué recordar", "context": "por qué importa", "importance": N}], "memberFacts": [{"member": "Nombre", "key": "tema", "content": "el hecho completo"}]}
+
+Donde importance es 1-5 (1=trivial, 5=crítico).
+Si no hay nada que recordar: {"save": false, "memories": [], "memberFacts": []}
+
+Conversación:
 ${recentMessages}`;
 
 	const response = await ai.models.generateContent({
@@ -250,13 +255,16 @@ ${recentMessages}`;
 	});
 
 	logTokenUsage("evaluateMemory", response);
-	const text = response.text ?? '{"save": false, "memories": []}';
+	const text =
+		response.text ?? '{"save": false, "memories": [], "memberFacts": []}';
 	try {
 		// Extract JSON from possible markdown code block
 		const jsonMatch = text.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) return { save: false, memories: [] };
-		return JSON.parse(jsonMatch[0]) as MemoryEvaluation;
+		if (!jsonMatch) return { save: false, memories: [], memberFacts: [] };
+		const parsed = JSON.parse(jsonMatch[0]) as MemoryEvaluation;
+		parsed.memberFacts = parsed.memberFacts ?? [];
+		return parsed;
 	} catch {
-		return { save: false, memories: [] };
+		return { save: false, memories: [], memberFacts: [] };
 	}
 }

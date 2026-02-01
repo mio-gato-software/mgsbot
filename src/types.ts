@@ -29,4 +29,21 @@ export interface MemoryEvaluation {
 		context: string;
 		importance: number;
 	}>;
+	memberFacts: MemberFactExtraction[];
+}
+
+export interface MemberFact {
+	key: string;
+	content: string;
+	updatedAt: number;
+}
+
+export interface MemberMemory {
+	[memberName: string]: MemberFact[];
+}
+
+export interface MemberFactExtraction {
+	member: string;
+	key: string;
+	content: string;
 }
