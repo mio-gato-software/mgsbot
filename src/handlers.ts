@@ -97,7 +97,7 @@ async function processConversation(
 	const willDefinitelyRespond =
 		!isGroupChat(ctx) || isBotMentionedOrRepliedTo(ctx, botInfo.id);
 	if (!willDefinitelyRespond) {
-		effectiveSystemPrompt += `\n\n## Group response rule\nThis is a group chat and you were NOT directly mentioned or replied to. Only respond if you have something genuinely relevant or useful to contribute. If you have nothing meaningful to add, respond with exactly: ${SILENCE_TOKEN}`;
+		effectiveSystemPrompt += `\n\n## Group response rule\nThis is a group chat and you were NOT directly mentioned or replied to. You MUST respond with exactly ${SILENCE_TOKEN} unless the message is clearly directed at you by context (e.g. someone is talking to you or about you). Do NOT respond just because you find the topic interesting or have an opinion. When in doubt, choose ${SILENCE_TOKEN}.`;
 	}
 
 	// Show typing indicator only when we know the bot will respond

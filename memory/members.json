@@ -1,88 +1,145 @@
 {
-  "Brenda": [
-    {
-      "key": "empleo",
-      "content": "Es abogada de profesión.",
-      "updatedAt": 1769979514812
-    },
-    {
-      "key": "preferencias",
-      "content": "Le gustan los perfumes de nicho y las cenas de lujo.",
-      "updatedAt": 1769979502099
-    },
-    {
-      "key": "preferencia",
-      "content": "Le gustan las cenas de lujo y los perfumes de nicho.",
-      "updatedAt": 1769979514812
-    }
-  ],
-  "Eliaquin": [
-    {
-      "key": "tecnologia",
-      "content": "Tiene una computadora que suele quedarse 'dormida' o lenta.",
-      "updatedAt": 1769979502099
-    },
-    {
-      "key": "comportamiento",
-      "content": "Borró mensajes del chat que el Bot le dirigió a Bonny.",
-      "updatedAt": 1769979526471
-    },
-    {
-      "key": "percepcion",
-      "content": "Fue calificado como 'odioso' y 'envidioso' por Bonny y el Bot tras borrar mensajes.",
-      "updatedAt": 1769979526471
-    },
-    {
-      "key": "accion-reciente",
-      "content": "Borró los mensajes que el Bot le envió a Bonny.",
-      "updatedAt": 1769979532595
-    },
-    {
-      "key": "equipo",
-      "content": "Utiliza una computadora que activa automáticamente al bot al despertar del modo de suspensión.",
-      "updatedAt": 1769979538617
-    },
-    {
-      "key": "intencion",
-      "content": "Planea modificar al bot para que sea más amable en futuras interacciones.",
-      "updatedAt": 1769979538617
-    },
-    {
-      "key": "conducta",
-      "content": "Borró mensajes de la conversación de forma deliberada.",
-      "updatedAt": 1769979538617
-    }
-  ],
-  "Bonny": [
-    {
-      "key": "relacion-brenda",
-      "content": "Es considerado el favorito por Brenda y mostró interés en su bienestar financiero sugiriendo un GoFundMe.",
-      "updatedAt": 1769979502099
-    },
-    {
-      "key": "relacion",
-      "content": "Es considerado el favorito del Bot y ha intentado realizar colectas de dinero para ella.",
-      "updatedAt": 1769979523188
-    },
-    {
-      "key": "apodo",
-      "content": "El Bot se refiere a él como 'More'.",
-      "updatedAt": 1769979526471
-    },
-    {
-      "key": "relacion-bot",
-      "content": "Es considerado el miembro favorito del Bot.",
-      "updatedAt": 1769979526471
-    },
-    {
-      "key": "incidente",
-      "content": "No pudo leer los mensajes que el Bot le envió porque fueron borrados por Eliaquín.",
-      "updatedAt": 1769979532595
-    },
-    {
-      "key": "opinion",
-      "content": "Considera odiosa la acción de Eliaquin de borrar los mensajes del chat.",
-      "updatedAt": 1769979538617
-    }
-  ]
+	"Brenda": [
+		{
+			"key": "empleo",
+			"content": "Es abogada de profesión.",
+			"updatedAt": 1769979514812
+		},
+		{
+			"key": "preferencias",
+			"content": "Le gustan los perfumes de nicho y las cenas de lujo.",
+			"updatedAt": 1769979502099
+		},
+		{
+			"key": "preferencia",
+			"content": "Le gustan las cenas de lujo y los perfumes de nicho.",
+			"updatedAt": 1769979514812
+		}
+	],
+	"Eliaquin": [
+		{
+			"key": "tecnologia",
+			"content": "Tiene una computadora que suele quedarse 'dormida' o lenta.",
+			"updatedAt": 1769979502099
+		},
+		{
+			"key": "comportamiento",
+			"content": "Borró mensajes del chat que el Bot le dirigió a Bonny.",
+			"updatedAt": 1769979526471
+		},
+		{
+			"key": "percepcion",
+			"content": "Fue calificado como 'odioso' y 'envidioso' por Bonny y el Bot tras borrar mensajes.",
+			"updatedAt": 1769979526471
+		},
+		{
+			"key": "accion-reciente",
+			"content": "Borró los mensajes que el Bot le envió a Bonny.",
+			"updatedAt": 1769979532595
+		},
+		{
+			"key": "equipo",
+			"content": "Utiliza una computadora que activa automáticamente al bot al despertar del modo de suspensión.",
+			"updatedAt": 1769979538617
+		},
+		{
+			"key": "intencion",
+			"content": "Planea modificar al bot para que sea más amable en futuras interacciones.",
+			"updatedAt": 1769979538617
+		},
+		{
+			"key": "conducta",
+			"content": "Borró mensajes de la conversación de forma deliberada.",
+			"updatedAt": 1769979538617
+		},
+		{
+			"key": "intencion-bot",
+			"content": "Planea modificar al bot para que sea más amable en el futuro.",
+			"updatedAt": 1769979646868
+		},
+		{
+			"key": "herramientas",
+			"content": "Tiene una computadora que el bot describe como de 'sueño pesado' por su lentitud al activar procesos.",
+			"updatedAt": 1769979646868
+		},
+		{
+			"key": "gestion-mensajes",
+			"content": "Borró mensajes del chat recientemente, acción que fue tildada de 'odiosa'.",
+			"updatedAt": 1769979685496
+		},
+		{
+			"key": "modificacion-bot",
+			"content": "Tiene la intención de modificar la programación del bot para hacerlo más amable próximamente.",
+			"updatedAt": 1769979685496
+		},
+		{
+			"key": "preferencia-bot",
+			"content": "Desea modificar al bot para que sea más amable y menos sarcástico.",
+			"updatedAt": 1769979716912
+		}
+	],
+	"Bonny": [
+		{
+			"key": "relacion-brenda",
+			"content": "Es considerado el favorito por Brenda y mostró interés en su bienestar financiero sugiriendo un GoFundMe.",
+			"updatedAt": 1769979502099
+		},
+		{
+			"key": "relacion",
+			"content": "Es considerado el favorito del Bot y ha intentado realizar colectas de dinero para ella.",
+			"updatedAt": 1769979523188
+		},
+		{
+			"key": "apodo",
+			"content": "El Bot se refiere a él como 'More'.",
+			"updatedAt": 1769979526471
+		},
+		{
+			"key": "relacion-bot",
+			"content": "Es considerado el miembro favorito del Bot.",
+			"updatedAt": 1769979526471
+		},
+		{
+			"key": "incidente",
+			"content": "No pudo leer los mensajes que el Bot le envió porque fueron borrados por Eliaquín.",
+			"updatedAt": 1769979532595
+		},
+		{
+			"key": "opinion",
+			"content": "Considera odiosa la acción de Eliaquin de borrar los mensajes del chat.",
+			"updatedAt": 1769979538617
+		},
+		{
+			"key": "opinion-eliaquin",
+			"content": "Consideró que Eliaquín fue 'odioso' al borrar los mensajes de la conversación.",
+			"updatedAt": 1769979646868
+		},
+		{
+			"key": "opinion-reciente",
+			"content": "Consideró odioso el comportamiento de Eliaquin al borrar los mensajes.",
+			"updatedAt": 1769979685496
+		},
+		{
+			"key": "preferencia-bot",
+			"content": "Según el bot, disfruta de su personalidad sarcástica y con carácter.",
+			"updatedAt": 1769979716912
+		}
+	],
+	"Jey": [
+		{
+			"key": "percepcion-bot",
+			"content": "Cree que el bot actúa siempre a la ofensiva para intentar destacar por encima de los demás.",
+			"updatedAt": 1769979685496
+		},
+		{
+			"key": "relacion-bot",
+			"content": "El bot le tiene un respeto explícito y acepta sus críticas constructivas.",
+			"updatedAt": 1769979716912
+		},
+		{
+			"key": "opinion-bot",
+			"content": "Opina que el bot suele estar a la ofensiva y le sugirió bajar la intensidad de su carácter.",
+			"updatedAt": 1769979716912
+		}
+	]
 }
