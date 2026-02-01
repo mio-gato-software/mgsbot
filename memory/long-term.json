@@ -4,15 +4,31 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalized interaction.",
     "createdAt": 1769958731356,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961584727,
     "importance": 5
+  },
+  {
+    "id": "mem_1769961564905_yipof9",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "User identification for personalized interaction.",
+    "createdAt": 1769961564905,
+    "lastAccessed": 1769961584727,
+    "importance": 4
+  },
+  {
+    "id": "mem_1769961048145_hb0f2y",
+    "content": "Eliaquín Encarnación's sister has a habit of drinking baking soda daily for stomach issues.",
+    "context": "The user shared this personal family information when asking for health advice.",
+    "createdAt": 1769961048145,
+    "lastAccessed": 1769961584727,
+    "importance": 4
   },
   {
     "id": "mem_1769960219287_r5lm0a",
     "content": "Eliaquín has a sister who habitually drinks baking soda for stomach issues.",
     "context": "Relevant health-related family context; the bot advised against this due to risks like high blood pressure and kidney damage.",
     "createdAt": 1769960219287,
-    "lastAccessed": 1769960219287,
+    "lastAccessed": 1769961584727,
     "importance": 4
   },
   {
@@ -20,7 +36,7 @@
     "content": "Tiene una hermana que consume bicarbonato de sodio diariamente para problemas estomacales por costumbre.",
     "context": "Información familiar y de salud relevante para futuras referencias o consejos.",
     "createdAt": 1769959792013,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961584727,
     "importance": 4
   },
   {
@@ -28,7 +44,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "The user identified themselves and the bot addressed them by this name.",
     "createdAt": 1769955362677,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961584727,
     "importance": 4
   },
   {
@@ -36,7 +52,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769955423608,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961584727,
     "importance": 4
   },
   {
@@ -44,7 +60,7 @@
     "content": "El usuario se llama Eliaquín Encarnación.",
     "context": "Identificación personal para futuras interacciones.",
     "createdAt": 1769956347141,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961584727,
     "importance": 4
   },
   {
@@ -52,7 +68,7 @@
     "content": "Su equipo favorito de béisbol son los Leones del Escogido.",
     "context": "Interés deportivo clave para personalización.",
     "createdAt": 1769956347141,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961584727,
     "importance": 4
   },
   {
@@ -60,7 +76,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769958322759,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961584727,
     "importance": 4
   },
   {
@@ -68,7 +84,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalization.",
     "createdAt": 1769959696020,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961584727,
     "importance": 4
   },
   {
@@ -76,15 +92,71 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification for personalized communication.",
     "createdAt": 1769958660427,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961584727,
     "importance": 4
+  },
+  {
+    "id": "mem_1769961594344_9u2xbc",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "User identification for personalized interaction.",
+    "createdAt": 1769961594344,
+    "lastAccessed": 1769961594344,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769961594344_wuf3no",
+    "content": "The bot is acting in a persona of a Dominican lawyer ('abogada') who uses informal slang and a sassy tone.",
+    "context": "Maintaining persona consistency in future interactions.",
+    "createdAt": 1769961594344,
+    "lastAccessed": 1769961594344,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769961564905_7ejxh0",
+    "content": "The user was advised that health is a non-negotiable priority in a previous context.",
+    "context": "Follow-up on personal values or health advice given.",
+    "createdAt": 1769961564905,
+    "lastAccessed": 1769961584727,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769961511846_e3dact",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "User identification.",
+    "createdAt": 1769961511846,
+    "lastAccessed": 1769961584727,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769961242750_0dkye5",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Basic user identification.",
+    "createdAt": 1769961242750,
+    "lastAccessed": 1769961553736,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769961242750_yp1dwg",
+    "content": "The user has a sister who habitually drinks baking soda daily for stomach issues.",
+    "context": "Family health context mentioned by the user to seek advice.",
+    "createdAt": 1769961242750,
+    "lastAccessed": 1769961553736,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769961048145_h5lwef",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "The user is identified by this name throughout the conversation.",
+    "createdAt": 1769961048145,
+    "lastAccessed": 1769961229982,
+    "importance": 3
   },
   {
     "id": "mem_1769960219287_8cb67y",
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769960219287,
-    "lastAccessed": 1769960219287,
+    "lastAccessed": 1769961229982,
     "importance": 3
   },
   {
@@ -92,7 +164,7 @@
     "content": "Eliaquín is interested in technology (comparing Rust and TypeScript) and space exploration (Mars missions).",
     "context": "Helps tailor future technical or scientific discussions.",
     "createdAt": 1769960219287,
-    "lastAccessed": 1769960219287,
+    "lastAccessed": 1769961229982,
     "importance": 3
   },
   {
@@ -100,7 +172,7 @@
     "content": "El usuario se llama Eliaquín Encarnación.",
     "context": "Identidad del usuario.",
     "createdAt": 1769959792013,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961031498,
     "importance": 3
   },
   {
@@ -108,7 +180,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identifying the user for personalized future interactions.",
     "createdAt": 1769954540611,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961031498,
     "importance": 3
   },
   {
@@ -116,7 +188,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identifying the user for personalized interactions.",
     "createdAt": 1769954598872,
-    "lastAccessed": 1769960212262,
+    "lastAccessed": 1769961031498,
     "importance": 3
   },
   {
@@ -256,6 +328,54 @@
     "importance": 3
   },
   {
+    "id": "mem_1769961594344_8bs6u2",
+    "content": "The eagle emoji (🦅) is a signature element of the bot's current persona.",
+    "context": "Stylistic preference mentioned during testing.",
+    "createdAt": 1769961594344,
+    "lastAccessed": 1769961594344,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769961564905_qw9ppj",
+    "content": "Eliaquín likes to test the bot's technical limits, specifically formatting (bold, italics) and emoji rendering.",
+    "context": "User behavior and testing preferences.",
+    "createdAt": 1769961564905,
+    "lastAccessed": 1769961584727,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769961511846_88yre1",
+    "content": "The user has a sister who habitually drinks baking soda daily to treat stomach issues.",
+    "context": "Personal family health information that may be relevant for future follow-ups.",
+    "createdAt": 1769961511846,
+    "lastAccessed": 1769961553736,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769961242750_8vjop6",
+    "content": "The bot is adopting the persona of a lawyer ('abogada') in this interaction.",
+    "context": "Defines the specific role-play or persona the user expects or the bot has established.",
+    "createdAt": 1769961242750,
+    "lastAccessed": 1769961495952,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769961242750_jlr1w4",
+    "content": "The user is interested in testing the bot's technical capabilities, such as Markdown formatting (bold and italics).",
+    "context": "User behavior and preference for verifying bot functionality.",
+    "createdAt": 1769961242750,
+    "lastAccessed": 1769961495952,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769961048145_vjuibn",
+    "content": "Eliaquín Encarnación is interested in software development, specifically comparing Rust and TypeScript.",
+    "context": "The user initiated the conversation by asking for a comparison of these technologies.",
+    "createdAt": 1769961048145,
+    "lastAccessed": 1769961229982,
+    "importance": 2
+  },
+  {
     "id": "mem_1769959792013_7m9ope",
     "content": "Tiene interés en la programación, específicamente en las diferencias entre Rust y TypeScript.",
     "context": "Intereses técnicos y profesionales.",
@@ -277,126 +397,6 @@
     "context": "Estilo de comunicación y trasfondo cultural.",
     "createdAt": 1769959792013,
     "lastAccessed": 1769960212262,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769954540611_a5gmot",
-    "content": "The user speaks Spanish.",
-    "context": "Language preference for communication.",
-    "createdAt": 1769954540611,
-    "lastAccessed": 1769959780262,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769954598872_c6zxsb",
-    "content": "The user is bilingual, communicating in both Spanish and English.",
-    "context": "Language preference for future interactions.",
-    "createdAt": 1769954598872,
-    "lastAccessed": 1769959780262,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769954598872_4g8vku",
-    "content": "The user repeatedly offered to transcribe audio files for the AI, suggesting a misunderstanding of the bot's role or a specific test case.",
-    "context": "Behavioral pattern and context of previous confusion/interactions.",
-    "createdAt": 1769954598872,
-    "lastAccessed": 1769959780262,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769959696020_r7ixcd",
-    "content": "Eliaquín is interested in space exploration and the possibilities of humans reaching Mars.",
-    "context": "General interest for future conversation topics.",
-    "createdAt": 1769959696020,
-    "lastAccessed": 1769959780262,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769959696020_6tctza",
-    "content": "The user uses informal Dominican greetings like 'Ke lo ke?'.",
-    "context": "Communication style and cultural background preference.",
-    "createdAt": 1769959696020,
-    "lastAccessed": 1769959780262,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769958731356_3f5eet",
-    "content": "The user communicates using varied media including YouTube video links and audio messages.",
-    "context": "Communication preference and behavioral pattern.",
-    "createdAt": 1769958731356,
-    "lastAccessed": 1769959687417,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769958731356_e8915v",
-    "content": "The user recently experienced nasal congestion and was looking for appropriate medication advice.",
-    "context": "Recent health context regarding respiratory symptoms.",
-    "createdAt": 1769958731356,
-    "lastAccessed": 1769959687417,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769958660427_uddjgd",
-    "content": "Eliaquín is interested in space exploration and the feasibility of humans colonizing Mars.",
-    "context": "User preference/interest expressed via audio message.",
-    "createdAt": 1769958660427,
-    "lastAccessed": 1769958717472,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769958660427_xt767a",
-    "content": "Eliaquín is interested in stories regarding corporate scandals and high-profile financial crimes (e.g., the Dennis Kozlowski/Tyco case).",
-    "context": "User shared content related to this specific topic.",
-    "createdAt": 1769958660427,
-    "lastAccessed": 1769958717472,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769958317214_7eieo6",
-    "content": "Eliaquín is interested in historical or true crime stories involving corporate scandals and financial fraud, such as the case of Dennis Kozlowski.",
-    "context": "The user shared a video about the former Tyco CEO and commented on his lavish lifestyle and downfall.",
-    "createdAt": 1769958317214,
-    "lastAccessed": 1769958646796,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769958322759_dg0m28",
-    "content": "The user is interested in business scandals and true crime stories involving corporate fraud, specifically mentioning Dennis Kozlowski and Tyco International.",
-    "context": "User content preferences and interests.",
-    "createdAt": 1769958322759,
-    "lastAccessed": 1769958646796,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769958322759_2vtnbp",
-    "content": "The user sought information on a cough medication containing Guaifenesina and Dextrometorfano, indicating they or someone close to them may be experiencing respiratory symptoms.",
-    "context": "Health-related query context.",
-    "createdAt": 1769958322759,
-    "lastAccessed": 1769958646796,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769957368360_9c970f",
-    "content": "Eliaquín Encarnación is a fan of the Escogido baseball team.",
-    "context": "The user was discussing the team's celebration and size of their fan base.",
-    "createdAt": 1769957368360,
-    "lastAccessed": 1769958301437,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769957346176_6i8djb",
-    "content": "Eliaquín Encarnación recently inquired about the dosage of a cough medication containing Guaifenesin and Dextromethorphan.",
-    "context": "The user shared an image of the medication and asked for adult dosage instructions, suggesting a current cough or cold.",
-    "createdAt": 1769957346176,
-    "lastAccessed": 1769957358375,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769957300373_dbncyz",
-    "content": "Eliaquín Encarnación is a young man with dark curly hair.",
-    "context": "Description derived from a photo the user shared of himself.",
-    "createdAt": 1769957300373,
-    "lastAccessed": 1769957334350,
     "importance": 2
   }
 ]

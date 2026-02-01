@@ -114,6 +114,7 @@ async function processConversation(
 	// Reply
 	await ctx.reply(responseText, {
 		reply_to_message_id: isGroupChat(ctx) ? ctx.message?.message_id : undefined,
+		parse_mode: "Markdown",
 	});
 
 	// Trigger long-term memory evaluation every N messages
