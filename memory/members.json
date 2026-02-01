@@ -180,31 +180,5 @@
 			"updatedAt": 1769981621007
 		}
 	],
-	"Jey": [
-		{
-			"key": "percepcion-bot",
-			"content": "Cree que el bot actúa siempre a la ofensiva para intentar destacar por encima de los demás.",
-			"updatedAt": 1769979685496
-		},
-		{
-			"key": "relacion-bot",
-			"content": "El bot le tiene un respeto explícito y acepta sus críticas constructivas.",
-			"updatedAt": 1769979716912
-		},
-		{
-			"key": "opinion-bot",
-			"content": "Opina que el bot suele estar a la ofensiva y le sugirió bajar la intensidad de su carácter.",
-			"updatedAt": 1769979716912
-		},
-		{
-			"key": "observacion",
-			"content": "Reportó un fallo técnico en el equipo (se apagó la computadora) durante la conversación.",
-			"updatedAt": 1769980905239
-		},
-		{
-			"key": "equipo",
-			"content": "Su computadora presenta fallas recurrentes y se apaga inesperadamente.",
-			"updatedAt": 1769981621007
-		}
-	]
+	"Jey": []
 }
