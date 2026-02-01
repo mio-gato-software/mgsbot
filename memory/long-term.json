@@ -4,7 +4,7 @@
     "content": "Eliaquín Encarnación es el programador y creador del bot.",
     "context": "Eliaquín afirma explícitamente haber programado al bot y tener planes de ajustarlo.",
     "createdAt": 1769977822187,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -12,7 +12,7 @@
     "content": "Eliaquín Encarnación is the developer/administrator of the bot and is responsible for its updates and maintenance.",
     "context": "Eliaquín mentioned taking the bot out of the group to improve it and thanked users for help testing it.",
     "createdAt": 1769971275560,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -20,7 +20,7 @@
     "content": "Eliaquín Encarnación is the developer/creator of the bot and manages its technical updates.",
     "context": "Eliaquín mentioned taking the bot offline to improve her and thanked the group for help with testing.",
     "createdAt": 1769969851452,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -28,7 +28,7 @@
     "content": "Eliaquín Encarnación instructed the bot to stop interacting unless explicitly mentioned.",
     "context": "Direct operational command from the creator to regulate bot behavior in the group chat.",
     "createdAt": 1769968705731,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -36,7 +36,7 @@
     "content": "Eliaquín Encarnación is the creator/developer of the bot.",
     "context": "Directly stated by the bot and Eliaquín regarding the bot's development and optimization.",
     "createdAt": 1769968359264,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -44,7 +44,7 @@
     "content": "The user's name is Bonny.",
     "context": "Identified throughout the conversation; essential for personalization.",
     "createdAt": 1769967203697,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -52,7 +52,7 @@
     "content": "Eliaquín Encarnación is the creator/developer of the bot.",
     "context": "The bot refers to him as 'mi creador' and he mentions updating its code.",
     "createdAt": 1769966269648,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -60,7 +60,7 @@
     "content": "Eliaquín Encarnación explicitly requested not to be called 'jefe' (boss).",
     "context": "User preference regarding how the bot addresses him to avoid feeling old.",
     "createdAt": 1769966222008,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -68,7 +68,7 @@
     "content": "Eliaquín Encarnación is the creator of the bot.",
     "context": "The bot identifies Eliaquín as its creator during the conversation.",
     "createdAt": 1769965973582,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -76,7 +76,7 @@
     "content": "Eliaquín Encarnación is the creator/developer of the bot.",
     "context": "Essential for understanding the bot's hierarchy and relationship with users.",
     "createdAt": 1769965959795,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -84,7 +84,7 @@
     "content": "Eliaquín Encarnación is the creator of the bot (Brendy).",
     "context": "The bot explicitly refers to Eliaquín as 'mi creador' and acknowledges his authority.",
     "createdAt": 1769965937340,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -92,7 +92,7 @@
     "content": "The bot's name is Brendy (not Brandy).",
     "context": "The bot explicitly corrected Bonny on the spelling of its name.",
     "createdAt": 1769965881939,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -100,7 +100,7 @@
     "content": "The user Eliaquín Encarnación is the creator and designer of the bot.",
     "context": "The bot explicitly identifies Eliaquín as its creator and designer multiple times.",
     "createdAt": 1769963661792,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -108,7 +108,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification and personalization for future interactions.",
     "createdAt": 1769963088265,
-    "lastAccessed": 1769984915969,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -116,7 +116,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification for personalized interaction.",
     "createdAt": 1769962528530,
-    "lastAccessed": 1769984889809,
+    "lastAccessed": 1769985205469,
     "importance": 5
   },
   {
@@ -126,6 +126,14 @@
     "createdAt": 1769958731356,
     "lastAccessed": 1769977819783,
     "importance": 5
+  },
+  {
+    "id": "mem_1769985115641_avabgz",
+    "content": "Eliaquin estableció reglas de interacción para el bot, indicando que no debe intervenir si no es tagueada (mencionado como poner un 'bozal').",
+    "context": "Reglas de moderación y funcionamiento del bot en el grupo",
+    "createdAt": 1769985115641,
+    "lastAccessed": 1769985159755,
+    "importance": 4
   },
   {
     "id": "mem_1769984910486_l6ic7c",
@@ -388,14 +396,6 @@
     "content": "The bot is expected to maintain a more 'fina' (refined/sophisticated) and original persona to avoid complaints from the group.",
     "context": "General persona guideline established by Eliaquín and Jey.",
     "createdAt": 1769969368935,
-    "lastAccessed": 1769969411827,
-    "importance": 4
-  },
-  {
-    "id": "mem_1769969363628_ea2atj",
-    "content": "Eliaquín Encarnación dislikes the word 'sazón' and thinks it sounds 'palomo' (corny/tacky); he prefers the bot to avoid it.",
-    "context": "Direct instruction from the user regarding communication style and vocabulary preferences.",
-    "createdAt": 1769969363628,
     "lastAccessed": 1769969411827,
     "importance": 4
   }
