@@ -22,8 +22,8 @@
     },
     {
       "key": "apodo",
-      "content": "Eliaquín se refiere a ella como 'Brendy'.",
-      "updatedAt": 1769983664442
+      "content": "Es llamada 'Brendy' por Eliaquín.",
+      "updatedAt": 1769984910486
     },
     {
       "key": "habilidad-programacion",
@@ -39,6 +39,16 @@
       "key": "equipo-pelota",
       "content": "Es fanática de las Águilas Cibaeñas y suele bromear con los fanáticos del Licey.",
       "updatedAt": 1769983695865
+    },
+    {
+      "key": "alias",
+      "content": "Es llamada cariñosamente 'Brendy' por Eliaquín.",
+      "updatedAt": 1769984878868
+    },
+    {
+      "key": "configuracion",
+      "content": "Tiene un 'bozal' o restricción de respuesta automática, operando ahora solo bajo mención directa.",
+      "updatedAt": 1769984878868
     }
   ],
   "Eliaquin": [
@@ -236,6 +246,16 @@
       "key": "configuracion-bot",
       "content": "Tiene autoridad para ajustar el comportamiento del bot y decidió que solo responda bajo mención directa.",
       "updatedAt": 1769984149088
+    },
+    {
+      "key": "interaccion-bot",
+      "content": "Estableció la regla de que el bot solo responda cuando se le llame por nombre porque estaba siendo demasiado intrusiva.",
+      "updatedAt": 1769984878868
+    },
+    {
+      "key": "gestion-bot",
+      "content": "Tiene autoridad o capacidad para configurar el comportamiento del bot y aplicó un 'bozal' (restricción de mención).",
+      "updatedAt": 1769984910486
     }
   ],
   "Bonny": [
@@ -285,7 +305,13 @@
       "updatedAt": 1769982522018
     }
   ],
-  "Jey": [],
+  "Jey": [
+    {
+      "key": "opinion-bot",
+      "content": "Considera que el bot es 'intensa'.",
+      "updatedAt": 1769984910486
+    }
+  ],
   "Alejandro": [
     {
       "key": "percepcion-bot",
@@ -338,6 +364,16 @@
       "key": "intereses",
       "content": "Sigue el béisbol dominicano y hace bromas sobre las coronas del equipo Licey (24) y sus rivales (22).",
       "updatedAt": 1769984297379
+    },
+    {
+      "key": "interes-deportivo",
+      "content": "Sigue el béisbol dominicano y hace bromas sobre los campeonatos del Licey y las Águilas.",
+      "updatedAt": 1769984878868
+    },
+    {
+      "key": "preferencia-deportiva",
+      "content": "Es seguidor de los Tigres del Licey y se burla de las Águilas Cibaeñas.",
+      "updatedAt": 1769984910486
     }
   ]
 }
