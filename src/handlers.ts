@@ -13,6 +13,7 @@ import type { ConversationMessage } from "./types.ts";
 
 const SILENCE_TOKEN = "[SILENCE]";
 const EVAL_EVERY_N_MESSAGES = 5;
+const isDev = process.env.NODE_ENV === "development";
 
 function getUserDisplayName(ctx: Context): string {
   const user = ctx.from;
@@ -135,41 +136,66 @@ async function triggerMemoryEvaluation(
 
 async function downloadAndTranscribe(
   ctx: Context,
+  botToken: string,
   mimeType: string,
   fileExtension: string,
   prefix: string,
 ): Promise<string> {
   const file = await ctx.getFile();
-  const url = `https://api.telegram.org/file/bot${ctx.api.config.use().token}/${file.file_path}`;
+  const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+  if (isDev) console.log("[downloadAndTranscribe] Downloading from:", url);
+
   const response = await fetch(url);
+  if (!response.ok) {
+    console.error("[downloadAndTranscribe] Download failed:", response.status, response.statusText);
+    return "[transcription failed]";
+  }
+
   const buffer = Buffer.from(await response.arrayBuffer());
   const filePath = `./audios/${prefix}_${ctx.message!.message_id}.${fileExtension}`;
   await Bun.write(filePath, buffer);
-  return transcribeAudio(filePath, mimeType);
+  if (isDev) console.log("[downloadAndTranscribe] Saved to:", filePath, `(${buffer.length} bytes)`);
+
+  const transcription = await transcribeAudio(filePath, mimeType);
+  if (isDev) console.log("[downloadAndTranscribe] Transcription:", transcription.slice(0, 200));
+  return transcription;
 }
 
 export function registerHandlers(bot: Bot): void {
+  const botToken = bot.token;
+
   // Voice messages
   bot.on("message:voice", async (ctx) => {
-    const transcription = await downloadAndTranscribe(
-      ctx,
-      "audio/ogg",
-      "ogg",
-      "voice",
-    );
-    const userName = getUserDisplayName(ctx);
-    const content = `[Audio from ${userName}]: ${transcription}`;
-    await processConversation(ctx, content, userName);
+    try {
+      const transcription = await downloadAndTranscribe(
+        ctx,
+        botToken,
+        "audio/ogg",
+        "ogg",
+        "voice",
+      );
+      const userName = getUserDisplayName(ctx);
+      const content = `[Audio from ${userName}]: ${transcription}`;
+      await processConversation(ctx, content, userName);
+    } catch (error) {
+      console.error("[voice handler] Error:", error);
+      if (isDev) await ctx.reply(`[Dev] Voice handler error: ${error}`).catch(() => {});
+    }
   });
 
   // Audio files
   bot.on("message:audio", async (ctx) => {
-    const ext = ctx.message.audio.mime_type?.split("/")[1] ?? "mp3";
-    const mimeType = ctx.message.audio.mime_type ?? "audio/mp3";
-    const transcription = await downloadAndTranscribe(ctx, mimeType, ext, "audio");
-    const userName = getUserDisplayName(ctx);
-    const content = `[Audio from ${userName}]: ${transcription}`;
-    await processConversation(ctx, content, userName);
+    try {
+      const ext = ctx.message.audio.mime_type?.split("/")[1] ?? "mp3";
+      const mimeType = ctx.message.audio.mime_type ?? "audio/mp3";
+      const transcription = await downloadAndTranscribe(ctx, botToken, mimeType, ext, "audio");
+      const userName = getUserDisplayName(ctx);
+      const content = `[Audio from ${userName}]: ${transcription}`;
+      await processConversation(ctx, content, userName);
+    } catch (error) {
+      console.error("[audio handler] Error:", error);
+      if (isDev) await ctx.reply(`[Dev] Audio handler error: ${error}`).catch(() => {});
+    }
   });
 
   // Text messages (catch-all)

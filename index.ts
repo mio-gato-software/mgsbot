@@ -13,3 +13,7 @@ await initMemoryDirs();
 registerHandlers(bot);
 
 bot.start();
+
+if (process.env.NODE_ENV === "development") {
+  console.log(`[startup] Bot started (NODE_ENV=development)`);
+}

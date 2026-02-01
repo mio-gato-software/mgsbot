@@ -1,1 +1,114 @@
-[]
+[
+  {
+    "id": "mem_1769954540611_3xllf7",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Identifying the user for personalized future interactions.",
+    "createdAt": 1769954540611,
+    "lastAccessed": 1769955412315,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769954540611_a5gmot",
+    "content": "The user speaks Spanish.",
+    "context": "Language preference for communication.",
+    "createdAt": 1769954540611,
+    "lastAccessed": 1769955412315,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769954598872_yu6m4o",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Identifying the user for personalized interactions.",
+    "createdAt": 1769954598872,
+    "lastAccessed": 1769955412315,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769954598872_c6zxsb",
+    "content": "The user is bilingual, communicating in both Spanish and English.",
+    "context": "Language preference for future interactions.",
+    "createdAt": 1769954598872,
+    "lastAccessed": 1769955412315,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769954598872_4g8vku",
+    "content": "The user repeatedly offered to transcribe audio files for the AI, suggesting a misunderstanding of the bot's role or a specific test case.",
+    "context": "Behavioral pattern and context of previous confusion/interactions.",
+    "createdAt": 1769954598872,
+    "lastAccessed": 1769955412315,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769955259083_p95s95",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Identity of the user for personalization.",
+    "createdAt": 1769955259083,
+    "lastAccessed": 1769955412315,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769955259083_1dg8zk",
+    "content": "The user speaks Spanish.",
+    "context": "Communication preference.",
+    "createdAt": 1769955259083,
+    "lastAccessed": 1769955412315,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769955259083_l8pzod",
+    "content": "The user repeatedly asked to transcribe audio files for the assistant, suggesting a misunderstanding of the assistant's role or a specific workflow expectation.",
+    "context": "Behavioral pattern/misunderstanding of bot functionality.",
+    "createdAt": 1769955259083,
+    "lastAccessed": 1769955412315,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769955362677_e5ldye",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "The user identified themselves and the bot addressed them by this name.",
+    "createdAt": 1769955362677,
+    "lastAccessed": 1769955412315,
+    "importance": 4
+  },
+  {
+    "id": "mem_1769955362677_c8qp6s",
+    "content": "The user prefers to communicate via audio messages.",
+    "context": "The interaction consisted of multiple audio message attempts and a confirmation of being heard through audio.",
+    "createdAt": 1769955362677,
+    "lastAccessed": 1769955412315,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769955379614_3s18h3",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Personal identification for future interactions.",
+    "createdAt": 1769955379614,
+    "lastAccessed": 1769955412315,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769955379614_aa9fzm",
+    "content": "Eliaquín Encarnación uses audio messages to communicate.",
+    "context": "Indicates the user's preferred communication method and that audio processing is working for him.",
+    "createdAt": 1769955379614,
+    "lastAccessed": 1769955412315,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769955423608_9wqnl6",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Personal identification for future interactions.",
+    "createdAt": 1769955423608,
+    "lastAccessed": 1769955423608,
+    "importance": 4
+  },
+  {
+    "id": "mem_1769955423608_tzf4r1",
+    "content": "Eliaquín Encarnación is interested in audio transcription services or testing the bot's transcription capabilities.",
+    "context": "User's specific intent and repeated mention of 'transcription' during the interaction.",
+    "createdAt": 1769955423608,
+    "lastAccessed": 1769955423608,
+    "importance": 3
+  }
+]
