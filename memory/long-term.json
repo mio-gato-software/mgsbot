@@ -4,7 +4,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification for personalized interaction.",
     "createdAt": 1769962528530,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 5
   },
   {
@@ -12,15 +12,39 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalized interaction.",
     "createdAt": 1769958731356,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 5
+  },
+  {
+    "id": "mem_1769962724039_m80vj2",
+    "content": "The user is located in or interested in matters specifically within Santo Domingo, Dominican Republic.",
+    "context": "Contextualized by the weather and business inquiries regarding the DR.",
+    "createdAt": 1769962724039,
+    "lastAccessed": 1769962724039,
+    "importance": 4
+  },
+  {
+    "id": "mem_1769962706377_ogo6dk",
+    "content": "The user is located in or interested in the context of Santo Domingo, Dominican Republic.",
+    "context": "Weather and business inquiries were specific to this location.",
+    "createdAt": 1769962706377,
+    "lastAccessed": 1769962714462,
+    "importance": 4
+  },
+  {
+    "id": "mem_1769962706377_9i9nlb",
+    "content": "The user is interested in the process of incorporating a company in the Dominican Republic.",
+    "context": "Asked about the difficulty and steps (ONAPI, Chamber of Commerce, DGII) for business formation.",
+    "createdAt": 1769962706377,
+    "lastAccessed": 1769962714462,
+    "importance": 4
   },
   {
     "id": "mem_1769962528530_ghayk4",
     "content": "The user is located in Santo Domingo.",
     "context": "The bot refers to Santo Domingo specifically when providing local weather information.",
     "createdAt": 1769962528530,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -28,7 +52,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769962405997,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -36,7 +60,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "User identification for personalized interaction.",
     "createdAt": 1769961564905,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -44,7 +68,7 @@
     "content": "Eliaquín Encarnación's sister has a habit of drinking baking soda daily for stomach issues.",
     "context": "The user shared this personal family information when asking for health advice.",
     "createdAt": 1769961048145,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -52,7 +76,7 @@
     "content": "Eliaquín has a sister who habitually drinks baking soda for stomach issues.",
     "context": "Relevant health-related family context; the bot advised against this due to risks like high blood pressure and kidney damage.",
     "createdAt": 1769960219287,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -60,7 +84,7 @@
     "content": "Tiene una hermana que consume bicarbonato de sodio diariamente para problemas estomacales por costumbre.",
     "context": "Información familiar y de salud relevante para futuras referencias o consejos.",
     "createdAt": 1769959792013,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -68,7 +92,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "The user identified themselves and the bot addressed them by this name.",
     "createdAt": 1769955362677,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -76,7 +100,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769955423608,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -84,7 +108,7 @@
     "content": "El usuario se llama Eliaquín Encarnación.",
     "context": "Identificación personal para futuras interacciones.",
     "createdAt": 1769956347141,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -92,7 +116,7 @@
     "content": "Su equipo favorito de béisbol son los Leones del Escogido.",
     "context": "Interés deportivo clave para personalización.",
     "createdAt": 1769956347141,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962714462,
     "importance": 4
   },
   {
@@ -100,7 +124,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769958322759,
-    "lastAccessed": 1769962613978,
+    "lastAccessed": 1769962695541,
     "importance": 4
   },
   {
@@ -108,7 +132,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalization.",
     "createdAt": 1769959696020,
-    "lastAccessed": 1769962512069,
+    "lastAccessed": 1769962695541,
     "importance": 4
   },
   {
@@ -116,8 +140,32 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification for personalized communication.",
     "createdAt": 1769958660427,
-    "lastAccessed": 1769962394203,
+    "lastAccessed": 1769962695541,
     "importance": 4
+  },
+  {
+    "id": "mem_1769962724039_ozx99x",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Used throughout the conversation for direct address.",
+    "createdAt": 1769962724039,
+    "lastAccessed": 1769962724039,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769962724039_0phexk",
+    "content": "The user is interested in the process of starting/incorporating a business in the Dominican Republic.",
+    "context": "The user asked about the difficulty of establishing a company and registering with ONAPI, the Chamber of Commerce, and the DGII.",
+    "createdAt": 1769962724039,
+    "lastAccessed": 1769962724039,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769962706377_wn4f7o",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Identifying the user in the conversation.",
+    "createdAt": 1769962706377,
+    "lastAccessed": 1769962714462,
+    "importance": 3
   },
   {
     "id": "mem_1769962528530_ixt8lt",
@@ -350,53 +398,5 @@
     "createdAt": 1769957346176,
     "lastAccessed": 1769957358375,
     "importance": 3
-  },
-  {
-    "id": "mem_1769957300373_3mmpdu",
-    "content": "Eliaquín Encarnación's favorite baseball team is the Leones del Escogido.",
-    "context": "The user mentioned they are his favorite team and noted they won the championship recently.",
-    "createdAt": 1769957300373,
-    "lastAccessed": 1769957334350,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769957300373_wv2qmu",
-    "content": "Eliaquín Encarnación is based in or interested in activities within Santo Domingo.",
-    "context": "He asked for recommendations for things to do in the city on a Sunday afternoon.",
-    "createdAt": 1769957300373,
-    "lastAccessed": 1769957334350,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769956347141_lf3qjp",
-    "content": "El usuario vive o se encuentra en Santo Domingo, República Dominicana.",
-    "context": "Recomendaciones locales y contexto geográfico.",
-    "createdAt": 1769956347141,
-    "lastAccessed": 1769957286869,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769955841907_23uash",
-    "content": "Eliaquín Encarnación's favorite baseball team is Leones del Escogido.",
-    "context": "The user mentioned they are his favorite team and discussed their recent championship win.",
-    "createdAt": 1769955841907,
-    "lastAccessed": 1769956338286,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769962528530_z23khv",
-    "content": "Eliaquín likes going to the beach.",
-    "context": "User preference expressed when asking about the weather.",
-    "createdAt": 1769962528530,
-    "lastAccessed": 1769962613978,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769962405997_u5t0u1",
-    "content": "Eliaquín has an interest in going to the beach and requested a weather check for that purpose.",
-    "context": "User preference and potential activity planning.",
-    "createdAt": 1769962405997,
-    "lastAccessed": 1769962512069,
-    "importance": 2
   }
 ]
