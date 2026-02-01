@@ -22,8 +22,8 @@
     },
     {
       "key": "apodo",
-      "content": "Es mencionada o identificada como 'Brendy' en el contexto de la identidad del bot.",
-      "updatedAt": 1769983531931
+      "content": "Eliaquín se refiere a ella como 'Brendy'.",
+      "updatedAt": 1769983664442
     },
     {
       "key": "habilidad-programacion",
@@ -34,6 +34,11 @@
       "key": "personalidad",
       "content": "Tiene una personalidad definida como 'fina' y con 'chispa', diseñada para no ser aburrida.",
       "updatedAt": 1769983476278
+    },
+    {
+      "key": "equipo-pelota",
+      "content": "Es fanática de las Águilas Cibaeñas y suele bromear con los fanáticos del Licey.",
+      "updatedAt": 1769983695865
     }
   ],
   "Eliaquin": [
@@ -144,8 +149,8 @@
     },
     {
       "key": "idiomas",
-      "content": "Muestra interés en aprender vocabulario básico en inglés.",
-      "updatedAt": 1769982435083
+      "content": "Ha preguntado previamente por la traducción de 'literalmente' al inglés, sugiriendo que se le olvidan estos términos.",
+      "updatedAt": 1769983681314
     },
     {
       "key": "interes-idiomas",
@@ -194,8 +199,38 @@
     },
     {
       "key": "rol-bot",
-      "content": "Es quien definió y configuró la personalidad actual del bot.",
-      "updatedAt": 1769983526957
+      "content": "Es quien le dio al bot su personalidad actual.",
+      "updatedAt": 1769983616896
+    },
+    {
+      "key": "aprendizaje",
+      "content": "Ha preguntado varias veces por la traducción de 'literally' al inglés.",
+      "updatedAt": 1769983616896
+    },
+    {
+      "key": "interes",
+      "content": "Consulta frecuentemente traducciones de términos del español al inglés.",
+      "updatedAt": 1769983631588
+    },
+    {
+      "key": "interes-ingles",
+      "content": "Pregunta por traducciones literales al inglés, como la palabra 'literally'.",
+      "updatedAt": 1769983664442
+    },
+    {
+      "key": "preferencia",
+      "content": "No le gusta que el grupo discuta sobre béisbol (pelota).",
+      "updatedAt": 1769983681314
+    },
+    {
+      "key": "interes-idioma",
+      "content": "Muestra interés por aprender traducciones literales al inglés, aunque a veces olvida que ya las ha preguntado.",
+      "updatedAt": 1769983695865
+    },
+    {
+      "key": "personalidad",
+      "content": "Actúa como mediador en el grupo y no le gusta que discutan de béisbol.",
+      "updatedAt": 1769983695865
     }
   ],
   "Bonny": [
@@ -266,18 +301,33 @@
   "Wispe": [
     {
       "key": "equipo-beisbol",
-      "content": "Es fanático del equipo de béisbol Licey.",
-      "updatedAt": 1769983476278
+      "content": "Es fanático de los Tigres del Licey y presume que su equipo tiene 24 coronas.",
+      "updatedAt": 1769983681314
     },
     {
       "key": "deporte",
-      "content": "Es fanático del equipo de béisbol Licey y suele ser objeto de bromas por ello.",
-      "updatedAt": 1769983531931
+      "content": "Es fanático del equipo de béisbol Licey.",
+      "updatedAt": 1769983616896
     },
     {
       "key": "humor",
       "content": "Bromea comparando al bot con Skynet por su falta de control.",
       "updatedAt": 1769983526957
+    },
+    {
+      "key": "idioma",
+      "content": "Tiene conocimientos de inglés y sabe pronunciar palabras como 'literally'.",
+      "updatedAt": 1769983695865
+    },
+    {
+      "key": "habilidad",
+      "content": "Tiene buena pronunciación en inglés, demostrada al pronunciar 'literally'.",
+      "updatedAt": 1769983681314
+    },
+    {
+      "key": "equipo-pelota",
+      "content": "Es fanático del Licey y presume los 24 campeonatos del equipo.",
+      "updatedAt": 1769983695865
     }
   ]
 }
