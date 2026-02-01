@@ -8,6 +8,7 @@ import {
 	type Part,
 } from "@google/genai";
 import type { MemoryEvaluation } from "./types.ts";
+import { executeWeatherFunction, weatherTool } from "./weather.ts";
 
 const ai = new GoogleGenAI({});
 const MODEL = "gemini-3-flash-preview";
@@ -169,10 +170,61 @@ export async function generateResponse(
 		model: MODEL,
 		config: {
 			systemInstruction: systemPrompt,
+			tools: [{ functionDeclarations: [weatherTool] }],
 		},
 		contents,
 	});
 	logTokenUsage("generateResponse", response);
+
+	const functionCalls = response.functionCalls;
+	if (functionCalls && functionCalls.length > 0) {
+		const call = functionCalls[0];
+		if (call.name === "get_current_weather") {
+			if (isDev)
+				console.log("[generateResponse] Function call: get_current_weather");
+			const weatherResult = await executeWeatherFunction();
+			if (isDev)
+				console.log("[generateResponse] Weather result:", weatherResult);
+
+			const modelParts = response.candidates?.[0]?.content?.parts ?? [];
+			const followUp: Content[] = [
+				...contents,
+				{
+					role: "model",
+					parts: modelParts,
+				},
+				{
+					role: "user",
+					parts: [
+						{
+							functionResponse: {
+								name: call.name,
+								response: { result: weatherResult },
+							},
+						},
+					],
+				},
+			];
+
+			const followUpResponse = await ai.models.generateContent({
+				model: MODEL,
+				config: {
+					systemInstruction: systemPrompt,
+					tools: [{ functionDeclarations: [weatherTool] }],
+				},
+				contents: followUp,
+			});
+			logTokenUsage("generateResponse:followUp", followUpResponse);
+			const text = followUpResponse.text ?? "";
+			if (isDev)
+				console.log(
+					"[generateResponse] Follow-up response:",
+					text.slice(0, 200),
+				);
+			return text;
+		}
+	}
+
 	const text = response.text ?? "";
 	if (isDev) console.log("[generateResponse] Response:", text.slice(0, 200));
 	return text;
