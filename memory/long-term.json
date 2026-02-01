@@ -4,15 +4,23 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalized interaction.",
     "createdAt": 1769958731356,
-    "lastAccessed": 1769959780262,
+    "lastAccessed": 1769960212262,
     "importance": 5
+  },
+  {
+    "id": "mem_1769960219287_r5lm0a",
+    "content": "Eliaquín has a sister who habitually drinks baking soda for stomach issues.",
+    "context": "Relevant health-related family context; the bot advised against this due to risks like high blood pressure and kidney damage.",
+    "createdAt": 1769960219287,
+    "lastAccessed": 1769960219287,
+    "importance": 4
   },
   {
     "id": "mem_1769959792013_iityrj",
     "content": "Tiene una hermana que consume bicarbonato de sodio diariamente para problemas estomacales por costumbre.",
     "context": "Información familiar y de salud relevante para futuras referencias o consejos.",
     "createdAt": 1769959792013,
-    "lastAccessed": 1769959792013,
+    "lastAccessed": 1769960212262,
     "importance": 4
   },
   {
@@ -20,7 +28,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "The user identified themselves and the bot addressed them by this name.",
     "createdAt": 1769955362677,
-    "lastAccessed": 1769959780262,
+    "lastAccessed": 1769960212262,
     "importance": 4
   },
   {
@@ -28,7 +36,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769955423608,
-    "lastAccessed": 1769959780262,
+    "lastAccessed": 1769960212262,
     "importance": 4
   },
   {
@@ -36,7 +44,7 @@
     "content": "El usuario se llama Eliaquín Encarnación.",
     "context": "Identificación personal para futuras interacciones.",
     "createdAt": 1769956347141,
-    "lastAccessed": 1769959780262,
+    "lastAccessed": 1769960212262,
     "importance": 4
   },
   {
@@ -44,7 +52,7 @@
     "content": "Su equipo favorito de béisbol son los Leones del Escogido.",
     "context": "Interés deportivo clave para personalización.",
     "createdAt": 1769956347141,
-    "lastAccessed": 1769959780262,
+    "lastAccessed": 1769960212262,
     "importance": 4
   },
   {
@@ -52,7 +60,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769958322759,
-    "lastAccessed": 1769959780262,
+    "lastAccessed": 1769960212262,
     "importance": 4
   },
   {
@@ -60,7 +68,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalization.",
     "createdAt": 1769959696020,
-    "lastAccessed": 1769959780262,
+    "lastAccessed": 1769960212262,
     "importance": 4
   },
   {
@@ -68,15 +76,31 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification for personalized communication.",
     "createdAt": 1769958660427,
-    "lastAccessed": 1769958717472,
+    "lastAccessed": 1769960212262,
     "importance": 4
+  },
+  {
+    "id": "mem_1769960219287_8cb67y",
+    "content": "The user's name is Eliaquín Encarnación.",
+    "context": "Personal identification for future interactions.",
+    "createdAt": 1769960219287,
+    "lastAccessed": 1769960219287,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769960219287_qo97wb",
+    "content": "Eliaquín is interested in technology (comparing Rust and TypeScript) and space exploration (Mars missions).",
+    "context": "Helps tailor future technical or scientific discussions.",
+    "createdAt": 1769960219287,
+    "lastAccessed": 1769960219287,
+    "importance": 3
   },
   {
     "id": "mem_1769959792013_w6ogl7",
     "content": "El usuario se llama Eliaquín Encarnación.",
     "context": "Identidad del usuario.",
     "createdAt": 1769959792013,
-    "lastAccessed": 1769959792013,
+    "lastAccessed": 1769960212262,
     "importance": 3
   },
   {
@@ -84,7 +108,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identifying the user for personalized future interactions.",
     "createdAt": 1769954540611,
-    "lastAccessed": 1769959780262,
+    "lastAccessed": 1769960212262,
     "importance": 3
   },
   {
@@ -92,7 +116,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identifying the user for personalized interactions.",
     "createdAt": 1769954598872,
-    "lastAccessed": 1769959780262,
+    "lastAccessed": 1769960212262,
     "importance": 3
   },
   {
@@ -236,7 +260,7 @@
     "content": "Tiene interés en la programación, específicamente en las diferencias entre Rust y TypeScript.",
     "context": "Intereses técnicos y profesionales.",
     "createdAt": 1769959792013,
-    "lastAccessed": 1769959792013,
+    "lastAccessed": 1769960212262,
     "importance": 2
   },
   {
@@ -244,7 +268,7 @@
     "content": "Muestra interés por la exploración espacial y la llegada del hombre a Marte.",
     "context": "Temas de interés personal.",
     "createdAt": 1769959792013,
-    "lastAccessed": 1769959792013,
+    "lastAccessed": 1769960212262,
     "importance": 2
   },
   {
@@ -252,7 +276,7 @@
     "content": "Utiliza expresiones coloquiales dominicanas (ej. 'Ke lo ke').",
     "context": "Estilo de comunicación y trasfondo cultural.",
     "createdAt": 1769959792013,
-    "lastAccessed": 1769959792013,
+    "lastAccessed": 1769960212262,
     "importance": 2
   },
   {
@@ -373,30 +397,6 @@
     "context": "Description derived from a photo the user shared of himself.",
     "createdAt": 1769957300373,
     "lastAccessed": 1769957334350,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769956347141_olhgnf",
-    "content": "El usuario reconoce que los Leones del Escogido tienen una base de fanáticos pequeña.",
-    "context": "Matiz sobre su perspectiva como fanático.",
-    "createdAt": 1769956347141,
-    "lastAccessed": 1769957286869,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769955259083_l8pzod",
-    "content": "The user repeatedly asked to transcribe audio files for the assistant, suggesting a misunderstanding of the assistant's role or a specific workflow expectation.",
-    "context": "Behavioral pattern/misunderstanding of bot functionality.",
-    "createdAt": 1769955259083,
-    "lastAccessed": 1769956338286,
-    "importance": 2
-  },
-  {
-    "id": "mem_1769955841907_t1yz0t",
-    "content": "Eliaquín Encarnación is located in or interested in activities within Santo Domingo, Dominican Republic.",
-    "context": "The user asked for recommendations for things to do in Santo Domingo on a Sunday afternoon.",
-    "createdAt": 1769955841907,
-    "lastAccessed": 1769956338286,
     "importance": 2
   }
 ]
