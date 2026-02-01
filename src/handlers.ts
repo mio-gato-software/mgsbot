@@ -45,13 +45,16 @@ function isBotMentionedOrRepliedTo(ctx: Context, botId: number): boolean {
 
 	// Check if bot is mentioned in entities
 	const entities = ctx.message?.entities ?? [];
-	const text = ctx.message?.text ?? "";
+	const text = ctx.message?.text ?? ctx.message?.caption ?? "";
 	for (const entity of entities) {
 		if (entity.type === "mention") {
 			const mention = text.slice(entity.offset, entity.offset + entity.length);
 			if (mention === `@${ctx.me?.username}`) return true;
 		}
 	}
+
+	// Check if called by name
+	if (/\bbrendy\b/i.test(text)) return true;
 
 	return false;
 }
