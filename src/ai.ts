@@ -230,6 +230,29 @@ export async function generateResponse(
 	return text;
 }
 
+export async function textToSpeech(text: string): Promise<string> {
+	const response = await fetch("https://api.lemonfox.ai/v1/audio/speech", {
+		method: "POST",
+		headers: {
+			Authorization: `Bearer ${process.env.LEMON_FOX_API_KEY}`,
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			input: text,
+			voice: "heart",
+			response_format: "mp3",
+		}),
+	});
+
+	if (!response.ok || !response.body) {
+		throw new Error(`LemonFox TTS failed: ${response.status}`);
+	}
+
+	const filePath = `./audios/tts_${Date.now()}.mp3`;
+	await Bun.write(filePath, response);
+	return filePath;
+}
+
 export async function evaluateMemory(
 	recentMessages: string,
 ): Promise<MemoryEvaluation> {

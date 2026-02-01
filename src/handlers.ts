@@ -1,9 +1,11 @@
 import type { Bot, Context } from "grammy";
+import { InputFile } from "grammy";
 import {
 	analyzeYouTube,
 	describeImage,
 	evaluateMemory,
 	generateResponse,
+	textToSpeech,
 	transcribeAudio,
 } from "./ai.ts";
 import {
@@ -126,14 +128,52 @@ async function processConversation(
 	};
 	await addMessageToShortTerm(shortTerm, botMessage);
 
-	// Reply (fallback to plain text if Markdown parsing fails)
+	// Reply (check for TTS marker first)
 	const replyOptions = {
 		reply_to_message_id: isGroupChat(ctx) ? ctx.message?.message_id : undefined,
 	};
-	try {
-		await ctx.reply(responseText, { ...replyOptions, parse_mode: "Markdown" });
-	} catch {
-		await ctx.reply(responseText, replyOptions);
+
+	const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/TTS\]/;
+	const ttsMatch = responseText.match(TTS_REGEX);
+
+	if (ttsMatch) {
+		const ttsText = ttsMatch[1].trim();
+		const plainText = responseText.replace(TTS_REGEX, "").trim();
+
+		// Send accompanying text if any
+		if (plainText) {
+			try {
+				await ctx.reply(plainText, {
+					...replyOptions,
+					parse_mode: "Markdown",
+				});
+			} catch {
+				await ctx.reply(plainText, replyOptions);
+			}
+		}
+
+		// Generate and send voice note
+		try {
+			const audioPath = await textToSpeech(ttsText);
+			await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
+		} catch (error) {
+			console.error("[TTS] Error generating speech:", error);
+			// Fallback: send the TTS text as plain text
+			try {
+				await ctx.reply(ttsText, replyOptions);
+			} catch {
+				// ignore fallback failure
+			}
+		}
+	} else {
+		try {
+			await ctx.reply(responseText, {
+				...replyOptions,
+				parse_mode: "Markdown",
+			});
+		} catch {
+			await ctx.reply(responseText, replyOptions);
+		}
 	}
 
 	// Trigger long-term memory evaluation every N messages
