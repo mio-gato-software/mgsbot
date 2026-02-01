@@ -4,7 +4,7 @@
     "content": "The user Eliaquín Encarnación is the creator and designer of the bot.",
     "context": "The bot explicitly identifies Eliaquín as its creator and designer multiple times.",
     "createdAt": 1769963661792,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 5
   },
   {
@@ -12,7 +12,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification and personalization for future interactions.",
     "createdAt": 1769963088265,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 5
   },
   {
@@ -20,7 +20,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification for personalized interaction.",
     "createdAt": 1769962528530,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 5
   },
   {
@@ -28,15 +28,23 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalized interaction.",
     "createdAt": 1769958731356,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 5
+  },
+  {
+    "id": "mem_1769964315140_cqmt8x",
+    "content": "Eliaquín Encarnación is the designer/creator of the bot.",
+    "context": "The bot refers to Eliaquín as the one who designed her.",
+    "createdAt": 1769964315140,
+    "lastAccessed": 1769964315140,
+    "importance": 4
   },
   {
     "id": "mem_1769963936893_fcb7ng",
     "content": "Eliaquín Encarnación is the designer/creator of the bot.",
     "context": "The bot acknowledges Eliaquín's role in its design during the conversation.",
     "createdAt": 1769963936893,
-    "lastAccessed": 1769963936893,
+    "lastAccessed": 1769964307296,
     "importance": 4
   },
   {
@@ -44,7 +52,7 @@
     "content": "Eliaquín Encarnación es el diseñador/creador de este bot.",
     "context": "El bot menciona 'lo que tú mismo diseñaste' al hablar con Eliaquín.",
     "createdAt": 1769963854517,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 4
   },
   {
@@ -52,7 +60,7 @@
     "content": "The bot's name is Brendy.",
     "context": "The bot identifies itself by this name.",
     "createdAt": 1769963661792,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 4
   },
   {
@@ -60,7 +68,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Basic user identification for personalized interaction.",
     "createdAt": 1769963589393,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 4
   },
   {
@@ -68,7 +76,7 @@
     "content": "The bot's identity is 'Brendy', a 30-year-old persona with a confident/sassy Dominican style, and Eliaquín is established as her creator/designer.",
     "context": "Maintains consistency in bot persona and the specific relationship dynamic defined by the user.",
     "createdAt": 1769963589393,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 4
   },
   {
@@ -76,7 +84,7 @@
     "content": "The user is located in or interested in Santo Domingo, Dominican Republic.",
     "context": "Relevant for providing contextual information like weather and local regulations.",
     "createdAt": 1769963088265,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 4
   },
   {
@@ -84,7 +92,7 @@
     "content": "The user is located in or interested in matters specifically within Santo Domingo, Dominican Republic.",
     "context": "Contextualized by the weather and business inquiries regarding the DR.",
     "createdAt": 1769962724039,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 4
   },
   {
@@ -92,7 +100,7 @@
     "content": "The user is located in or interested in the context of Santo Domingo, Dominican Republic.",
     "context": "Weather and business inquiries were specific to this location.",
     "createdAt": 1769962706377,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 4
   },
   {
@@ -100,7 +108,7 @@
     "content": "The user is interested in the process of incorporating a company in the Dominican Republic.",
     "context": "Asked about the difficulty and steps (ONAPI, Chamber of Commerce, DGII) for business formation.",
     "createdAt": 1769962706377,
-    "lastAccessed": 1769963923820,
+    "lastAccessed": 1769964307296,
     "importance": 4
   },
   {
@@ -208,11 +216,19 @@
     "importance": 4
   },
   {
+    "id": "mem_1769964315140_x1xhcf",
+    "content": "The bot's persona is a woman who claims to be eternally 29 years old.",
+    "context": "Persona consistency regarding age and personality.",
+    "createdAt": 1769964315140,
+    "lastAccessed": 1769964315140,
+    "importance": 3
+  },
+  {
     "id": "mem_1769963936893_1segww",
     "content": "Wispe is a recurring contact/member who frequently talks about Elon Musk and is teased for being 'reactive'.",
     "context": "Information about a third party mentioned in the conversation to maintain context in group dynamics.",
     "createdAt": 1769963936893,
-    "lastAccessed": 1769963936893,
+    "lastAccessed": 1769964307296,
     "importance": 3
   },
   {
@@ -220,7 +236,7 @@
     "content": "The bot's persona supports the 'Águilas' (likely Águilas Cibaeñas baseball team) and uses it to tease Wispe.",
     "context": "Persona preference and recurring banter theme.",
     "createdAt": 1769963936893,
-    "lastAccessed": 1769963936893,
+    "lastAccessed": 1769964307296,
     "importance": 3
   },
   {
@@ -381,22 +397,6 @@
     "context": "Helps tailor future technical or scientific discussions.",
     "createdAt": 1769960219287,
     "lastAccessed": 1769961229982,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769959792013_w6ogl7",
-    "content": "El usuario se llama Eliaquín Encarnación.",
-    "context": "Identidad del usuario.",
-    "createdAt": 1769959792013,
-    "lastAccessed": 1769961031498,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769954540611_3xllf7",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Identifying the user for personalized future interactions.",
-    "createdAt": 1769954540611,
-    "lastAccessed": 1769961031498,
     "importance": 3
   }
 ]
