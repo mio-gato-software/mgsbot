@@ -13,7 +13,17 @@ bun install          # Install dependencies
 bun run index.ts     # Run the bot
 ```
 
-No test runner, linter, or build step is configured. TypeScript is executed directly by Bun (no emit).
+TypeScript is executed directly by Bun (no emit).
+
+## Lint & Format
+
+```bash
+bun run lint         # Check lint + format issues
+bun run lint:fix     # Auto-fix lint + format issues
+bun run format       # Format only
+```
+
+**Rule: Always run `bun run lint:fix` after making changes to ensure code passes all Biome checks.**
 
 ## Architecture
 
