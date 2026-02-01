@@ -22,8 +22,8 @@
     },
     {
       "key": "apodo",
-      "content": "Es llamada 'Brendy' por Eliaquín.",
-      "updatedAt": 1769984910486
+      "content": "Es llamada 'Brendy' por Eliaquin y Jey la apoda 'la intensa'.",
+      "updatedAt": 1769984933324
     },
     {
       "key": "habilidad-programacion",
@@ -49,6 +49,11 @@
       "key": "configuracion",
       "content": "Tiene un 'bozal' o restricción de respuesta automática, operando ahora solo bajo mención directa.",
       "updatedAt": 1769984878868
+    },
+    {
+      "key": "habilidad",
+      "content": "Tiene la capacidad de transcribir audios de los miembros del grupo.",
+      "updatedAt": 1769984933324
     }
   ],
   "Eliaquin": [
@@ -256,6 +261,11 @@
       "key": "gestion-bot",
       "content": "Tiene autoridad o capacidad para configurar el comportamiento del bot y aplicó un 'bozal' (restricción de mención).",
       "updatedAt": 1769984910486
+    },
+    {
+      "key": "control-bot",
+      "content": "Tiene la autoridad o capacidad de moderar las intervenciones de Brenda (el bot), refiriéndose a ello como 'poner el bozal'.",
+      "updatedAt": 1769984933324
     }
   ],
   "Bonny": [
@@ -362,8 +372,8 @@
     },
     {
       "key": "intereses",
-      "content": "Sigue el béisbol dominicano y hace bromas sobre las coronas del equipo Licey (24) y sus rivales (22).",
-      "updatedAt": 1769984297379
+      "content": "Sigue el béisbol invernal dominicano y bromea sobre la antigüedad de los títulos de Licey y Águilas.",
+      "updatedAt": 1769984933324
     },
     {
       "key": "interes-deportivo",
