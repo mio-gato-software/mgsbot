@@ -21,7 +21,6 @@ import {
 import { buildContents, buildSystemPrompt } from "./prompt.ts";
 import type { ConversationMessage } from "./types.ts";
 
-const SILENCE_TOKEN = "[SILENCE]";
 const EVAL_EVERY_N_MESSAGES = 5;
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
 const OWNER_USER_ID = Number(process.env.OWNER_USER_ID);
@@ -94,31 +93,17 @@ async function processConversation(
 	);
 	const contents = buildContents(shortTerm);
 
-	// In groups, add instruction for selective response
-	let effectiveSystemPrompt = systemPrompt;
-	const willDefinitelyRespond =
-		!isGroupChat(ctx) || isBotMentionedOrRepliedTo(ctx, botInfo.id);
-	if (!willDefinitelyRespond) {
-		effectiveSystemPrompt += `\n\n## Group response rule\nThis is a group chat and you were NOT directly mentioned or replied to. You MUST respond with exactly ${SILENCE_TOKEN} unless the message is clearly directed at you by context (e.g. someone is talking to you or about you). Do NOT respond just because you find the topic interesting or have an opinion. When in doubt, choose ${SILENCE_TOKEN}.`;
-	}
-
-	// Show typing indicator only when we know the bot will respond
-	if (willDefinitelyRespond) {
-		await ctx.replyWithChatAction("typing");
-	}
-
-	// Generate response
-	const responseText = await generateResponse(effectiveSystemPrompt, contents);
-
-	// Check for silence
-	if (responseText.trim() === SILENCE_TOKEN) {
+	// In groups, only respond when mentioned or replied to
+	const effectiveSystemPrompt = systemPrompt;
+	if (isGroupChat(ctx) && !isBotMentionedOrRepliedTo(ctx, botInfo.id)) {
 		return;
 	}
 
-	// Show typing now if we didn't before (bot decided to respond voluntarily)
-	if (!willDefinitelyRespond) {
-		await ctx.replyWithChatAction("typing");
-	}
+	// Show typing indicator
+	await ctx.replyWithChatAction("typing");
+
+	// Generate response
+	const responseText = await generateResponse(effectiveSystemPrompt, contents);
 
 	// Save bot response to short-term
 	const botMessage: ConversationMessage = {
