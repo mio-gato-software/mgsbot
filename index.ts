@@ -14,6 +14,10 @@ await initMemoryDirs();
 // Register all message handlers
 registerHandlers(bot);
 
+bot.catch((err) => {
+	console.error("[bot.catch] Error in middleware:", err.message);
+});
+
 bot.start();
 
 if (process.env.NODE_ENV === "development") {

@@ -126,11 +126,15 @@ async function processConversation(
 	};
 	await addMessageToShortTerm(shortTerm, botMessage);
 
-	// Reply
-	await ctx.reply(responseText, {
+	// Reply (fallback to plain text if Markdown parsing fails)
+	const replyOptions = {
 		reply_to_message_id: isGroupChat(ctx) ? ctx.message?.message_id : undefined,
-		parse_mode: "Markdown",
-	});
+	};
+	try {
+		await ctx.reply(responseText, { ...replyOptions, parse_mode: "Markdown" });
+	} catch {
+		await ctx.reply(responseText, replyOptions);
+	}
 
 	// Trigger long-term memory evaluation every N messages
 	if (shortTerm.messageCountSinceEval >= EVAL_EVERY_N_MESSAGES) {
