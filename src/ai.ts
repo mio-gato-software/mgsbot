@@ -231,6 +231,12 @@ export async function generateResponse(
 }
 
 export async function textToSpeech(text: string): Promise<string> {
+	if (isDev)
+		console.log(
+			"[textToSpeech] API key present:",
+			!!process.env.LEMON_FOX_API_KEY,
+		);
+
 	const response = await fetch("https://api.lemonfox.ai/v1/audio/speech", {
 		method: "POST",
 		headers: {
@@ -242,14 +248,21 @@ export async function textToSpeech(text: string): Promise<string> {
 			voice: "heart",
 			response_format: "mp3",
 		}),
+		signal: AbortSignal.timeout(15000),
 	});
 
-	if (!response.ok || !response.body) {
-		throw new Error(`LemonFox TTS failed: ${response.status}`);
+	if (isDev) console.log("[textToSpeech] Response status:", response.status);
+
+	if (!response.ok) {
+		const errorBody = await response.text().catch(() => "");
+		throw new Error(`LemonFox TTS failed: ${response.status} ${errorBody}`);
 	}
 
 	const filePath = `./audios/tts_${Date.now()}.mp3`;
-	await Bun.write(filePath, response);
+	const arrayBuffer = await response.arrayBuffer();
+	if (isDev)
+		console.log("[textToSpeech] Received bytes:", arrayBuffer.byteLength);
+	await Bun.write(filePath, new Uint8Array(arrayBuffer));
 	return filePath;
 }
 

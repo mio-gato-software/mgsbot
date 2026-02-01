@@ -136,25 +136,20 @@ async function processConversation(
 	const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/TTS\]/;
 	const ttsMatch = responseText.match(TTS_REGEX);
 
+	if (isDev)
+		console.log(
+			"[TTS] Checking for marker:",
+			ttsMatch ? `found "${ttsMatch[1]}"` : "not found",
+		);
+
 	if (ttsMatch) {
 		const ttsText = ttsMatch[1].trim();
-		const plainText = responseText.replace(TTS_REGEX, "").trim();
 
-		// Send accompanying text if any
-		if (plainText) {
-			try {
-				await ctx.reply(plainText, {
-					...replyOptions,
-					parse_mode: "Markdown",
-				});
-			} catch {
-				await ctx.reply(plainText, replyOptions);
-			}
-		}
-
-		// Generate and send voice note
+		// Generate and send voice note only
 		try {
+			if (isDev) console.log("[TTS] Generating speech for:", ttsText);
 			const audioPath = await textToSpeech(ttsText);
+			if (isDev) console.log("[TTS] Audio saved to:", audioPath);
 			await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
 		} catch (error) {
 			console.error("[TTS] Error generating speech:", error);
