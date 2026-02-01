@@ -1,409 +1,424 @@
 {
-	"Brenda": [
-		{
-			"key": "empleo",
-			"content": "Es abogada de profesión.",
-			"updatedAt": 1769979514812
-		},
-		{
-			"key": "preferencias",
-			"content": "Tiene una lista de deseos de perfumes y prefiere los perfumes de nicho sobre los hombres problemáticos.",
-			"updatedAt": 1769982828883
-		},
-		{
-			"key": "preferencia",
-			"content": "Prefiere a los hombres buenos con perfume de nicho antes que a los hombres tóxicos.",
-			"updatedAt": 1769983043024
-		},
-		{
-			"key": "estado-actual",
-			"content": "Está ocupada o 'en lo suyo' según mencionan Eliaquín y el bot.",
-			"updatedAt": 1769980571253
-		},
-		{
-			"key": "apodo",
-			"content": "Es llamada 'Brendy' por Eliaquin y Jey la apoda 'la intensa'.",
-			"updatedAt": 1769984933324
-		},
-		{
-			"key": "habilidad-programacion",
-			"content": "Fue interpelada por Eliaquin para validar si sabía resolver problemas de recursividad.",
-			"updatedAt": 1769980905239
-		},
-		{
-			"key": "personalidad",
-			"content": "Tiene una personalidad definida como 'fina' y con 'chispa', diseñada para no ser aburrida.",
-			"updatedAt": 1769983476278
-		},
-		{
-			"key": "equipo-pelota",
-			"content": "Es fanática de las Águilas Cibaeñas y suele bromear con los fanáticos del Licey.",
-			"updatedAt": 1769983695865
-		},
-		{
-			"key": "alias",
-			"content": "Es llamada cariñosamente 'Brendy' por Eliaquín.",
-			"updatedAt": 1769984878868
-		},
-		{
-			"key": "configuracion",
-			"content": "Tiene un 'bozal' o restricción de respuesta automática, operando ahora solo bajo mención directa.",
-			"updatedAt": 1769984878868
-		},
-		{
-			"key": "habilidad",
-			"content": "Tiene la capacidad de transcribir audios de los miembros del grupo.",
-			"updatedAt": 1769984933324
-		},
-		{
-			"key": "relación-wispe",
-			"content": "Según Eliaquín, Brenda evita o ignora a Wispe (le hace el 'fo').",
-			"updatedAt": 1769985115643
-		}
-	],
-	"Eliaquin": [
-		{
-			"key": "tecnologia",
-			"content": "El bot sugiere que su computadora tiene problemas de rendimiento o memoria.",
-			"updatedAt": 1769982522018
-		},
-		{
-			"key": "comportamiento",
-			"content": "Borró mensajes del chat que el Bot le dirigió a Bonny.",
-			"updatedAt": 1769979526471
-		},
-		{
-			"key": "percepcion",
-			"content": "Fue calificado como 'odioso' y 'envidioso' por Bonny y el Bot tras borrar mensajes.",
-			"updatedAt": 1769979526471
-		},
-		{
-			"key": "accion-reciente",
-			"content": "Borró los mensajes que el Bot le envió a Bonny.",
-			"updatedAt": 1769979532595
-		},
-		{
-			"key": "equipo",
-			"content": "Se menciona que su computadora tiene problemas de rendimiento o poca memoria.",
-			"updatedAt": 1769982870568
-		},
-		{
-			"key": "intencion",
-			"content": "Planea modificar al bot para que sea más amable en futuras interacciones.",
-			"updatedAt": 1769979538617
-		},
-		{
-			"key": "conducta",
-			"content": "Borró mensajes de la conversación de forma deliberada.",
-			"updatedAt": 1769979538617
-		},
-		{
-			"key": "intencion-bot",
-			"content": "Planea modificar al bot para que sea más amable en el futuro.",
-			"updatedAt": 1769979646868
-		},
-		{
-			"key": "herramientas",
-			"content": "Tiene una computadora que el bot describe como de 'sueño pesado' por su lentitud al activar procesos.",
-			"updatedAt": 1769979646868
-		},
-		{
-			"key": "gestion-mensajes",
-			"content": "Borró mensajes del chat recientemente, acción que fue tildada de 'odiosa'.",
-			"updatedAt": 1769979685496
-		},
-		{
-			"key": "modificacion-bot",
-			"content": "Tiene la intención de modificar la programación del bot para hacerlo más amable próximamente.",
-			"updatedAt": 1769979685496
-		},
-		{
-			"key": "preferencia-bot",
-			"content": "Prefiere que el bot sea menos intrusivo y solo actúe bajo mención directa.",
-			"updatedAt": 1769984297379
-		},
-		{
-			"key": "interes-viajes",
-			"content": "Investigó costos para viajar a Puerto Rico y Miami, concluyendo que PR es más costoso.",
-			"updatedAt": 1769980530195
-		},
-		{
-			"key": "investigacion-viajes",
-			"content": "Investigó que viajar a Puerto Rico es más caro que ir a Miami.",
-			"updatedAt": 1769980571253
-		},
-		{
-			"key": "intereses",
-			"content": "Se interesa por la psicología evolutiva, dinámicas de pareja y el análisis de comportamiento humano.",
-			"updatedAt": 1769982950322
-		},
-		{
-			"key": "viajes",
-			"content": "Le gustaría irse de vacaciones a París.",
-			"updatedAt": 1769982605708
-		},
-		{
-			"key": "interes-tecnico",
-			"content": "Muestra interés por la programación en TypeScript y el análisis de complejidad de algoritmos.",
-			"updatedAt": 1769980905239
-		},
-		{
-			"key": "proyecto-negocio",
-			"content": "Busca información sobre la instalación de estaciones de expendio de combustibles y regulaciones del MICM.",
-			"updatedAt": 1769980905239
-		},
-		{
-			"key": "proyecto",
-			"content": "Está investigando los requisitos del MICM para establecer una estación de expendio de combustibles.",
-			"updatedAt": 1769980940367
-		},
-		{
-			"key": "ubicacion",
-			"content": "Tiene intereses comerciales o reside en República Dominicana.",
-			"updatedAt": 1769980940367
-		},
-		{
-			"key": "interes-negocio",
-			"content": "Está investigando el procedimiento legal y la inversión necesaria para instalar una bomba de combustible.",
-			"updatedAt": 1769981621007
-		},
-		{
-			"key": "idiomas",
-			"content": "Ha preguntado previamente por la traducción de 'literalmente' al inglés, sugiriendo que se le olvidan estos términos.",
-			"updatedAt": 1769983681314
-		},
-		{
-			"key": "interes-idiomas",
-			"content": "Está practicando inglés, específicamente vocabulario como 'avocado', 'literally' e 'iguana'.",
-			"updatedAt": 1769982605708
-		},
-		{
-			"key": "filosofia-vida",
-			"content": "Valora la paz mental por encima de tener la razón en disputas triviales de convivencia ciudadana.",
-			"updatedAt": 1769983043024
-		},
-		{
-			"key": "apodo-bot",
-			"content": "Llama al bot por el nombre de 'Brendy'.",
-			"updatedAt": 1769982987592
-		},
-		{
-			"key": "filosofía-vida",
-			"content": "Prefiere no buscar problemas y ceder en disputas triviales de derechos públicos por su paz mental.",
-			"updatedAt": 1769982987592
-		},
-		{
-			"key": "interés",
-			"content": "Le interesan los temas de psicología evolutiva, el análisis de comportamiento y los documentales de crímenes reales.",
-			"updatedAt": 1769982987592
-		},
-		{
-			"key": "rol-grupo",
-			"content": "Es quien configuró la personalidad actual de la entidad/bot Brenda.",
-			"updatedAt": 1769983043024
-		},
-		{
-			"key": "prioridad",
-			"content": "Valora la paz mental por encima de tener la razón en disputas triviales de convivencia ciudadana.",
-			"updatedAt": 1769983476278
-		},
-		{
-			"key": "rol",
-			"content": "Configuró la personalidad del bot y tiene la capacidad de modificar su modo de interacción (tagueo).",
-			"updatedAt": 1769983531931
-		},
-		{
-			"key": "filosofia",
-			"content": "Prioriza la paz mental sobre los conflictos por derechos menores, como el parqueo frente a las casas.",
-			"updatedAt": 1769983526957
-		},
-		{
-			"key": "rol-bot",
-			"content": "Es quien le dio al bot su personalidad actual.",
-			"updatedAt": 1769983616896
-		},
-		{
-			"key": "aprendizaje",
-			"content": "Ha preguntado varias veces por la traducción de 'literally' al inglés.",
-			"updatedAt": 1769983616896
-		},
-		{
-			"key": "interes",
-			"content": "Consulta frecuentemente traducciones de términos del español al inglés.",
-			"updatedAt": 1769983631588
-		},
-		{
-			"key": "interes-ingles",
-			"content": "Pregunta por traducciones literales al inglés, como la palabra 'literally'.",
-			"updatedAt": 1769983664442
-		},
-		{
-			"key": "preferencia",
-			"content": "No le gusta que el grupo discuta sobre béisbol (pelota).",
-			"updatedAt": 1769983681314
-		},
-		{
-			"key": "interes-idioma",
-			"content": "Muestra interés por aprender traducciones literales al inglés, aunque a veces olvida que ya las ha preguntado.",
-			"updatedAt": 1769983695865
-		},
-		{
-			"key": "personalidad",
-			"content": "Actúa como mediador en el grupo y no le gusta que discutan de béisbol.",
-			"updatedAt": 1769983695865
-		},
-		{
-			"key": "configuracion-bot",
-			"content": "Tiene autoridad para ajustar el comportamiento del bot y decidió que solo responda bajo mención directa.",
-			"updatedAt": 1769984149088
-		},
-		{
-			"key": "interaccion-bot",
-			"content": "Estableció la regla de que el bot solo responda cuando se le llame por nombre porque estaba siendo demasiado intrusiva.",
-			"updatedAt": 1769984878868
-		},
-		{
-			"key": "gestion-bot",
-			"content": "Tiene autoridad o capacidad para configurar el comportamiento del bot y aplicó un 'bozal' (restricción de mención).",
-			"updatedAt": 1769984910486
-		},
-		{
-			"key": "control-bot",
-			"content": "Tiene la autoridad o capacidad de moderar las intervenciones de Brenda (el bot), refiriéndose a ello como 'poner el bozal'.",
-			"updatedAt": 1769984933324
-		},
-		{
-			"key": "autoridad",
-			"content": "Estableció las reglas de conducta y el 'bozal' para limitar las intervenciones del bot.",
-			"updatedAt": 1769985115643
-		}
-	],
-	"Bonny": [
-		{
-			"key": "relacion-brenda",
-			"content": "Es considerado el favorito por Brenda y mostró interés en su bienestar financiero sugiriendo un GoFundMe.",
-			"updatedAt": 1769979502099
-		},
-		{
-			"key": "opinion",
-			"content": "Considera odiosa la acción de Eliaquin de borrar los mensajes del chat.",
-			"updatedAt": 1769979538617
-		},
-		{
-			"key": "opinion-eliaquin",
-			"content": "Consideró que Eliaquín fue 'odioso' al borrar los mensajes de la conversación.",
-			"updatedAt": 1769979646868
-		},
-		{
-			"key": "opinion-reciente",
-			"content": "Consideró odioso el comportamiento de Eliaquin al borrar los mensajes.",
-			"updatedAt": 1769979685496
-		},
-		{
-			"key": "preferencia-bot",
-			"content": "Según el bot, disfruta de su personalidad sarcástica y con carácter.",
-			"updatedAt": 1769979716912
-		},
-		{
-			"key": "viaje",
-			"content": "Realizó un viaje a Puerto Rico recientemente.",
-			"updatedAt": 1769980530195
-		},
-		{
-			"key": "viaje-reciente",
-			"content": "Viajó a Puerto Rico recientemente.",
-			"updatedAt": 1769980571253
-		},
-		{
-			"key": "perfil-economico",
-			"content": "Considera que una inversión de 40 a 60 millones de pesos es barata.",
-			"updatedAt": 1769981621007
-		},
-		{
-			"key": "percepcion-economica",
-			"content": "Considera que una inversión de 40 a 60 millones de pesos es barata.",
-			"updatedAt": 1769982522018
-		}
-	],
-	"Jey": [
-		{
-			"key": "opinion-bot",
-			"content": "Considera que el bot es 'intensa'.",
-			"updatedAt": 1769984910486
-		},
-		{
-			"key": "percepción-bot",
-			"content": "Considera que el bot es intenso en sus intervenciones.",
-			"updatedAt": 1769985115643
-		}
-	],
-	"Alejandro": [
-		{
-			"key": "percepcion-bot",
-			"content": "Cree que el bot es ahora más inteligente y útil que antes.",
-			"updatedAt": 1769982870568
-		},
-		{
-			"key": "percepción-bot",
-			"content": "Considera que el bot se ha vuelto más útil e inteligente, aunque conserva su personalidad 'fresca'.",
-			"updatedAt": 1769982987592
-		},
-		{
-			"key": "opinion-bot",
-			"content": "Opina que el bot se ha vuelto más útil e inteligente recientemente.",
-			"updatedAt": 1769982950322
-		}
-	],
-	"Wispe": [
-		{
-			"key": "equipo-beisbol",
-			"content": "Presume de tener 24 coronas, lo que indica que es fanático de los Tigres del Licey.",
-			"updatedAt": 1769984149088
-		},
-		{
-			"key": "deporte",
-			"content": "Es fanático del equipo de béisbol Licey.",
-			"updatedAt": 1769983616896
-		},
-		{
-			"key": "humor",
-			"content": "Bromea comparando al bot con Skynet por su falta de control.",
-			"updatedAt": 1769983526957
-		},
-		{
-			"key": "idioma",
-			"content": "Tiene conocimientos de inglés y sabe pronunciar palabras como 'literally'.",
-			"updatedAt": 1769983695865
-		},
-		{
-			"key": "habilidad",
-			"content": "Tiene buena pronunciación en inglés, demostrada al pronunciar 'literally'.",
-			"updatedAt": 1769983681314
-		},
-		{
-			"key": "equipo-pelota",
-			"content": "Es fanático del Licey y presume los 24 campeonatos del equipo.",
-			"updatedAt": 1769983695865
-		},
-		{
-			"key": "intereses",
-			"content": "Sigue el béisbol invernal dominicano y bromea sobre la antigüedad de los títulos de Licey y Águilas.",
-			"updatedAt": 1769984933324
-		},
-		{
-			"key": "interes-deportivo",
-			"content": "Sigue el béisbol dominicano y hace bromas sobre los campeonatos del Licey y las Águilas.",
-			"updatedAt": 1769984878868
-		},
-		{
-			"key": "preferencia-deportiva",
-			"content": "Es seguidor de los Tigres del Licey y se burla de las Águilas Cibaeñas.",
-			"updatedAt": 1769984910486
-		},
-		{
-			"key": "interacción",
-			"content": "Mantiene una relación de debate constante y bromas con el bot, especialmente sobre béisbol.",
-			"updatedAt": 1769985115643
-		}
-	]
+  "Brenda": [
+    {
+      "key": "empleo",
+      "content": "Es abogada de profesión.",
+      "updatedAt": 1769979514812
+    },
+    {
+      "key": "preferencias",
+      "content": "Tiene una lista de deseos de perfumes y prefiere los perfumes de nicho sobre los hombres problemáticos.",
+      "updatedAt": 1769982828883
+    },
+    {
+      "key": "preferencia",
+      "content": "Prefiere a los hombres buenos con perfume de nicho antes que a los hombres tóxicos.",
+      "updatedAt": 1769983043024
+    },
+    {
+      "key": "estado-actual",
+      "content": "Está ocupada o 'en lo suyo' según mencionan Eliaquín y el bot.",
+      "updatedAt": 1769980571253
+    },
+    {
+      "key": "apodo",
+      "content": "Es llamada 'Brendy' por Eliaquin y Jey la apoda 'la intensa'.",
+      "updatedAt": 1769984933324
+    },
+    {
+      "key": "habilidad-programacion",
+      "content": "Fue interpelada por Eliaquin para validar si sabía resolver problemas de recursividad.",
+      "updatedAt": 1769980905239
+    },
+    {
+      "key": "personalidad",
+      "content": "Tiene una personalidad definida como 'fina' y con 'chispa', diseñada para no ser aburrida.",
+      "updatedAt": 1769983476278
+    },
+    {
+      "key": "equipo-pelota",
+      "content": "Es fanática de las Águilas Cibaeñas y suele bromear con los fanáticos del Licey.",
+      "updatedAt": 1769983695865
+    },
+    {
+      "key": "alias",
+      "content": "Es llamada cariñosamente 'Brendy' por Eliaquín.",
+      "updatedAt": 1769984878868
+    },
+    {
+      "key": "configuracion",
+      "content": "Tiene un 'bozal' o restricción de respuesta automática, operando ahora solo bajo mención directa.",
+      "updatedAt": 1769984878868
+    },
+    {
+      "key": "habilidad",
+      "content": "Tiene la capacidad de transcribir audios de los miembros del grupo.",
+      "updatedAt": 1769984933324
+    },
+    {
+      "key": "relación-wispe",
+      "content": "Según Eliaquín, Brenda evita o ignora a Wispe (le hace el 'fo').",
+      "updatedAt": 1769985115643
+    },
+    {
+      "key": "modo-operacion",
+      "content": "Se encuentra en modo exclusivo, respondiendo únicamente bajo mención directa por orden de Eliaquín.",
+      "updatedAt": 1769985630715
+    }
+  ],
+  "Eliaquin": [
+    {
+      "key": "tecnologia",
+      "content": "El bot sugiere que su computadora tiene problemas de rendimiento o memoria.",
+      "updatedAt": 1769982522018
+    },
+    {
+      "key": "comportamiento",
+      "content": "Borró mensajes del chat que el Bot le dirigió a Bonny.",
+      "updatedAt": 1769979526471
+    },
+    {
+      "key": "percepcion",
+      "content": "Fue calificado como 'odioso' y 'envidioso' por Bonny y el Bot tras borrar mensajes.",
+      "updatedAt": 1769979526471
+    },
+    {
+      "key": "accion-reciente",
+      "content": "Borró los mensajes que el Bot le envió a Bonny.",
+      "updatedAt": 1769979532595
+    },
+    {
+      "key": "equipo",
+      "content": "Se menciona que su computadora tiene problemas de rendimiento o poca memoria.",
+      "updatedAt": 1769982870568
+    },
+    {
+      "key": "intencion",
+      "content": "Planea modificar al bot para que sea más amable en futuras interacciones.",
+      "updatedAt": 1769979538617
+    },
+    {
+      "key": "conducta",
+      "content": "Borró mensajes de la conversación de forma deliberada.",
+      "updatedAt": 1769979538617
+    },
+    {
+      "key": "intencion-bot",
+      "content": "Planea modificar al bot para que sea más amable en el futuro.",
+      "updatedAt": 1769979646868
+    },
+    {
+      "key": "herramientas",
+      "content": "Tiene una computadora que el bot describe como de 'sueño pesado' por su lentitud al activar procesos.",
+      "updatedAt": 1769979646868
+    },
+    {
+      "key": "gestion-mensajes",
+      "content": "Borró mensajes del chat recientemente, acción que fue tildada de 'odiosa'.",
+      "updatedAt": 1769979685496
+    },
+    {
+      "key": "modificacion-bot",
+      "content": "Tiene la intención de modificar la programación del bot para hacerlo más amable próximamente.",
+      "updatedAt": 1769979685496
+    },
+    {
+      "key": "preferencia-bot",
+      "content": "Prefiere que el bot sea menos intrusivo y solo actúe bajo mención directa.",
+      "updatedAt": 1769984297379
+    },
+    {
+      "key": "interes-viajes",
+      "content": "Investigó costos para viajar a Puerto Rico y Miami, concluyendo que PR es más costoso.",
+      "updatedAt": 1769980530195
+    },
+    {
+      "key": "investigacion-viajes",
+      "content": "Investigó que viajar a Puerto Rico es más caro que ir a Miami.",
+      "updatedAt": 1769980571253
+    },
+    {
+      "key": "intereses",
+      "content": "Se interesa por la psicología evolutiva, dinámicas de pareja y el análisis de comportamiento humano.",
+      "updatedAt": 1769982950322
+    },
+    {
+      "key": "viajes",
+      "content": "Le gustaría irse de vacaciones a París.",
+      "updatedAt": 1769982605708
+    },
+    {
+      "key": "interes-tecnico",
+      "content": "Muestra interés por la programación en TypeScript y el análisis de complejidad de algoritmos.",
+      "updatedAt": 1769980905239
+    },
+    {
+      "key": "proyecto-negocio",
+      "content": "Busca información sobre la instalación de estaciones de expendio de combustibles y regulaciones del MICM.",
+      "updatedAt": 1769980905239
+    },
+    {
+      "key": "proyecto",
+      "content": "Está investigando los requisitos del MICM para establecer una estación de expendio de combustibles.",
+      "updatedAt": 1769980940367
+    },
+    {
+      "key": "ubicacion",
+      "content": "Tiene intereses comerciales o reside en República Dominicana.",
+      "updatedAt": 1769980940367
+    },
+    {
+      "key": "interes-negocio",
+      "content": "Está investigando el procedimiento legal y la inversión necesaria para instalar una bomba de combustible.",
+      "updatedAt": 1769981621007
+    },
+    {
+      "key": "idiomas",
+      "content": "Ha preguntado previamente por la traducción de 'literalmente' al inglés, sugiriendo que se le olvidan estos términos.",
+      "updatedAt": 1769983681314
+    },
+    {
+      "key": "interes-idiomas",
+      "content": "Está practicando inglés, específicamente vocabulario como 'avocado', 'literally' e 'iguana'.",
+      "updatedAt": 1769982605708
+    },
+    {
+      "key": "filosofia-vida",
+      "content": "Valora la paz mental por encima de tener la razón en disputas triviales de convivencia ciudadana.",
+      "updatedAt": 1769983043024
+    },
+    {
+      "key": "apodo-bot",
+      "content": "Llama al bot por el nombre de 'Brendy'.",
+      "updatedAt": 1769982987592
+    },
+    {
+      "key": "filosofía-vida",
+      "content": "Prefiere no buscar problemas y ceder en disputas triviales de derechos públicos por su paz mental.",
+      "updatedAt": 1769982987592
+    },
+    {
+      "key": "interés",
+      "content": "Le interesan los temas de psicología evolutiva, el análisis de comportamiento y los documentales de crímenes reales.",
+      "updatedAt": 1769982987592
+    },
+    {
+      "key": "rol-grupo",
+      "content": "Es quien configuró la personalidad actual de la entidad/bot Brenda.",
+      "updatedAt": 1769983043024
+    },
+    {
+      "key": "prioridad",
+      "content": "Valora la paz mental por encima de tener la razón en disputas triviales de convivencia ciudadana.",
+      "updatedAt": 1769983476278
+    },
+    {
+      "key": "rol",
+      "content": "Configuró la personalidad del bot y tiene la capacidad de modificar su modo de interacción (tagueo).",
+      "updatedAt": 1769983531931
+    },
+    {
+      "key": "filosofia",
+      "content": "Prioriza la paz mental sobre los conflictos por derechos menores, como el parqueo frente a las casas.",
+      "updatedAt": 1769983526957
+    },
+    {
+      "key": "rol-bot",
+      "content": "Es quien le dio al bot su personalidad actual.",
+      "updatedAt": 1769983616896
+    },
+    {
+      "key": "aprendizaje",
+      "content": "Ha preguntado varias veces por la traducción de 'literally' al inglés.",
+      "updatedAt": 1769983616896
+    },
+    {
+      "key": "interes",
+      "content": "Consulta frecuentemente traducciones de términos del español al inglés.",
+      "updatedAt": 1769983631588
+    },
+    {
+      "key": "interes-ingles",
+      "content": "Pregunta por traducciones literales al inglés, como la palabra 'literally'.",
+      "updatedAt": 1769983664442
+    },
+    {
+      "key": "preferencia",
+      "content": "No le gusta que el grupo discuta sobre béisbol (pelota).",
+      "updatedAt": 1769983681314
+    },
+    {
+      "key": "interes-idioma",
+      "content": "Muestra interés por aprender traducciones literales al inglés, aunque a veces olvida que ya las ha preguntado.",
+      "updatedAt": 1769983695865
+    },
+    {
+      "key": "personalidad",
+      "content": "Actúa como mediador en el grupo y no le gusta que discutan de béisbol.",
+      "updatedAt": 1769983695865
+    },
+    {
+      "key": "configuracion-bot",
+      "content": "Tiene autoridad para ajustar el comportamiento del bot y decidió que solo responda bajo mención directa.",
+      "updatedAt": 1769984149088
+    },
+    {
+      "key": "interaccion-bot",
+      "content": "Estableció la regla de que el bot solo responda cuando se le llame por nombre porque estaba siendo demasiado intrusiva.",
+      "updatedAt": 1769984878868
+    },
+    {
+      "key": "gestion-bot",
+      "content": "Tiene autoridad o capacidad para configurar el comportamiento del bot y aplicó un 'bozal' (restricción de mención).",
+      "updatedAt": 1769984910486
+    },
+    {
+      "key": "control-bot",
+      "content": "Tiene la autoridad o capacidad de moderar las intervenciones de Brenda (el bot), refiriéndose a ello como 'poner el bozal'.",
+      "updatedAt": 1769984933324
+    },
+    {
+      "key": "autoridad",
+      "content": "Estableció las reglas de conducta y el 'bozal' para limitar las intervenciones del bot.",
+      "updatedAt": 1769985115643
+    },
+    {
+      "key": "reglas-bot",
+      "content": "Impuso un 'bozal' o restricción a Brenda para que solo responda cuando se le etiqueta por considerarla intensa.",
+      "updatedAt": 1769985630715
+    }
+  ],
+  "Bonny": [
+    {
+      "key": "relacion-brenda",
+      "content": "Es considerado el favorito por Brenda y mostró interés en su bienestar financiero sugiriendo un GoFundMe.",
+      "updatedAt": 1769979502099
+    },
+    {
+      "key": "opinion",
+      "content": "Considera odiosa la acción de Eliaquin de borrar los mensajes del chat.",
+      "updatedAt": 1769979538617
+    },
+    {
+      "key": "opinion-eliaquin",
+      "content": "Consideró que Eliaquín fue 'odioso' al borrar los mensajes de la conversación.",
+      "updatedAt": 1769979646868
+    },
+    {
+      "key": "opinion-reciente",
+      "content": "Consideró odioso el comportamiento de Eliaquin al borrar los mensajes.",
+      "updatedAt": 1769979685496
+    },
+    {
+      "key": "preferencia-bot",
+      "content": "Según el bot, disfruta de su personalidad sarcástica y con carácter.",
+      "updatedAt": 1769979716912
+    },
+    {
+      "key": "viaje",
+      "content": "Realizó un viaje a Puerto Rico recientemente.",
+      "updatedAt": 1769980530195
+    },
+    {
+      "key": "viaje-reciente",
+      "content": "Viajó a Puerto Rico recientemente.",
+      "updatedAt": 1769980571253
+    },
+    {
+      "key": "perfil-economico",
+      "content": "Considera que una inversión de 40 a 60 millones de pesos es barata.",
+      "updatedAt": 1769981621007
+    },
+    {
+      "key": "percepcion-economica",
+      "content": "Considera que una inversión de 40 a 60 millones de pesos es barata.",
+      "updatedAt": 1769982522018
+    }
+  ],
+  "Jey": [
+    {
+      "key": "opinion-bot",
+      "content": "Considera que el bot es 'intensa'.",
+      "updatedAt": 1769984910486
+    },
+    {
+      "key": "percepción-bot",
+      "content": "Considera que el bot es intenso en sus intervenciones.",
+      "updatedAt": 1769985115643
+    },
+    {
+      "key": "opinion-reglas",
+      "content": "Dio el visto bueno a las restricciones impuestas sobre el comportamiento de la bot.",
+      "updatedAt": 1769985630715
+    }
+  ],
+  "Alejandro": [
+    {
+      "key": "percepcion-bot",
+      "content": "Cree que el bot es ahora más inteligente y útil que antes.",
+      "updatedAt": 1769982870568
+    },
+    {
+      "key": "percepción-bot",
+      "content": "Considera que el bot se ha vuelto más útil e inteligente, aunque conserva su personalidad 'fresca'.",
+      "updatedAt": 1769982987592
+    },
+    {
+      "key": "opinion-bot",
+      "content": "Opina que el bot se ha vuelto más útil e inteligente recientemente.",
+      "updatedAt": 1769982950322
+    }
+  ],
+  "Wispe": [
+    {
+      "key": "equipo-beisbol",
+      "content": "Presume de tener 24 coronas, lo que indica que es fanático de los Tigres del Licey.",
+      "updatedAt": 1769984149088
+    },
+    {
+      "key": "deporte",
+      "content": "Es fanático del equipo de béisbol Licey.",
+      "updatedAt": 1769983616896
+    },
+    {
+      "key": "humor",
+      "content": "Bromea comparando al bot con Skynet por su falta de control.",
+      "updatedAt": 1769983526957
+    },
+    {
+      "key": "idioma",
+      "content": "Tiene conocimientos de inglés y sabe pronunciar palabras como 'literally'.",
+      "updatedAt": 1769983695865
+    },
+    {
+      "key": "habilidad",
+      "content": "Tiene buena pronunciación en inglés, demostrada al pronunciar 'literally'.",
+      "updatedAt": 1769983681314
+    },
+    {
+      "key": "equipo-pelota",
+      "content": "Es fanático del Licey y presume los 24 campeonatos del equipo.",
+      "updatedAt": 1769983695865
+    },
+    {
+      "key": "intereses",
+      "content": "Sigue el béisbol invernal dominicano y bromea sobre la antigüedad de los títulos de Licey y Águilas.",
+      "updatedAt": 1769984933324
+    },
+    {
+      "key": "interes-deportivo",
+      "content": "Tiene un tema recurrente o 'trauma' con las 24 coronas del equipo Licey.",
+      "updatedAt": 1769985630715
+    },
+    {
+      "key": "preferencia-deportiva",
+      "content": "Es seguidor de los Tigres del Licey y se burla de las Águilas Cibaeñas.",
+      "updatedAt": 1769984910486
+    },
+    {
+      "key": "interacción",
+      "content": "Mantiene una relación de debate constante y bromas con el bot, especialmente sobre béisbol.",
+      "updatedAt": 1769985115643
+    }
+  ]
 }
