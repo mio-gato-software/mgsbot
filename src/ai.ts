@@ -3,7 +3,9 @@ import {
   createUserContent,
   createPartFromUri,
   type Content,
+  type Part,
 } from "@google/genai";
+import * as fs from "node:fs";
 import type { MemoryEvaluation } from "./types.ts";
 
 const ai = new GoogleGenAI({});
@@ -63,6 +65,38 @@ export async function transcribeAudio(
   } catch (error) {
     console.error("[transcribeAudio] Error:", error);
     return "[transcription failed]";
+  }
+}
+
+export async function describeImage(
+  filePath: string,
+  mimeType: string,
+  caption?: string,
+): Promise<string> {
+  try {
+    const base64Data = fs.readFileSync(filePath, { encoding: "base64" });
+
+    const parts: Part[] = [
+      { inlineData: { mimeType, data: base64Data } },
+      { text: caption
+        ? `The user sent this image with the caption: "${caption}". Describe what you see briefly in Spanish, so you can reference it in conversation.`
+        : "The user sent this image. Describe what you see briefly in Spanish, so you can reference it in conversation."
+      },
+    ];
+
+    if (isDev) console.log("[describeImage] Sending image to model, mimeType:", mimeType);
+
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: createUserContent(parts),
+    });
+
+    const text = response.text ?? "[image description failed]";
+    if (isDev) console.log("[describeImage] Result:", text.slice(0, 200));
+    return text;
+  } catch (error) {
+    console.error("[describeImage] Error:", error);
+    return "[image description failed]";
   }
 }
 

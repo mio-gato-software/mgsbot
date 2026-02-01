@@ -4,7 +4,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identifying the user for personalized future interactions.",
     "createdAt": 1769954540611,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 3
   },
   {
@@ -12,7 +12,7 @@
     "content": "The user speaks Spanish.",
     "context": "Language preference for communication.",
     "createdAt": 1769954540611,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 2
   },
   {
@@ -20,7 +20,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identifying the user for personalized interactions.",
     "createdAt": 1769954598872,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 3
   },
   {
@@ -28,7 +28,7 @@
     "content": "The user is bilingual, communicating in both Spanish and English.",
     "context": "Language preference for future interactions.",
     "createdAt": 1769954598872,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 2
   },
   {
@@ -36,7 +36,7 @@
     "content": "The user repeatedly offered to transcribe audio files for the AI, suggesting a misunderstanding of the bot's role or a specific test case.",
     "context": "Behavioral pattern and context of previous confusion/interactions.",
     "createdAt": 1769954598872,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 2
   },
   {
@@ -44,7 +44,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identity of the user for personalization.",
     "createdAt": 1769955259083,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 3
   },
   {
@@ -52,7 +52,7 @@
     "content": "The user speaks Spanish.",
     "context": "Communication preference.",
     "createdAt": 1769955259083,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 3
   },
   {
@@ -60,7 +60,7 @@
     "content": "The user repeatedly asked to transcribe audio files for the assistant, suggesting a misunderstanding of the assistant's role or a specific workflow expectation.",
     "context": "Behavioral pattern/misunderstanding of bot functionality.",
     "createdAt": 1769955259083,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 2
   },
   {
@@ -68,7 +68,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "The user identified themselves and the bot addressed them by this name.",
     "createdAt": 1769955362677,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 4
   },
   {
@@ -76,7 +76,7 @@
     "content": "The user prefers to communicate via audio messages.",
     "context": "The interaction consisted of multiple audio message attempts and a confirmation of being heard through audio.",
     "createdAt": 1769955362677,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 3
   },
   {
@@ -84,7 +84,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769955379614,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 3
   },
   {
@@ -100,7 +100,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for future interactions.",
     "createdAt": 1769955423608,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 4
   },
   {
@@ -108,7 +108,7 @@
     "content": "Eliaquín Encarnación is interested in audio transcription services or testing the bot's transcription capabilities.",
     "context": "User's specific intent and repeated mention of 'transcription' during the interaction.",
     "createdAt": 1769955423608,
-    "lastAccessed": 1769955832601,
+    "lastAccessed": 1769956338286,
     "importance": 3
   },
   {
@@ -140,7 +140,7 @@
     "content": "Eliaquín Encarnación's favorite baseball team is Leones del Escogido.",
     "context": "The user mentioned they are his favorite team and discussed their recent championship win.",
     "createdAt": 1769955841907,
-    "lastAccessed": 1769955841907,
+    "lastAccessed": 1769956338286,
     "importance": 3
   },
   {
@@ -148,7 +148,39 @@
     "content": "Eliaquín Encarnación is located in or interested in activities within Santo Domingo, Dominican Republic.",
     "context": "The user asked for recommendations for things to do in Santo Domingo on a Sunday afternoon.",
     "createdAt": 1769955841907,
-    "lastAccessed": 1769955841907,
+    "lastAccessed": 1769956338286,
+    "importance": 2
+  },
+  {
+    "id": "mem_1769956347141_sv8d6h",
+    "content": "El usuario se llama Eliaquín Encarnación.",
+    "context": "Identificación personal para futuras interacciones.",
+    "createdAt": 1769956347141,
+    "lastAccessed": 1769956347141,
+    "importance": 4
+  },
+  {
+    "id": "mem_1769956347141_lf3qjp",
+    "content": "El usuario vive o se encuentra en Santo Domingo, República Dominicana.",
+    "context": "Recomendaciones locales y contexto geográfico.",
+    "createdAt": 1769956347141,
+    "lastAccessed": 1769956347141,
+    "importance": 3
+  },
+  {
+    "id": "mem_1769956347141_9r64pz",
+    "content": "Su equipo favorito de béisbol son los Leones del Escogido.",
+    "context": "Interés deportivo clave para personalización.",
+    "createdAt": 1769956347141,
+    "lastAccessed": 1769956347141,
+    "importance": 4
+  },
+  {
+    "id": "mem_1769956347141_olhgnf",
+    "content": "El usuario reconoce que los Leones del Escogido tienen una base de fanáticos pequeña.",
+    "context": "Matiz sobre su perspectiva como fanático.",
+    "createdAt": 1769956347141,
+    "lastAccessed": 1769956347141,
     "importance": 2
   }
 ]

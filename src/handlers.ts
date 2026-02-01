@@ -1,5 +1,5 @@
 import type { Bot, Context } from "grammy";
-import { transcribeAudio, generateResponse, evaluateMemory } from "./ai.ts";
+import { transcribeAudio, describeImage, generateResponse, evaluateMemory } from "./ai.ts";
 import {
   loadShortTerm,
   addMessageToShortTerm,
@@ -164,6 +164,32 @@ async function downloadAndTranscribe(
   return transcription;
 }
 
+async function downloadImage(
+  ctx: Context,
+  botToken: string,
+): Promise<{ filePath: string; mimeType: string }> {
+  const photos = ctx.message!.photo!;
+  // Telegram sends multiple sizes; pick the largest
+  const photo = photos[photos.length - 1];
+  const file = await ctx.api.getFile(photo.file_id);
+  const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+  if (isDev) console.log("[downloadImage] Downloading from:", url);
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+  }
+
+  const ext = file.file_path?.split(".").pop() ?? "jpg";
+  const mimeType = ext === "png" ? "image/png" : "image/jpeg";
+  const filePath = `./audios/photo_${ctx.message!.message_id}.${ext}`;
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await Bun.write(filePath, buffer);
+  if (isDev) console.log("[downloadImage] Saved to:", filePath, `(${buffer.length} bytes)`);
+
+  return { filePath, mimeType };
+}
+
 export function registerHandlers(bot: Bot): void {
   const botToken = bot.token;
 
@@ -198,6 +224,23 @@ export function registerHandlers(bot: Bot): void {
     } catch (error) {
       console.error("[audio handler] Error:", error);
       if (isDev) await ctx.reply(`[Dev] Audio handler error: ${error}`).catch(() => {});
+    }
+  });
+
+  // Photos
+  bot.on("message:photo", async (ctx) => {
+    try {
+      const { filePath, mimeType } = await downloadImage(ctx, botToken);
+      const caption = ctx.message.caption;
+      const description = await describeImage(filePath, mimeType, caption);
+      const userName = getUserDisplayName(ctx);
+      const content = caption
+        ? `[Image from ${userName}, caption: "${caption}"]: ${description}`
+        : `[Image from ${userName}]: ${description}`;
+      await processConversation(ctx, content, userName);
+    } catch (error) {
+      console.error("[photo handler] Error:", error);
+      if (isDev) await ctx.reply(`[Dev] Photo handler error: ${error}`).catch(() => {});
     }
   });
 
