@@ -1,17 +1,18 @@
 {
-  "name": "andrordbot",
-  "module": "index.ts",
-  "dependencies": {
-    "@google/genai": "^1",
-    "grammy": "^1.39.3"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "private": true,
-  "scripts": {
-    "start": "bun run index.ts",
-    "dev": "bun --watch run index.ts"
-  },
-  "type": "module"
+	"name": "andrordbot",
+	"module": "index.ts",
+	"dependencies": {
+		"@google/genai": "^1",
+		"grammy": "^1.39.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.13",
+		"@types/bun": "latest"
+	},
+	"private": true,
+	"scripts": {
+		"start": "bun run index.ts",
+		"dev": "bun --watch run index.ts"
+	},
+	"type": "module"
 }

@@ -1,9 +1,11 @@
-import { Bot } from "grammy";
 import { mkdir } from "node:fs/promises";
-import { initMemoryDirs } from "./src/memory.ts";
+import { Bot } from "grammy";
 import { registerHandlers } from "./src/handlers.ts";
+import { initMemoryDirs } from "./src/memory.ts";
 
-const bot = new Bot(process.env.BOT_TOKEN!);
+const token = process.env.BOT_TOKEN;
+if (!token) throw new Error("BOT_TOKEN environment variable is required");
+const bot = new Bot(token);
 
 // Initialize directories
 await mkdir("./audios").catch(() => {});
@@ -15,5 +17,5 @@ registerHandlers(bot);
 bot.start();
 
 if (process.env.NODE_ENV === "development") {
-  console.log(`[startup] Bot started (NODE_ENV=development)`);
+	console.log(`[startup] Bot started (NODE_ENV=development)`);
 }
