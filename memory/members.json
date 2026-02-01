@@ -149,8 +149,8 @@
     },
     {
       "key": "viajes",
-      "content": "Le gustaría irse de vacaciones a París.",
-      "updatedAt": 1769982605708
+      "content": "Tiene interés en ir de vacaciones a París.",
+      "updatedAt": 1769986815130
     },
     {
       "key": "interes-tecnico",
@@ -291,6 +291,21 @@
       "key": "reglas-bot",
       "content": "Estableció la regla de que la bot (Brendy) solo responda cuando sea mencionada directamente para evitar que sea intensa.",
       "updatedAt": 1769985896947
+    },
+    {
+      "key": "rutina",
+      "content": "Le da mucha pereza levantarse por las mañanas.",
+      "updatedAt": 1769986211309
+    },
+    {
+      "key": "rutina-mañana",
+      "content": "Le da mucha pereza levantarse por las mañanas.",
+      "updatedAt": 1769986231146
+    },
+    {
+      "key": "interés-idioma",
+      "content": "Está practicando inglés, preguntando por traducciones de palabras como aguacate, iguana y frases de viaje.",
+      "updatedAt": 1769986815130
     }
   ],
   "Bonny": [
@@ -422,8 +437,8 @@
     },
     {
       "key": "interes-deportivo",
-      "content": "Tiene un tema recurrente o 'trauma' con las 24 coronas del equipo Licey.",
-      "updatedAt": 1769985630715
+      "content": "Teme al equipo de las Águilas y señala que tienen 10 años sin ganar.",
+      "updatedAt": 1769986231146
     },
     {
       "key": "preferencia-deportiva",
