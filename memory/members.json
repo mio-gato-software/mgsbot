@@ -64,6 +64,11 @@
       "key": "modo-operacion",
       "content": "Se encuentra en modo exclusivo, respondiendo únicamente bajo mención directa por orden de Eliaquín.",
       "updatedAt": 1769985630715
+    },
+    {
+      "key": "estado-operativo",
+      "content": "Se encuentra en modo exclusiva, respondiendo solo bajo mención directa por orden de Eliaquin.",
+      "updatedAt": 1769985896947
     }
   ],
   "Eliaquin": [
@@ -124,8 +129,8 @@
     },
     {
       "key": "preferencia-bot",
-      "content": "Prefiere que el bot sea menos intrusivo y solo actúe bajo mención directa.",
-      "updatedAt": 1769984297379
+      "content": "Restringió al bot a responder solo cuando se le invoca directamente para evitar interrupciones excesivas.",
+      "updatedAt": 1769985900153
     },
     {
       "key": "interes-viajes",
@@ -274,8 +279,8 @@
     },
     {
       "key": "control-bot",
-      "content": "Tiene la autoridad o capacidad de moderar las intervenciones de Brenda (el bot), refiriéndose a ello como 'poner el bozal'.",
-      "updatedAt": 1769984933324
+      "content": "Restringió las respuestas de Brenda para que solo responda cuando se le llame directamente.",
+      "updatedAt": 1769985929838
     },
     {
       "key": "autoridad",
@@ -284,8 +289,8 @@
     },
     {
       "key": "reglas-bot",
-      "content": "Impuso un 'bozal' o restricción a Brenda para que solo responda cuando se le etiqueta por considerarla intensa.",
-      "updatedAt": 1769985630715
+      "content": "Estableció la regla de que la bot (Brendy) solo responda cuando sea mencionada directamente para evitar que sea intensa.",
+      "updatedAt": 1769985896947
     }
   ],
   "Bonny": [
@@ -338,8 +343,8 @@
   "Jey": [
     {
       "key": "opinion-bot",
-      "content": "Considera que el bot es 'intensa'.",
-      "updatedAt": 1769984910486
+      "content": "Estuvo de acuerdo con la decisión de Eliaquín de limitar la intensidad de las respuestas de Brenda.",
+      "updatedAt": 1769985929838
     },
     {
       "key": "percepción-bot",
@@ -350,6 +355,16 @@
       "key": "opinion-reglas",
       "content": "Dio el visto bueno a las restricciones impuestas sobre el comportamiento de la bot.",
       "updatedAt": 1769985630715
+    },
+    {
+      "key": "permisos-bot",
+      "content": "Dio el visto bueno a Eliaquin para restringir las respuestas de la bot.",
+      "updatedAt": 1769985896947
+    },
+    {
+      "key": "preferencia-bot",
+      "content": "Dio su aprobación para que el bot opere en modo restrictivo o exclusivo.",
+      "updatedAt": 1769985900153
     }
   ],
   "Alejandro": [
@@ -372,13 +387,13 @@
   "Wispe": [
     {
       "key": "equipo-beisbol",
-      "content": "Presume de tener 24 coronas, lo que indica que es fanático de los Tigres del Licey.",
-      "updatedAt": 1769984149088
+      "content": "Es seguidor de los Tigres del Licey y suele hablar sobre sus 24 coronas.",
+      "updatedAt": 1769985896947
     },
     {
       "key": "deporte",
-      "content": "Es fanático del equipo de béisbol Licey.",
-      "updatedAt": 1769983616896
+      "content": "Sigue el béisbol dominicano; menciona frecuentemente los 24 títulos del Licey y afirma temer a las Águilas a pesar de su racha sin ganar.",
+      "updatedAt": 1769985929838
     },
     {
       "key": "humor",
@@ -419,6 +434,16 @@
       "key": "interacción",
       "content": "Mantiene una relación de debate constante y bromas con el bot, especialmente sobre béisbol.",
       "updatedAt": 1769985115643
+    },
+    {
+      "key": "rivalidad-deportiva",
+      "content": "Expresó que teme a las Águilas Cibaeñas porque llevan 10 años sin ganar.",
+      "updatedAt": 1769985896947
+    },
+    {
+      "key": "interes-beisbol",
+      "content": "Sigue de cerca el béisbol dominicano; bromea con las 24 coronas del Licey y menciona que las Águilas llevan 10 años sin ganar.",
+      "updatedAt": 1769985900153
     }
   ]
 }
