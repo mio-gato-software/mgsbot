@@ -3,6 +3,7 @@ import {
 	type Content,
 	createPartFromUri,
 	createUserContent,
+	type GenerateContentResponse,
 	GoogleGenAI,
 	type Part,
 } from "@google/genai";
@@ -12,6 +13,14 @@ const ai = new GoogleGenAI({});
 const MODEL = "gemini-3-flash-preview";
 
 const isDev = process.env.NODE_ENV === "development";
+
+function logTokenUsage(label: string, response: GenerateContentResponse): void {
+	const usage = response.usageMetadata;
+	if (!usage) return;
+	console.log(
+		`[tokens:${label}] in=${usage.promptTokenCount ?? 0} out=${usage.candidatesTokenCount ?? 0} total=${usage.totalTokenCount ?? 0}`,
+	);
+}
 
 export async function transcribeAudio(
 	filePath: string,
@@ -67,6 +76,7 @@ export async function transcribeAudio(
 			]),
 		});
 
+		logTokenUsage("transcribeAudio", response);
 		const text = response.text ?? "[transcription failed]";
 		if (isDev) console.log("[transcribeAudio] Result:", text.slice(0, 200));
 		return text;
@@ -104,6 +114,7 @@ export async function describeImage(
 			contents: createUserContent(parts),
 		});
 
+		logTokenUsage("describeImage", response);
 		const text = response.text ?? "[image description failed]";
 		if (isDev) console.log("[describeImage] Result:", text.slice(0, 200));
 		return text;
@@ -134,6 +145,7 @@ export async function analyzeYouTube(
 			contents: createUserContent(parts),
 		});
 
+		logTokenUsage("analyzeYouTube", response);
 		const text = response.text ?? "[video analysis failed]";
 		if (isDev) console.log("[analyzeYouTube] Result:", text.slice(0, 200));
 		return text;
@@ -160,6 +172,7 @@ export async function generateResponse(
 		},
 		contents,
 	});
+	logTokenUsage("generateResponse", response);
 	const text = response.text ?? "";
 	if (isDev) console.log("[generateResponse] Response:", text.slice(0, 200));
 	return text;
@@ -184,6 +197,7 @@ ${recentMessages}`;
 		contents: createUserContent([prompt]),
 	});
 
+	logTokenUsage("evaluateMemory", response);
 	const text = response.text ?? '{"save": false, "memories": []}';
 	try {
 		// Extract JSON from possible markdown code block
