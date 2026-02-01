@@ -19,6 +19,7 @@ import type { ConversationMessage } from "./types.ts";
 
 const SILENCE_TOKEN = "[SILENCE]";
 const EVAL_EVERY_N_MESSAGES = 5;
+const ALLOWED_GROUP_ID = -10192990;
 const isDev = process.env.NODE_ENV === "development";
 
 function getUserDisplayName(ctx: Context): string {
@@ -254,6 +255,21 @@ function extractYouTubeUrl(
 
 export function registerHandlers(bot: Bot): void {
 	const botToken = bot.token;
+
+	// Group whitelist: only allow the permitted group, leave all others
+	bot.use(async (ctx, next) => {
+		const chatId = ctx.chat?.id;
+		if (isGroupChat(ctx) && chatId !== ALLOWED_GROUP_ID) {
+			console.log(`[guard] Unauthorized group ${chatId}, leaving...`);
+			if (chatId) {
+				await ctx.api
+					.leaveChat(chatId)
+					.catch((e) => console.error("[guard] Failed to leave:", e));
+			}
+			return;
+		}
+		await next();
+	});
 
 	// Voice messages
 	bot.on("message:voice", async (ctx) => {

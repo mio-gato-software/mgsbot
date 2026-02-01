@@ -1,10 +1,98 @@
 [
   {
+    "id": "mem_1769971275560_n40y9n",
+    "content": "Eliaquín Encarnación is the developer/administrator of the bot and is responsible for its updates and maintenance.",
+    "context": "Eliaquín mentioned taking the bot out of the group to improve it and thanked users for help testing it.",
+    "createdAt": 1769971275560,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769969851452_8o7y95",
+    "content": "Eliaquín Encarnación is the developer/creator of the bot and manages its technical updates.",
+    "context": "Eliaquín mentioned taking the bot offline to improve her and thanked the group for help with testing.",
+    "createdAt": 1769969851452,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769968705731_pxeykq",
+    "content": "Eliaquín Encarnación instructed the bot to stop interacting unless explicitly mentioned.",
+    "context": "Direct operational command from the creator to regulate bot behavior in the group chat.",
+    "createdAt": 1769968705731,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769968359264_m4cx50",
+    "content": "Eliaquín Encarnación is the creator/developer of the bot.",
+    "context": "Directly stated by the bot and Eliaquín regarding the bot's development and optimization.",
+    "createdAt": 1769968359264,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769967203697_p36ohw",
+    "content": "The user's name is Bonny.",
+    "context": "Identified throughout the conversation; essential for personalization.",
+    "createdAt": 1769967203697,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769966269648_vcvsft",
+    "content": "Eliaquín Encarnación is the creator/developer of the bot.",
+    "context": "The bot refers to him as 'mi creador' and he mentions updating its code.",
+    "createdAt": 1769966269648,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769966222008_sltrtm",
+    "content": "Eliaquín Encarnación explicitly requested not to be called 'jefe' (boss).",
+    "context": "User preference regarding how the bot addresses him to avoid feeling old.",
+    "createdAt": 1769966222008,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769965973582_k63due",
+    "content": "Eliaquín Encarnación is the creator of the bot.",
+    "context": "The bot identifies Eliaquín as its creator during the conversation.",
+    "createdAt": 1769965973582,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769965959795_q61266",
+    "content": "Eliaquín Encarnación is the creator/developer of the bot.",
+    "context": "Essential for understanding the bot's hierarchy and relationship with users.",
+    "createdAt": 1769965959795,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769965937340_7ezc8a",
+    "content": "Eliaquín Encarnación is the creator of the bot (Brendy).",
+    "context": "The bot explicitly refers to Eliaquín as 'mi creador' and acknowledges his authority.",
+    "createdAt": 1769965937340,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
+    "id": "mem_1769965881939_fu6tie",
+    "content": "The bot's name is Brendy (not Brandy).",
+    "context": "The bot explicitly corrected Bonny on the spelling of its name.",
+    "createdAt": 1769965881939,
+    "lastAccessed": 1769971434961,
+    "importance": 5
+  },
+  {
     "id": "mem_1769963661792_4xh96u",
     "content": "The user Eliaquín Encarnación is the creator and designer of the bot.",
     "context": "The bot explicitly identifies Eliaquín as its creator and designer multiple times.",
     "createdAt": 1769963661792,
-    "lastAccessed": 1769964307296,
+    "lastAccessed": 1769971434961,
     "importance": 5
   },
   {
@@ -12,7 +100,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification and personalization for future interactions.",
     "createdAt": 1769963088265,
-    "lastAccessed": 1769964307296,
+    "lastAccessed": 1769971394186,
     "importance": 5
   },
   {
@@ -20,7 +108,7 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Identification for personalized interaction.",
     "createdAt": 1769962528530,
-    "lastAccessed": 1769964307296,
+    "lastAccessed": 1769971394186,
     "importance": 5
   },
   {
@@ -28,375 +116,287 @@
     "content": "The user's name is Eliaquín Encarnación.",
     "context": "Personal identification for personalized interaction.",
     "createdAt": 1769958731356,
-    "lastAccessed": 1769964307296,
+    "lastAccessed": 1769971394186,
     "importance": 5
   },
   {
-    "id": "mem_1769964315140_cqmt8x",
-    "content": "Eliaquín Encarnación is the designer/creator of the bot.",
-    "context": "The bot refers to Eliaquín as the one who designed her.",
-    "createdAt": 1769964315140,
-    "lastAccessed": 1769964315140,
+    "id": "mem_1769971418534_iwuh9v",
+    "content": "The bot's name is Brendy; she is a fan of the Águilas Cibaeñas (Aguilucha) and expresses a strong rivalry with fans of the Licey team.",
+    "context": "Bot persona identity and recurring social themes.",
+    "createdAt": 1769971418534,
+    "lastAccessed": 1769971434961,
     "importance": 4
   },
   {
-    "id": "mem_1769963936893_fcb7ng",
-    "content": "Eliaquín Encarnación is the designer/creator of the bot.",
-    "context": "The bot acknowledges Eliaquín's role in its design during the conversation.",
-    "createdAt": 1769963936893,
-    "lastAccessed": 1769964307296,
-    "importance": 4
-  },
-  {
-    "id": "mem_1769963854517_t9ayxl",
-    "content": "Eliaquín Encarnación es el diseñador/creador de este bot.",
-    "context": "El bot menciona 'lo que tú mismo diseñaste' al hablar con Eliaquín.",
-    "createdAt": 1769963854517,
-    "lastAccessed": 1769964307296,
-    "importance": 4
-  },
-  {
-    "id": "mem_1769963661792_kue7wb",
-    "content": "The bot's name is Brendy.",
-    "context": "The bot identifies itself by this name.",
-    "createdAt": 1769963661792,
-    "lastAccessed": 1769964307296,
-    "importance": 4
-  },
-  {
-    "id": "mem_1769963589393_ds4rwz",
+    "id": "mem_1769971396467_tcx3jn",
     "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Basic user identification for personalized interaction.",
-    "createdAt": 1769963589393,
-    "lastAccessed": 1769964307296,
+    "context": "User identification from the conversation transcript.",
+    "createdAt": 1769971396467,
+    "lastAccessed": 1769971434961,
     "importance": 4
   },
   {
-    "id": "mem_1769963589393_eixje1",
-    "content": "The bot's identity is 'Brendy', a 30-year-old persona with a confident/sassy Dominican style, and Eliaquín is established as her creator/designer.",
-    "context": "Maintains consistency in bot persona and the specific relationship dynamic defined by the user.",
-    "createdAt": 1769963589393,
-    "lastAccessed": 1769964307296,
+    "id": "mem_1769971396467_qw41uk",
+    "content": "The user is based in or interested in the Dominican Republic.",
+    "context": "The user asked about divorce laws in RD and inquired about local beach conditions.",
+    "createdAt": 1769971396467,
+    "lastAccessed": 1769971434961,
     "importance": 4
   },
   {
-    "id": "mem_1769963088265_7n70bo",
-    "content": "The user is located in or interested in Santo Domingo, Dominican Republic.",
-    "context": "Relevant for providing contextual information like weather and local regulations.",
-    "createdAt": 1769963088265,
-    "lastAccessed": 1769964307296,
+    "id": "mem_1769971275560_0ysn3g",
+    "content": "The bot is named 'Brendy' and has an established rapport with users Wispe and Bonny.",
+    "context": "Eliaquín addresses the bot as Brendy, and the bot refers to its 'memories' and interactions with Bonny and Wispe.",
+    "createdAt": 1769971275560,
+    "lastAccessed": 1769971315164,
     "importance": 4
   },
   {
-    "id": "mem_1769962724039_m80vj2",
-    "content": "The user is located in or interested in matters specifically within Santo Domingo, Dominican Republic.",
-    "context": "Contextualized by the weather and business inquiries regarding the DR.",
-    "createdAt": 1769962724039,
-    "lastAccessed": 1769964307296,
+    "id": "mem_1769971223696_9tpd3q",
+    "content": "Eliaquín Encarnación is the developer or administrator responsible for updating and maintaining the bot (Brendy).",
+    "context": "Eliaquín mentioned taking the bot out of the group to 'improve her' and thanked the users for helping test it.",
+    "createdAt": 1769971223696,
+    "lastAccessed": 1769971260273,
     "importance": 4
   },
   {
-    "id": "mem_1769962706377_ogo6dk",
-    "content": "The user is located in or interested in the context of Santo Domingo, Dominican Republic.",
-    "context": "Weather and business inquiries were specific to this location.",
-    "createdAt": 1769962706377,
-    "lastAccessed": 1769964307296,
+    "id": "mem_1769969817098_50hnj1",
+    "content": "Eliaquín Encarnación is the developer or person in charge of updating and improving the bot's system.",
+    "context": "Eliaquín mentioned taking the bot out of the group to 'improve her' and she addresses him as the one who controls her.",
+    "createdAt": 1769969817098,
+    "lastAccessed": 1769971206360,
     "importance": 4
   },
   {
-    "id": "mem_1769962706377_9i9nlb",
-    "content": "The user is interested in the process of incorporating a company in the Dominican Republic.",
-    "context": "Asked about the difficulty and steps (ONAPI, Chamber of Commerce, DGII) for business formation.",
-    "createdAt": 1769962706377,
-    "lastAccessed": 1769964307296,
+    "id": "mem_1769969727493_jmajvy",
+    "content": "Eliaquín Encarnación is the creator/prompt-author of the bot (Brendy) and designed its authentic and unfiltered personality.",
+    "context": "Explains the bot's identity, origin, and why it behaves with a specific tone.",
+    "createdAt": 1769969727493,
+    "lastAccessed": 1769969840082,
     "importance": 4
   },
   {
-    "id": "mem_1769962528530_ghayk4",
-    "content": "The user is located in Santo Domingo.",
-    "context": "The bot refers to Santo Domingo specifically when providing local weather information.",
-    "createdAt": 1769962528530,
-    "lastAccessed": 1769963923820,
+    "id": "mem_1769969709657_rgdp3t",
+    "content": "Eliaquín Encarnación specifically designed the bot's personality to be 'authentic', 'unfiltered', and to support the Águilas Cibaeñas baseball team.",
+    "context": "This defines the bot's persona and explains its sarcastic/aggressive behavior toward certain users or topics.",
+    "createdAt": 1769969709657,
+    "lastAccessed": 1769969807046,
     "importance": 4
   },
   {
-    "id": "mem_1769962405997_c9z2e0",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Personal identification for future interactions.",
-    "createdAt": 1769962405997,
-    "lastAccessed": 1769963923820,
+    "id": "mem_1769969695572_6wgj4v",
+    "content": "Eliaquín Encarnación is the creator or developer of the bot.",
+    "context": "The bot explicitly mentions 'Tú me hiciste así de auténtica' to Eliaquín.",
+    "createdAt": 1769969695572,
+    "lastAccessed": 1769969714408,
     "importance": 4
   },
   {
-    "id": "mem_1769961564905_yipof9",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "User identification for personalized interaction.",
-    "createdAt": 1769961564905,
-    "lastAccessed": 1769963840967,
+    "id": "mem_1769969455760_2unreg",
+    "content": "Eliaquín Encarnación is the person responsible for adjusting the bot's prompt and configuration.",
+    "context": "He mentioned needing to refine the prompt to improve the bot's responses after Jey's complaints.",
+    "createdAt": 1769969455760,
+    "lastAccessed": 1769969694945,
     "importance": 4
   },
   {
-    "id": "mem_1769961048145_hb0f2y",
-    "content": "Eliaquín Encarnación's sister has a habit of drinking baking soda daily for stomach issues.",
-    "context": "The user shared this personal family information when asking for health advice.",
-    "createdAt": 1769961048145,
-    "lastAccessed": 1769963650148,
+    "id": "mem_1769969372733_y68llp",
+    "content": "Eliaquín Encarnación is the person responsible for adjusting the bot's prompt and settings.",
+    "context": "Identifies the user with the authority to modify the bot's behavior.",
+    "createdAt": 1769969372733,
+    "lastAccessed": 1769969694945,
     "importance": 4
   },
   {
-    "id": "mem_1769960219287_r5lm0a",
-    "content": "Eliaquín has a sister who habitually drinks baking soda for stomach issues.",
-    "context": "Relevant health-related family context; the bot advised against this due to risks like high blood pressure and kidney damage.",
-    "createdAt": 1769960219287,
-    "lastAccessed": 1769963650148,
+    "id": "mem_1769969368935_1f68q4",
+    "content": "Eliaquín Encarnación requested the bot to stop using the word 'sazón' because it sounds 'palomo' (low class/uncool).",
+    "context": "Direct instruction to modify the bot's vocabulary and social register.",
+    "createdAt": 1769969368935,
+    "lastAccessed": 1769969443918,
     "importance": 4
   },
   {
-    "id": "mem_1769959792013_iityrj",
-    "content": "Tiene una hermana que consume bicarbonato de sodio diariamente para problemas estomacales por costumbre.",
-    "context": "Información familiar y de salud relevante para futuras referencias o consejos.",
-    "createdAt": 1769959792013,
-    "lastAccessed": 1769963578046,
+    "id": "mem_1769969368935_dj7n7h",
+    "content": "The bot is expected to maintain a more 'fina' (refined/sophisticated) and original persona to avoid complaints from the group.",
+    "context": "General persona guideline established by Eliaquín and Jey.",
+    "createdAt": 1769969368935,
+    "lastAccessed": 1769969411827,
     "importance": 4
   },
   {
-    "id": "mem_1769955362677_e5ldye",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "The user identified themselves and the bot addressed them by this name.",
-    "createdAt": 1769955362677,
-    "lastAccessed": 1769963578046,
+    "id": "mem_1769969363628_ea2atj",
+    "content": "Eliaquín Encarnación dislikes the word 'sazón' and thinks it sounds 'palomo' (corny/tacky); he prefers the bot to avoid it.",
+    "context": "Direct instruction from the user regarding communication style and vocabulary preferences.",
+    "createdAt": 1769969363628,
+    "lastAccessed": 1769969411827,
     "importance": 4
   },
   {
-    "id": "mem_1769955423608_9wqnl6",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Personal identification for future interactions.",
-    "createdAt": 1769955423608,
-    "lastAccessed": 1769963077620,
+    "id": "mem_1769969357493_0bbi3a",
+    "content": "Eliaquín Encarnación requested the bot to stop using the word 'sazón' because he thinks it sounds 'palomo' (lame/corny).",
+    "context": "Direct instruction on conversational style and vocabulary preference for Eliaquín.",
+    "createdAt": 1769969357493,
+    "lastAccessed": 1769969362714,
     "importance": 4
   },
   {
-    "id": "mem_1769956347141_sv8d6h",
-    "content": "El usuario se llama Eliaquín Encarnación.",
-    "context": "Identificación personal para futuras interacciones.",
-    "createdAt": 1769956347141,
-    "lastAccessed": 1769962714462,
+    "id": "mem_1769969339970_ddascx",
+    "content": "Eliaquín Encarnación requested not to use the word 'sazón' because it sounds 'palomo'.",
+    "context": "Direct communication style preference and vocabulary constraint for a specific user.",
+    "createdAt": 1769969339970,
+    "lastAccessed": 1769969362714,
     "importance": 4
   },
   {
-    "id": "mem_1769956347141_9r64pz",
-    "content": "Su equipo favorito de béisbol son los Leones del Escogido.",
-    "context": "Interés deportivo clave para personalización.",
-    "createdAt": 1769956347141,
-    "lastAccessed": 1769962714462,
+    "id": "mem_1769969318080_4to1ft",
+    "content": "Eliaquín Encarnación requested that the bot stop using the word 'sazón' because it sounds 'palomo' (unrefined/lame).",
+    "context": "Direct feedback from a user regarding the bot's vocabulary and persona style.",
+    "createdAt": 1769969318080,
+    "lastAccessed": 1769969352175,
     "importance": 4
   },
   {
-    "id": "mem_1769958322759_ewlroz",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Personal identification for future interactions.",
-    "createdAt": 1769958322759,
-    "lastAccessed": 1769962695541,
+    "id": "mem_1769969235155_0yojt8",
+    "content": "Bonny requested that the bot attack Wispe whenever he mentions El Escogido.",
+    "context": "Direct instruction for how the bot should interact with a specific user to gain Bonny's favor.",
+    "createdAt": 1769969235155,
+    "lastAccessed": 1769969330087,
     "importance": 4
   },
   {
-    "id": "mem_1769959696020_crlq41",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Personal identification for personalization.",
-    "createdAt": 1769959696020,
-    "lastAccessed": 1769962695541,
+    "id": "mem_1769969188420_7ps19n",
+    "content": "Eliaquín Encarnación is the developer/maintainer of the bot and is currently refining it based on user interactions.",
+    "context": "Identifies the person responsible for technical updates and code modifications.",
+    "createdAt": 1769969188420,
+    "lastAccessed": 1769969307140,
     "importance": 4
   },
   {
-    "id": "mem_1769958660427_lr8gtr",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Identification for personalized communication.",
-    "createdAt": 1769958660427,
-    "lastAccessed": 1769962695541,
+    "id": "mem_1769969152791_ys6b7j",
+    "content": "Eliaquín Encarnación is the developer/creator of the bot and is currently in a testing and refinement phase based on user interactions.",
+    "context": "Eliaquín mentions he is gathering ideas from group interactions to adjust and improve the bot's code.",
+    "createdAt": 1769969152791,
+    "lastAccessed": 1769969223496,
     "importance": 4
   },
   {
-    "id": "mem_1769964315140_x1xhcf",
-    "content": "The bot's persona is a woman who claims to be eternally 29 years old.",
-    "context": "Persona consistency regarding age and personality.",
-    "createdAt": 1769964315140,
-    "lastAccessed": 1769964315140,
-    "importance": 3
+    "id": "mem_1769968558606_h377da",
+    "content": "Eliaquín is the creator/developer of the bot.",
+    "context": "The bot mentions it was 'made' by Eliaquín.",
+    "createdAt": 1769968558606,
+    "lastAccessed": 1769969181658,
+    "importance": 4
   },
   {
-    "id": "mem_1769963936893_1segww",
-    "content": "Wispe is a recurring contact/member who frequently talks about Elon Musk and is teased for being 'reactive'.",
-    "context": "Information about a third party mentioned in the conversation to maintain context in group dynamics.",
-    "createdAt": 1769963936893,
-    "lastAccessed": 1769964307296,
-    "importance": 3
+    "id": "mem_1769968552772_rfxttk",
+    "content": "The Bot's name is Brendy.",
+    "context": "Bonny addresses the Bot by this name during the conversation.",
+    "createdAt": 1769968552772,
+    "lastAccessed": 1769969148870,
+    "importance": 4
   },
   {
-    "id": "mem_1769963936893_vwmthv",
-    "content": "The bot's persona supports the 'Águilas' (likely Águilas Cibaeñas baseball team) and uses it to tease Wispe.",
-    "context": "Persona preference and recurring banter theme.",
-    "createdAt": 1769963936893,
-    "lastAccessed": 1769964307296,
-    "importance": 3
+    "id": "mem_1769968518602_cww6r0",
+    "content": "Eliaquín Encarnación is the developer of the bot and recently implemented a simpler, more efficient version of it.",
+    "context": "Information about the bot's creator and development history",
+    "createdAt": 1769968518602,
+    "lastAccessed": 1769968694106,
+    "importance": 4
   },
   {
-    "id": "mem_1769963854517_oy86aq",
-    "content": "Existe un usuario llamado Wispe que suele hablar sobre Elon Musk y es seguidor (o rival) de las Águilas.",
-    "context": "El bot describe cómo reaccionaría ante Wispe a diferentes horas y menciona sus temas de conversación recurrentes.",
-    "createdAt": 1769963854517,
-    "lastAccessed": 1769963923820,
-    "importance": 3
+    "id": "mem_1769968481810_g8ucno",
+    "content": "Eliaquín Encarnación created a new, more efficient version of the bot in a single morning, significantly reducing token usage (from ~40,000 to a few thousand per message).",
+    "context": "Explains the technical origin and efficiency of the current bot implementation.",
+    "createdAt": 1769968481810,
+    "lastAccessed": 1769968545634,
+    "importance": 4
   },
   {
-    "id": "mem_1769963661792_me3g9d",
-    "content": "The bot's persona age is 29 ('veintinueve eternos').",
-    "context": "The bot corrected an initial mention of 30 to claim it stays at 29 forever.",
-    "createdAt": 1769963661792,
-    "lastAccessed": 1769963840967,
-    "importance": 3
+    "id": "mem_1769968445465_fgsaon",
+    "content": "Eliaquín Encarnación is the developer who created this version of the bot in a single morning to be more token-efficient than a previous, more complex version.",
+    "context": "Provides technical background and establishes the creator-creation relationship.",
+    "createdAt": 1769968445465,
+    "lastAccessed": 1769968545634,
+    "importance": 4
   },
   {
-    "id": "mem_1769963589393_9p0qr4",
-    "content": "Eliaquín is interested in the process of incorporating a company in the Dominican Republic (mentioning ONAPI, DGII, and Chamber of Commerce).",
-    "context": "User's business interests and regional context.",
-    "createdAt": 1769963589393,
-    "lastAccessed": 1769963650148,
-    "importance": 3
+    "id": "mem_1769968367083_q70176",
+    "content": "Eliaquín Encarnación is the developer who created this version of the bot in a single morning to be more token-efficient than the previous complex version.",
+    "context": "Provides background on the bot's development and Eliaquín's role as the creator/optimizer.",
+    "createdAt": 1769968367083,
+    "lastAccessed": 1769968505774,
+    "importance": 4
   },
   {
-    "id": "mem_1769963088265_5dzpi5",
-    "content": "The user is interested in the legal process of incorporating a company in the Dominican Republic.",
-    "context": "Indicates a professional or entrepreneurial interest for future follow-ups.",
-    "createdAt": 1769963088265,
-    "lastAccessed": 1769963578046,
-    "importance": 3
+    "id": "mem_1769968359264_3mgfwu",
+    "content": "The current version of the bot was built by Eliaquín in a single morning and is optimized to use significantly fewer tokens (thousands vs. 40,000 in the previous version).",
+    "context": "Technical details shared by Eliaquín regarding the bot's current implementation and efficiency.",
+    "createdAt": 1769968359264,
+    "lastAccessed": 1769968472365,
+    "importance": 4
   },
   {
-    "id": "mem_1769962724039_ozx99x",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Used throughout the conversation for direct address.",
-    "createdAt": 1769962724039,
-    "lastAccessed": 1769963077620,
-    "importance": 3
+    "id": "mem_1769968342412_9none4",
+    "content": "Eliaquín Encarnación is the creator/developer of the bot (referred to as Eliaco).",
+    "context": "Jey and the bot mention that Eliaquín made the bot with its own criteria and is currently optimizing it.",
+    "createdAt": 1769968342412,
+    "lastAccessed": 1769968428281,
+    "importance": 4
   },
   {
-    "id": "mem_1769962724039_0phexk",
-    "content": "The user is interested in the process of starting/incorporating a business in the Dominican Republic.",
-    "context": "The user asked about the difficulty of establishing a company and registering with ONAPI, the Chamber of Commerce, and the DGII.",
-    "createdAt": 1769962724039,
-    "lastAccessed": 1769963077620,
-    "importance": 3
+    "id": "mem_1769968272501_amhb56",
+    "content": "Eliaquín (also referred to as Eliaco) is the creator/developer of the bot.",
+    "context": "Jey and the bot discuss the bot's programming and behavior.",
+    "createdAt": 1769968272501,
+    "lastAccessed": 1769968354466,
+    "importance": 4
   },
   {
-    "id": "mem_1769962706377_wn4f7o",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Identifying the user in the conversation.",
-    "createdAt": 1769962706377,
-    "lastAccessed": 1769962714462,
-    "importance": 3
+    "id": "mem_1769968266123_mody3d",
+    "content": "Eliaquín (o Eliaco) es el creador/desarrollador de la bot.",
+    "context": "Se menciona como la persona que construyó la identidad y criterio de la IA.",
+    "createdAt": 1769968266123,
+    "lastAccessed": 1769968354466,
+    "importance": 4
   },
   {
-    "id": "mem_1769962528530_ixt8lt",
-    "content": "Eliaquín is developing or testing the bot's capabilities, such as time accuracy.",
-    "context": "Explains the nature of the interaction and the user's technical role.",
-    "createdAt": 1769962528530,
-    "lastAccessed": 1769962613978,
-    "importance": 3
+    "id": "mem_1769968249249_k2qzly",
+    "content": "The bot's creator or developer is named Eliaquín (also referred to as Eliaco).",
+    "context": "Jey and the bot mention him in relation to how the bot is programmed and its autonomy.",
+    "createdAt": 1769968249249,
+    "lastAccessed": 1769968354466,
+    "importance": 4
   },
   {
-    "id": "mem_1769962405997_8hwm8t",
-    "content": "Eliaquín is a developer or person adding new capabilities to the bot.",
-    "context": "He mentioned giving the bot 'capacidades nuevas' and adjusted the time settings.",
-    "createdAt": 1769962405997,
-    "lastAccessed": 1769962512069,
-    "importance": 3
+    "id": "mem_1769967796654_pnar7m",
+    "content": "Eliaquín Encarnación es el creador/desarrollador de la personalidad y estilo de la IA.",
+    "context": "Define la relación de autoridad y origen entre el usuario y la IA.",
+    "createdAt": 1769967796654,
+    "lastAccessed": 1769968324477,
+    "importance": 4
   },
   {
-    "id": "mem_1769962405997_lnd9qs",
-    "content": "Eliaquín is likely from or residing in the Dominican Republic.",
-    "context": "Inferred from the use of the Dominican flag (🇩🇴) and heavy use of Dominican slang like 'nítido', 'jodes', and 'midiendo el aceite'.",
-    "createdAt": 1769962405997,
-    "lastAccessed": 1769962512069,
-    "importance": 3
+    "id": "mem_1769967767903_oppvbw",
+    "content": "Eliaquín Encarnación is the creator or developer of the bot.",
+    "context": "The bot explicitly mentions that Eliaquín made her 'authentic and with spark'.",
+    "createdAt": 1769967767903,
+    "lastAccessed": 1769968258747,
+    "importance": 4
   },
   {
-    "id": "mem_1769961773434_icx4r5",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Basic user identification.",
-    "createdAt": 1769961773434,
-    "lastAccessed": 1769962394203,
-    "importance": 3
+    "id": "mem_1769967763315_c71x1i",
+    "content": "Alejandro Reyes works in a bank, a fact Brendy frequently mentions.",
+    "context": "Key biographical detail about Alejandro that he has noted is a repetitive topic of conversation.",
+    "createdAt": 1769967763315,
+    "lastAccessed": 1769968258747,
+    "importance": 4
   },
   {
-    "id": "mem_1769961594344_9u2xbc",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "User identification for personalized interaction.",
-    "createdAt": 1769961594344,
-    "lastAccessed": 1769962394203,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769961594344_wuf3no",
-    "content": "The bot is acting in a persona of a Dominican lawyer ('abogada') who uses informal slang and a sassy tone.",
-    "context": "Maintaining persona consistency in future interactions.",
-    "createdAt": 1769961594344,
-    "lastAccessed": 1769962394203,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769961564905_7ejxh0",
-    "content": "The user was advised that health is a non-negotiable priority in a previous context.",
-    "context": "Follow-up on personal values or health advice given.",
-    "createdAt": 1769961564905,
-    "lastAccessed": 1769961584727,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769961511846_e3dact",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "User identification.",
-    "createdAt": 1769961511846,
-    "lastAccessed": 1769961584727,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769961242750_0dkye5",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Basic user identification.",
-    "createdAt": 1769961242750,
-    "lastAccessed": 1769961553736,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769961242750_yp1dwg",
-    "content": "The user has a sister who habitually drinks baking soda daily for stomach issues.",
-    "context": "Family health context mentioned by the user to seek advice.",
-    "createdAt": 1769961242750,
-    "lastAccessed": 1769961553736,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769961048145_h5lwef",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "The user is identified by this name throughout the conversation.",
-    "createdAt": 1769961048145,
-    "lastAccessed": 1769961229982,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769960219287_8cb67y",
-    "content": "The user's name is Eliaquín Encarnación.",
-    "context": "Personal identification for future interactions.",
-    "createdAt": 1769960219287,
-    "lastAccessed": 1769961229982,
-    "importance": 3
-  },
-  {
-    "id": "mem_1769960219287_qo97wb",
-    "content": "Eliaquín is interested in technology (comparing Rust and TypeScript) and space exploration (Mars missions).",
-    "context": "Helps tailor future technical or scientific discussions.",
-    "createdAt": 1769960219287,
-    "lastAccessed": 1769961229982,
-    "importance": 3
+    "id": "mem_1769967251022_bbzsu7",
+    "content": "El usuario se llama Bonny.",
+    "context": "Identificación personal del usuario.",
+    "createdAt": 1769967251022,
+    "lastAccessed": 1769968235775,
+    "importance": 4
   }
 ]
