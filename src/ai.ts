@@ -272,9 +272,7 @@ export async function evaluateMemory(
 	const prompt = `Analiza el siguiente extracto de conversación. Haz dos cosas:
 
 1. **Memorias generales**: información compartida que vale la pena recordar a largo plazo (hechos, preferencias, eventos importantes, decisiones, etc.).
-2. **Hechos por miembro**: datos personales sobre personas específicas mencionadas en la conversación (eventos de vida, trabajo, preferencias, logros, relaciones, etc.). Usa un key corto en español para cada hecho (ej: "estado-civil", "empleo", "telefono", "hobby", "mascota"). Si un hecho actualiza algo previo, usa el mismo key para reemplazarlo.
-
-Miembros conocidos: Eliaquin, Jey, Wispe, Brenda, Gil, Alejandro, Bonny.
+2. **Hechos por miembro**: datos personales sobre personas específicas mencionadas en la conversación (eventos de vida, trabajo, preferencias, logros, relaciones, etc.). Usa un key corto en español para cada hecho (ej: "estado-civil", "empleo", "telefono", "hobby", "mascota"). Si un hecho actualiza algo previo, usa el mismo key para reemplazarlo. Identifica a los miembros por sus nombres tal como aparecen en la conversación.
 
 Responde SOLO con JSON válido en este formato exacto:
 {"save": boolean, "memories": [{"content": "qué recordar", "context": "por qué importa", "importance": N}], "memberFacts": [{"member": "Nombre", "key": "tema", "content": "el hecho completo"}]}
