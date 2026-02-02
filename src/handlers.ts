@@ -59,6 +59,11 @@ function isBotMentionedOrRepliedTo(ctx: Context, botId: number): boolean {
 	return false;
 }
 
+function shouldIgnoreInGroup(ctx: Context): boolean {
+	if (!isGroupChat(ctx)) return false;
+	return !isBotMentionedOrRepliedTo(ctx, ctx.me.id);
+}
+
 async function processConversation(
 	ctx: Context,
 	userContent: string,
@@ -325,6 +330,7 @@ export function registerHandlers(bot: Bot): void {
 
 	// Voice messages
 	bot.on("message:voice", async (ctx) => {
+		if (shouldIgnoreInGroup(ctx)) return;
 		try {
 			const transcription = await downloadAndTranscribe(
 				ctx,
@@ -345,6 +351,7 @@ export function registerHandlers(bot: Bot): void {
 
 	// Audio files
 	bot.on("message:audio", async (ctx) => {
+		if (shouldIgnoreInGroup(ctx)) return;
 		try {
 			const ext = ctx.message.audio.mime_type?.split("/")[1] ?? "mp3";
 			const mimeType = ctx.message.audio.mime_type ?? "audio/mp3";
@@ -367,6 +374,7 @@ export function registerHandlers(bot: Bot): void {
 
 	// Photos
 	bot.on("message:photo", async (ctx) => {
+		if (shouldIgnoreInGroup(ctx)) return;
 		try {
 			const { filePath, mimeType } = await downloadImage(ctx, botToken);
 			const caption = ctx.message.caption;
@@ -391,6 +399,7 @@ export function registerHandlers(bot: Bot): void {
 
 		const yt = extractYouTubeUrl(ctx);
 		if (yt) {
+			if (shouldIgnoreInGroup(ctx)) return;
 			const analysis = await analyzeYouTube(
 				yt.url,
 				yt.remainingText || undefined,
