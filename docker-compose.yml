@@ -5,7 +5,5 @@ services:
     env_file:
       - .env
     volumes:
-      - ./memory/short-term:/app/memory/short-term
-      - ./memory/long-term.json:/app/memory/long-term.json
-      - ./memory/members.json:/app/memory/members.json
+      - ./memory:/app/memory
       - ./audios:/app/audios
