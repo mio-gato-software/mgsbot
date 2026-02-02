@@ -13,10 +13,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json index.ts ./
 COPY src/ ./src/
 COPY memory/permanent.md ./memory/permanent.md
-COPY memory/members.json ./memory/members.json
 
-# Create writable directories for runtime data
-RUN mkdir -p memory/short-term audios
+# Create writable directories and empty runtime data files
+RUN mkdir -p memory/short-term audios \
+    && echo '{}' > memory/members.json \
+    && echo '[]' > memory/long-term.json
 
 ENV NODE_ENV=production
 
