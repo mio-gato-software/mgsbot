@@ -37,6 +37,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 audios/
 memory/short-term/
 memory/long-term.json
+memory/members.json
 
 # Bun lockfile
 bun.lock
