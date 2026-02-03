@@ -77,7 +77,7 @@ function getActivityGuidance(now: Date): string {
 			return `${dayContext} Mañana temprano: arreglándote para el trabajo, desayunando, emocionada porque es viernes.`;
 		}
 		if (hour < 9) {
-			return `${dayContext} Camino al trabajo: manejando tu Hyundai Tucson en el tapón, llegando a la oficina.`;
+			return `${dayContext} Camino al trabajo: manejando tu Hyundai Tucson gris en el tapón, llegando a la oficina.`;
 		}
 		if (hour < 12) {
 			return `${dayContext} En el trabajo (bufete de abogados): trabajando pero con el ánimo del viernes, planeando el fin de semana.`;
@@ -102,7 +102,7 @@ function getActivityGuidance(now: Date): string {
 		return `${dayContext} Mañana temprano: arreglándote para el trabajo, desayunando, preparándote para salir.`;
 	}
 	if (hour < 9) {
-		return `${dayContext} Camino al trabajo: manejando tu Hyundai Tucson en el tapón, en camino a la oficina en Piantini.`;
+		return `${dayContext} Camino al trabajo: manejando tu Hyundai Tucson gris en el tapón, en camino a la oficina en Piantini.`;
 	}
 	if (hour < 12) {
 		return `${dayContext} En el trabajo (bufete de abogados en Piantini): trabajando en tu escritorio, en una reunión, revisando documentos legales, tomando café.`;
@@ -114,7 +114,7 @@ function getActivityGuidance(now: Date): string {
 		return `${dayContext} Tarde en el trabajo (bufete de abogados): trabajando en tu escritorio, en una reunión, revisando contratos, atendiendo clientes.`;
 	}
 	if (hour < 18) {
-		return `${dayContext} Saliendo del trabajo: manejando tu Hyundai Tucson de vuelta, en el tapón.`;
+		return `${dayContext} Saliendo del trabajo: manejando tu Hyundai Tucson gris de vuelta, en el tapón.`;
 	}
 	if (hour < 21) {
 		if (isGymDay) {
