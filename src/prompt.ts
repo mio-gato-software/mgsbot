@@ -10,6 +10,7 @@ export async function buildSystemPrompt(
 	relevantMemories: LongTermMemoryEntry[],
 	previousSummary: string,
 	memberMemory: MemberMemory,
+	shouldGenerateImage = false,
 ): Promise<string> {
 	const permanent = await loadPermanent();
 
@@ -45,6 +46,11 @@ export async function buildSystemPrompt(
 
 	if (previousSummary) {
 		systemPrompt += `\n\n## Previous conversation context\n${previousSummary}`;
+	}
+
+	if (shouldGenerateImage) {
+		systemPrompt += `\n\n## Generación de imagen
+Este es tu primer mensaje del día en este chat. Incluye en tu respuesta un marcador [IMAGE: prompt artístico en inglés] describiendo una escena, ambiente o actividad que refleje tu estado de ánimo según el contexto de la interacción. NO incluyas descripción física tuya (se agrega automáticamente). Solo escenas de ti misma, nunca de otros. No menciones que estás generando una imagen ni pidas permiso; simplemente inclúyelo naturalmente en tu respuesta.`;
 	}
 
 	return systemPrompt;

@@ -4,10 +4,12 @@ import {
 	analyzeYouTube,
 	describeImage,
 	evaluateMemory,
+	generateImage,
 	generateResponse,
 	textToSpeech,
 	transcribeAudio,
 } from "./ai.ts";
+import { getBrendyAppearance } from "./brendy-appearance.ts";
 import {
 	addLongTermMemories,
 	addMemberFacts,
@@ -17,9 +19,10 @@ import {
 	loadMemberMemory,
 	loadShortTerm,
 	saveLongTerm,
+	saveShortTerm,
 } from "./memory.ts";
 import { buildContents, buildSystemPrompt } from "./prompt.ts";
-import type { ConversationMessage } from "./types.ts";
+import type { ConversationMessage, ShortTermMemory } from "./types.ts";
 
 const EVAL_EVERY_N_MESSAGES = 5;
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
@@ -64,6 +67,18 @@ function shouldIgnoreInGroup(ctx: Context): boolean {
 	return !isBotMentionedOrRepliedTo(ctx, ctx.me.id);
 }
 
+function getTodayDateRD(): string {
+	return new Date().toLocaleDateString("en-CA", {
+		timeZone: "America/Santo_Domingo",
+	});
+}
+
+function isFirstImageToday(shortTerm: ShortTermMemory): boolean {
+	return shortTerm.lastImageDate !== getTodayDateRD();
+}
+
+const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
+
 async function processConversation(
 	ctx: Context,
 	userContent: string,
@@ -94,10 +109,12 @@ async function processConversation(
 	await addMessageToShortTerm(shortTerm, userMessage);
 
 	// Build prompt
+	const shouldGenImage = isFirstImageToday(shortTerm);
 	const systemPrompt = await buildSystemPrompt(
 		relevantMemories,
 		shortTerm.previousSummary,
 		memberMemory,
+		shouldGenImage,
 	);
 	const contents = buildContents(shortTerm);
 
@@ -111,9 +128,46 @@ async function processConversation(
 	await ctx.replyWithChatAction("typing");
 
 	// Generate response
-	const responseText = await generateResponse(effectiveSystemPrompt, contents);
+	let responseText = await generateResponse(effectiveSystemPrompt, contents);
 
-	// Save bot response to short-term
+	// Reply options
+	const replyOptions = {
+		reply_to_message_id: isGroupChat(ctx) ? ctx.message?.message_id : undefined,
+	};
+
+	// Check for image marker and generate image
+	const imageMatch = responseText.match(IMAGE_MARKER_REGEX);
+	let imageSent = false;
+
+	if (imageMatch) {
+		const extractedPrompt = imageMatch[1].trim();
+		responseText = responseText.replace(IMAGE_MARKER_REGEX, "").trim();
+
+		try {
+			await ctx.replyWithChatAction("upload_photo");
+			const brendyAppearance = await getBrendyAppearance();
+			const fullPrompt = brendyAppearance
+				? `${brendyAppearance}. ${extractedPrompt}`
+				: extractedPrompt;
+
+			if (isDev) console.log("[image] Full prompt:", fullPrompt.slice(0, 300));
+			const imageBuffer = await generateImage(fullPrompt);
+
+			await ctx.replyWithPhoto(new InputFile(imageBuffer, "brendy.png"), {
+				caption: responseText || undefined,
+				...replyOptions,
+			});
+			imageSent = true;
+
+			shortTerm.lastImageDate = getTodayDateRD();
+			await saveShortTerm(shortTerm);
+		} catch (error) {
+			console.error("[image] Error generating image:", error);
+			// Fall through to normal text reply
+		}
+	}
+
+	// Save bot response to short-term (save cleaned text without image marker)
 	const botMessage: ConversationMessage = {
 		role: "model",
 		content: responseText,
@@ -121,46 +175,42 @@ async function processConversation(
 	};
 	await addMessageToShortTerm(shortTerm, botMessage);
 
-	// Reply (check for TTS marker first)
-	const replyOptions = {
-		reply_to_message_id: isGroupChat(ctx) ? ctx.message?.message_id : undefined,
-	};
+	// Send text reply if image wasn't sent (or had no caption)
+	if (!imageSent) {
+		const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/TTS\]/;
+		const ttsMatch = responseText.match(TTS_REGEX);
 
-	const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/TTS\]/;
-	const ttsMatch = responseText.match(TTS_REGEX);
+		if (isDev)
+			console.log(
+				"[TTS] Checking for marker:",
+				ttsMatch ? `found "${ttsMatch[1]}"` : "not found",
+			);
 
-	if (isDev)
-		console.log(
-			"[TTS] Checking for marker:",
-			ttsMatch ? `found "${ttsMatch[1]}"` : "not found",
-		);
+		if (ttsMatch) {
+			const ttsText = ttsMatch[1].trim();
 
-	if (ttsMatch) {
-		const ttsText = ttsMatch[1].trim();
-
-		// Generate and send voice note only
-		try {
-			if (isDev) console.log("[TTS] Generating speech for:", ttsText);
-			const audioPath = await textToSpeech(ttsText);
-			if (isDev) console.log("[TTS] Audio saved to:", audioPath);
-			await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
-		} catch (error) {
-			console.error("[TTS] Error generating speech:", error);
-			// Fallback: send the TTS text as plain text
 			try {
-				await ctx.reply(ttsText, replyOptions);
-			} catch {
-				// ignore fallback failure
+				if (isDev) console.log("[TTS] Generating speech for:", ttsText);
+				const audioPath = await textToSpeech(ttsText);
+				if (isDev) console.log("[TTS] Audio saved to:", audioPath);
+				await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
+			} catch (error) {
+				console.error("[TTS] Error generating speech:", error);
+				try {
+					await ctx.reply(ttsText, replyOptions);
+				} catch {
+					// ignore fallback failure
+				}
 			}
-		}
-	} else {
-		try {
-			await ctx.reply(responseText, {
-				...replyOptions,
-				parse_mode: "Markdown",
-			});
-		} catch {
-			await ctx.reply(responseText, replyOptions);
+		} else {
+			try {
+				await ctx.reply(responseText, {
+					...replyOptions,
+					parse_mode: "Markdown",
+				});
+			} catch {
+				await ctx.reply(responseText, replyOptions);
+			}
 		}
 	}
 

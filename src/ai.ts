@@ -266,6 +266,22 @@ export async function textToSpeech(text: string): Promise<string> {
 	return filePath;
 }
 
+export async function generateImage(prompt: string): Promise<Buffer> {
+	if (isDev) console.log("[generateImage] Prompt:", prompt.slice(0, 200));
+
+	const response = await ai.models.generateImages({
+		model: "imagen-4.0-generate-001",
+		prompt,
+		config: { numberOfImages: 1 },
+	});
+
+	const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
+	if (!imageBytes) throw new Error("No image data in response");
+
+	if (isDev) console.log("[generateImage] Image generated successfully");
+	return Buffer.from(imageBytes, "base64");
+}
+
 export async function evaluateMemory(
 	recentMessages: string,
 ): Promise<MemoryEvaluation> {
