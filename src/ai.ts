@@ -266,20 +266,40 @@ export async function textToSpeech(text: string): Promise<string> {
 	return filePath;
 }
 
-export async function generateImage(prompt: string): Promise<Buffer> {
+export async function generateImage(
+	prompt: string,
+	referenceImagePath: string,
+): Promise<Buffer> {
 	if (isDev) console.log("[generateImage] Prompt:", prompt.slice(0, 200));
 
-	const response = await ai.models.generateImages({
-		model: "imagen-4.0-generate-001",
-		prompt,
-		config: { numberOfImages: 1 },
+	const ext = referenceImagePath.split(".").pop() ?? "jpg";
+	const mimeType = ext === "png" ? "image/png" : "image/jpeg";
+	const base64Data = fs.readFileSync(referenceImagePath, {
+		encoding: "base64",
 	});
 
-	const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-	if (!imageBytes) throw new Error("No image data in response");
+	const response = await ai.models.generateContent({
+		model: "gemini-3-pro-image-preview",
+		contents: createUserContent([
+			{ inlineData: { mimeType, data: base64Data } },
+			{
+				text: `This is a reference image of a character. Generate a new image of this same character (same face, body features, and art style) but with a completely different outfit, pose, and setting. The scene: ${prompt}. Only the character's identity should match the reference — everything else should be new and fit the scene.`,
+			},
+		]),
+		config: {
+			responseModalities: ["IMAGE", "TEXT"],
+		},
+	});
 
-	if (isDev) console.log("[generateImage] Image generated successfully");
-	return Buffer.from(imageBytes, "base64");
+	const parts = response.candidates?.[0]?.content?.parts ?? [];
+	for (const part of parts) {
+		if (part.inlineData?.data) {
+			if (isDev) console.log("[generateImage] Image generated successfully");
+			return Buffer.from(part.inlineData.data, "base64");
+		}
+	}
+
+	throw new Error("No image data in response");
 }
 
 export async function evaluateMemory(

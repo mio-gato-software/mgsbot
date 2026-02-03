@@ -9,7 +9,7 @@ import {
 	textToSpeech,
 	transcribeAudio,
 } from "./ai.ts";
-import { getBrendyAppearance } from "./brendy-appearance.ts";
+import { getBrendyBasePath } from "./brendy-appearance.ts";
 import {
 	addLongTermMemories,
 	addMemberFacts,
@@ -142,28 +142,29 @@ async function processConversation(
 	if (imageMatch) {
 		const extractedPrompt = imageMatch[1].trim();
 		responseText = responseText.replace(IMAGE_MARKER_REGEX, "").trim();
+		const basePath = getBrendyBasePath();
 
-		try {
-			await ctx.replyWithChatAction("upload_photo");
-			const brendyAppearance = await getBrendyAppearance();
-			const fullPrompt = brendyAppearance
-				? `${brendyAppearance}. ${extractedPrompt}`
-				: extractedPrompt;
+		if (basePath) {
+			try {
+				await ctx.replyWithChatAction("upload_photo");
+				if (isDev)
+					console.log("[image] Prompt:", extractedPrompt.slice(0, 300));
+				const imageBuffer = await generateImage(extractedPrompt, basePath);
 
-			if (isDev) console.log("[image] Full prompt:", fullPrompt.slice(0, 300));
-			const imageBuffer = await generateImage(fullPrompt);
+				await ctx.replyWithPhoto(new InputFile(imageBuffer, "brendy.png"), {
+					caption: responseText || undefined,
+					...replyOptions,
+				});
+				imageSent = true;
 
-			await ctx.replyWithPhoto(new InputFile(imageBuffer, "brendy.png"), {
-				caption: responseText || undefined,
-				...replyOptions,
-			});
-			imageSent = true;
-
-			shortTerm.lastImageDate = getTodayDateRD();
-			await saveShortTerm(shortTerm);
-		} catch (error) {
-			console.error("[image] Error generating image:", error);
-			// Fall through to normal text reply
+				shortTerm.lastImageDate = getTodayDateRD();
+				await saveShortTerm(shortTerm);
+			} catch (error) {
+				console.error("[image] Error generating image:", error);
+				// Fall through to normal text reply
+			}
+		} else {
+			console.warn("[image] No base image found, skipping image generation");
 		}
 	}
 
