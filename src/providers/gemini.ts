@@ -18,10 +18,12 @@ function logTokenUsage(label: string, response: GenerateContentResponse): void {
 }
 
 function messagesToContents(messages: ChatMessage[]): Content[] {
-	return messages.map((msg) => ({
-		role: msg.role === "user" ? "user" : "model",
-		parts: [{ text: msg.content }],
-	}));
+	return messages
+		.filter((msg) => msg.content?.trim())
+		.map((msg) => ({
+			role: msg.role === "user" ? "user" : "model",
+			parts: [{ text: msg.content }],
+		}));
 }
 
 export class GeminiChatProvider implements ChatProvider {

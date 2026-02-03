@@ -209,13 +209,15 @@ async function processConversation(
 		}
 	}
 
-	// Save bot response to short-term (save cleaned text without image marker)
-	const botMessage: ConversationMessage = {
-		role: "model",
-		content: responseText,
-		timestamp: Date.now(),
-	};
-	await addMessageToShortTerm(shortTerm, botMessage);
+	// Save bot response to short-term (only if non-empty)
+	if (responseText.trim()) {
+		const botMessage: ConversationMessage = {
+			role: "model",
+			content: responseText,
+			timestamp: Date.now(),
+		};
+		await addMessageToShortTerm(shortTerm, botMessage);
+	}
 
 	// Send text reply if image wasn't sent (or had no caption)
 	if (!imageSent) {
