@@ -46,6 +46,12 @@ export class GeminiChatProvider implements ChatProvider {
 	): Promise<string> {
 		const contents = messagesToContents(messages);
 
+		if (contents.length === 0) {
+			throw new Error(
+				"No valid messages to send to Gemini API. The conversation history may be corrupted - please clear the chat memory.",
+			);
+		}
+
 		if (isDev) {
 			console.log(
 				"[GeminiChatProvider] Calling model with",
