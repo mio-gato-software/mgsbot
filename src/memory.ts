@@ -183,11 +183,7 @@ export async function addMessageToShortTerm(
 			[
 				{
 					role: "user",
-					parts: [
-						{
-							text: `${existingSummary}Conversation to summarize:\n${conversationText}`,
-						},
-					],
+					content: `${existingSummary}Conversation to summarize:\n${conversationText}`,
 				},
 			],
 		);
