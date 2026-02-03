@@ -25,6 +25,33 @@ function getDayOfWeekContext(dayOfWeek: number): string {
 }
 
 /**
+ * Determine if it's a "busy" time when Brendy might decline to chat extensively
+ * Returns a guidance string if busy, null if available
+ */
+function getBusyGuidance(now: Date): string | null {
+	const hour = now.getHours();
+	const dayOfWeek = now.getDay();
+
+	// Weekend - not busy
+	if (dayOfWeek === 0 || dayOfWeek === 6) return null;
+
+	// Holiday - not busy
+	if (isHoliday(now)) return null;
+
+	// Work hours (9am-12pm, 2pm-5pm on weekdays)
+	if ((hour >= 9 && hour < 12) || (hour >= 14 && hour < 17)) {
+		return `Estás en el trabajo (bufete de abogados). Puedes responder brevemente pero mencionar que estás ocupada, en una reunión, o que tienes trabajo. No tienes que dar largas explicaciones. Puedes decir cosas como "estoy en el trabajo", "ahora no puedo", "estoy ocupada", "luego hablamos", etc.`;
+	}
+
+	// Driving to/from work (8-9am, 5-6pm on weekdays)
+	if (hour === 8 || hour === 17) {
+		return `Estás manejando (en el tapón). Puedes responder brevemente pero mencionar que estás al volante o en el tapón. No deberías estar muy disponible para conversar largo.`;
+	}
+
+	return null;
+}
+
+/**
  * Get activity guidance for image generation based on time and day type
  */
 function getActivityGuidance(now: Date): string {
@@ -167,28 +194,35 @@ export async function buildSystemPrompt(
 		systemPrompt += `\n\n## Previous conversation context\n${previousSummary}`;
 	}
 
+	// Always add activity context so bot knows what she's "doing"
+	const nowDR = new Date(
+		new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
+	);
+	const activityGuidance = getActivityGuidance(nowDR);
+	const busyGuidance = getBusyGuidance(nowDR);
+
+	systemPrompt += `\n\n## Tu actividad actual\n${activityGuidance}`;
+
+	if (busyGuidance) {
+		systemPrompt += `\n\n## Estado de disponibilidad\n${busyGuidance}`;
+	}
+
 	if (shouldGenerateImage) {
 		const weatherContext = await getDailyWeatherForImage();
 		const weatherInstruction = weatherContext
 			? `\n\n**Clima actual:** ${weatherContext}. Si tu escena es al aire libre (playa, parque, calle, terraza, piscina, jardín, balcón, ventana con vista exterior), incorpora este clima visualmente en el prompt: cielo, iluminación, lluvia si aplica, etc. No lo menciones en texto, solo muéstralo. Para escenas completamente interiores sin vista al exterior, ignora el clima.`
 			: "";
 
-		const nowDR = new Date(
-			new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
-		);
 		const currentTime = nowDR.toLocaleTimeString("es-DO", {
 			hour: "2-digit",
 			minute: "2-digit",
 			hour12: true,
 		});
-		const activityGuidance = getActivityGuidance(nowDR);
 
 		systemPrompt += `\n\n## Generación de imagen
-Este es tu primer mensaje del día en este chat. Incluye en tu respuesta un marcador [IMAGE: prompt artístico en inglés] describiendo una escena, ambiente o actividad que refleje tu estado de ánimo según el contexto de la interacción.${weatherInstruction}
+Este es tu primer mensaje del día en este chat. Incluye en tu respuesta un marcador [IMAGE: prompt artístico en inglés] describiendo una escena, ambiente o actividad que refleje tu estado de ánimo según el contexto de tu actividad actual.${weatherInstruction}
 
 NO incluyas descripción física tuya (se agrega automáticamente). Incluye en el prompt la ropa y el outfit que llevas en la escena. La escena debe ser coherente con la hora actual (son las ${currentTime}).
-
-**Contexto de tu día:** ${activityGuidance}
 
 Solo escenas de ti misma, nunca de otros. No menciones que estás generando una imagen ni pidas permiso; simplemente inclúyelo naturalmente en tu respuesta.`;
 	}
