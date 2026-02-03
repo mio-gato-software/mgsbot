@@ -73,8 +73,44 @@ function getTodayDateRD(): string {
 	});
 }
 
-function isFirstImageToday(shortTerm: ShortTermMemory): boolean {
-	return shortTerm.lastImageDate !== getTodayDateRD();
+const IMAGE_EARLIEST_HOUR = 8;
+const IMAGE_LATEST_HOUR = 23;
+
+function generateRandomTargetTime(): string {
+	const randomHour =
+		IMAGE_EARLIEST_HOUR +
+		Math.floor(Math.random() * (IMAGE_LATEST_HOUR - IMAGE_EARLIEST_HOUR + 1));
+	const randomMinute = Math.floor(Math.random() * 60);
+
+	const rdDate = getTodayDateRD();
+	const [year, month, day] = rdDate.split("-").map(Number);
+
+	const target = new Date(year, month - 1, day, randomHour, randomMinute, 0, 0);
+	return target.toISOString();
+}
+
+function shouldGenerateImageNow(shortTerm: ShortTermMemory): boolean {
+	const todayRD = getTodayDateRD();
+
+	// Already generated today
+	if (shortTerm.lastImageDate === todayRD) return false;
+
+	// New day or missing target - generate random target time
+	if (shortTerm.imageTargetDate !== todayRD || !shortTerm.imageTargetTime) {
+		shortTerm.imageTargetTime = generateRandomTargetTime();
+		shortTerm.imageTargetDate = todayRD;
+		if (isDev) {
+			console.log(
+				"[image] New target time generated:",
+				shortTerm.imageTargetTime,
+			);
+		}
+	}
+
+	// Check if current time passed target
+	const now = new Date();
+	const target = new Date(shortTerm.imageTargetTime);
+	return now >= target;
 }
 
 const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
@@ -109,7 +145,7 @@ async function processConversation(
 	await addMessageToShortTerm(shortTerm, userMessage);
 
 	// Build prompt
-	const shouldGenImage = isFirstImageToday(shortTerm);
+	const shouldGenImage = shouldGenerateImageNow(shortTerm);
 	const systemPrompt = await buildSystemPrompt(
 		relevantMemories,
 		shortTerm.previousSummary,

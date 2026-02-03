@@ -12,6 +12,8 @@ export interface ShortTermMemory {
 	lastActivity: number;
 	messageCountSinceEval: number;
 	lastImageDate?: string;
+	imageTargetTime?: string;
+	imageTargetDate?: string;
 }
 
 export interface LongTermMemoryEntry {
