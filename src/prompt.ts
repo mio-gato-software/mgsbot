@@ -1,6 +1,6 @@
 import type { Content } from "@google/genai";
 import { getDailyWeatherForImage } from "./daily-weather.ts";
-import { isHoliday, isWeekend } from "./holidays.ts";
+import { isHoliday } from "./holidays.ts";
 import { loadPermanent } from "./memory.ts";
 import type {
 	LongTermMemoryEntry,
@@ -9,56 +9,120 @@ import type {
 } from "./types.ts";
 
 /**
+ * Get day-of-week context for mood and routines
+ */
+function getDayOfWeekContext(dayOfWeek: number): string {
+	const contexts: Record<number, string> = {
+		0: "Domingo - día de familia y descanso.",
+		1: "Lunes - empezando la semana.",
+		2: "Martes - día de gym después del trabajo.",
+		3: "Miércoles - mitad de semana.",
+		4: "Jueves - día de gym, ya casi es viernes.",
+		5: "Viernes - emocionada por el fin de semana.",
+		6: "Sábado - día de self-care (uñas, pelo) por la mañana.",
+	};
+	return contexts[dayOfWeek] ?? "";
+}
+
+/**
  * Get activity guidance for image generation based on time and day type
  */
 function getActivityGuidance(now: Date): string {
 	const hour = now.getHours();
+	const dayOfWeek = now.getDay();
+	const dayContext = getDayOfWeekContext(dayOfWeek);
 
 	if (isHoliday(now)) {
 		// Holiday - vacation vibes
-		return "Hoy es feriado. Actividades típicas: viajando, en la playa, en la piscina, de paseo, en un resort, explorando un lugar nuevo, road trip, de vacaciones.";
+		return `Hoy es feriado. Actividades típicas: viajando, en Boca Chica o Juan Dolio, en la piscina, de paseo, en un resort, explorando un lugar nuevo, road trip, de vacaciones.`;
 	}
 
-	if (isWeekend(now)) {
-		// Weekend schedule
+	// Saturday
+	if (dayOfWeek === 6) {
 		if (hour < 10) {
-			return "Es fin de semana por la mañana temprano. Actividades típicas: durmiendo hasta tarde, recién despertando, relajándote en casa en pijama.";
+			return `${dayContext} Mañana temprano: durmiendo hasta tarde, recién despertando, relajándote en casa en pijama.`;
 		}
-		if (hour < 12) {
-			return "Es fin de semana por la mañana. Actividades típicas: brunch, desayunando tarde, relajándote en casa, preparándote para salir.";
+		if (hour < 13) {
+			return `${dayContext} Actividades típicas: en el salón haciéndote las uñas, en la peluquería, spa, self-care.`;
 		}
 		if (hour < 18) {
-			return "Es fin de semana por la tarde. Actividades típicas: en el mall, en la playa, con amigas, haciendo diligencias, en el gym, en la piscina.";
+			return `${dayContext} Tarde: en Ágora Mall, Blue Mall o Galería 360, en Boca Chica o Juan Dolio, con amigas, haciendo diligencias.`;
 		}
 		if (hour < 21) {
-			return "Es fin de semana por la noche temprano. Actividades típicas: en un restaurante, en un bar, arreglándote para salir, cenando.";
+			return `${dayContext} Noche temprano: en un restaurante en la Zona Colonial o Piantini, arreglándote para salir, cenando.`;
 		}
-		return "Es fin de semana de noche. Actividades típicas: en casa relajándote, viendo TV, en la cama, en un bar.";
+		return `${dayContext} Noche: en casa relajándote, viendo TV, en la cama, en un bar en Piantini o Naco.`;
 	}
 
-	// Workday schedule - Brendy works 9-5 at a law firm
+	// Sunday
+	if (dayOfWeek === 0) {
+		if (hour < 10) {
+			return `${dayContext} Mañana temprano: durmiendo hasta tarde, relajándote en casa.`;
+		}
+		if (hour < 14) {
+			return `${dayContext} Es hora del almuerzo dominicano en familia. Actividades típicas: en casa de tus padres, almorzando sancocho o arroz con pollo, compartiendo con la familia.`;
+		}
+		if (hour < 18) {
+			return `${dayContext} Tarde: descansando en casa, viendo películas, preparándote para la semana.`;
+		}
+		if (hour < 21) {
+			return `${dayContext} Noche temprano: en casa relajándote, cenando algo ligero, preparando tu ropa para mañana.`;
+		}
+		return `${dayContext} Noche: en la cama temprano, preparándote para la semana, viendo TV.`;
+	}
+
+	// Friday (special workday)
+	if (dayOfWeek === 5) {
+		if (hour < 8) {
+			return `${dayContext} Mañana temprano: arreglándote para el trabajo, desayunando, emocionada porque es viernes.`;
+		}
+		if (hour < 9) {
+			return `${dayContext} Camino al trabajo: manejando tu Hyundai Tucson en el tapón, llegando a la oficina.`;
+		}
+		if (hour < 12) {
+			return `${dayContext} En el trabajo (bufete de abogados): trabajando pero con el ánimo del viernes, planeando el fin de semana.`;
+		}
+		if (hour < 14) {
+			return `${dayContext} Almuerzo: en un restaurante cerca del trabajo en Piantini, almorzando con compañeras.`;
+		}
+		if (hour < 17) {
+			return `${dayContext} Tarde en el trabajo: terminando pendientes, quizás saliendo un poco más temprano.`;
+		}
+		if (hour < 20) {
+			return `${dayContext} Después del trabajo: tomando algo con amigas en la Zona Colonial o Piantini, happy hour, arreglándote para salir.`;
+		}
+		return `${dayContext} Noche de viernes: en un bar o restaurante, de fiesta, pasándola bien con amigas.`;
+	}
+
+	// Tuesday or Thursday (gym days)
+	const isGymDay = dayOfWeek === 2 || dayOfWeek === 4;
+
+	// Regular workday schedule
 	if (hour < 8) {
-		return "Es día de trabajo temprano en la mañana. Actividades típicas: arreglándote para el trabajo, desayunando, preparándote para salir.";
+		return `${dayContext} Mañana temprano: arreglándote para el trabajo, desayunando, preparándote para salir.`;
 	}
 	if (hour < 9) {
-		return "Es hora de ir al trabajo. Actividades típicas: manejando tu Hyundai Tucson en el tapón, en camino a la oficina, llegando al trabajo.";
+		return `${dayContext} Camino al trabajo: manejando tu Hyundai Tucson en el tapón, en camino a la oficina en Piantini.`;
 	}
 	if (hour < 12) {
-		return "Estás en el trabajo (bufete de abogados). Actividades típicas: trabajando en tu escritorio, en una reunión, revisando documentos legales, tomando un café en la oficina.";
+		return `${dayContext} En el trabajo (bufete de abogados en Piantini): trabajando en tu escritorio, en una reunión, revisando documentos legales, tomando café.`;
 	}
 	if (hour < 14) {
-		return "Es hora de almuerzo en el trabajo. Actividades típicas: almorzando en la oficina, en un restaurante cerca del trabajo, descansando brevemente.";
+		return `${dayContext} Almuerzo: en la oficina o en un restaurante cerca del trabajo en Piantini.`;
 	}
 	if (hour < 17) {
-		return "Estás en el trabajo por la tarde (bufete de abogados). Actividades típicas: trabajando en tu escritorio, en una reunión, revisando contratos, atendiendo clientes.";
+		return `${dayContext} Tarde en el trabajo (bufete de abogados): trabajando en tu escritorio, en una reunión, revisando contratos, atendiendo clientes.`;
 	}
 	if (hour < 18) {
-		return "Estás saliendo del trabajo. Actividades típicas: manejando tu Hyundai Tucson de vuelta a casa, en el tapón, saliendo de la oficina.";
+		return `${dayContext} Saliendo del trabajo: manejando tu Hyundai Tucson de vuelta, en el tapón.`;
 	}
 	if (hour < 21) {
-		return "Es día de semana después del trabajo. Actividades típicas: en el gym, en el mall, en casa relajándote, cenando, haciendo diligencias.";
+		if (isGymDay) {
+			return `${dayContext} Después del trabajo: en el gym (Body Shop o SmartFit), haciendo ejercicio, entrenando.`;
+		}
+		return `${dayContext} Después del trabajo: en Ágora Mall o Blue Mall, en casa relajándote, cenando, haciendo diligencias.`;
 	}
-	return "Es día de semana de noche. Actividades típicas: en casa relajándote, viendo TV, en la cama, preparándote para dormir.";
+	return `${dayContext} Noche: en casa relajándote, viendo TV, en la cama, preparándote para dormir.`;
 }
 
 export async function buildSystemPrompt(
@@ -89,7 +153,7 @@ export async function buildSystemPrompt(
 			"\n\n## Lo que sabes de los miembros\nEsta información es contexto interno. NO la recites ni repitas. Úsala solo cuando sea orgánicamente relevante.";
 		for (const name of memberNames) {
 			const facts = memberMemory[name];
-			if (facts.length > 0) {
+			if (facts && facts.length > 0) {
 				memberSection += `\n### ${name}`;
 				for (const fact of facts) {
 					memberSection += `\n  - ${fact.content}`;
