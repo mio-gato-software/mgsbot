@@ -1,14 +1,13 @@
 import * as fs from "node:fs";
 import {
-	type Content,
 	createPartFromUri,
 	createUserContent,
 	type GenerateContentResponse,
 	GoogleGenAI,
 	type Part,
 } from "@google/genai";
+import { type ChatMessage, createChatProvider } from "./providers/index.ts";
 import type { MemoryEvaluation } from "./types.ts";
-import { executeWeatherFunction, weatherTool } from "./weather.ts";
 
 const ai = new GoogleGenAI({});
 const MODEL = "gemini-3-flash-preview";
@@ -158,76 +157,10 @@ export async function analyzeYouTube(
 
 export async function generateResponse(
 	systemPrompt: string,
-	contents: Content[],
+	messages: ChatMessage[],
 ): Promise<string> {
-	if (isDev)
-		console.log(
-			"[generateResponse] Calling model with",
-			contents.length,
-			"content entries",
-		);
-	const response = await ai.models.generateContent({
-		model: MODEL,
-		config: {
-			systemInstruction: systemPrompt,
-			tools: [{ functionDeclarations: [weatherTool] }],
-		},
-		contents,
-	});
-	logTokenUsage("generateResponse", response);
-
-	const functionCalls = response.functionCalls;
-	if (functionCalls && functionCalls.length > 0) {
-		const call = functionCalls[0];
-		if (call.name === "get_current_weather") {
-			if (isDev)
-				console.log("[generateResponse] Function call: get_current_weather");
-			const weatherResult = await executeWeatherFunction();
-			if (isDev)
-				console.log("[generateResponse] Weather result:", weatherResult);
-
-			const modelParts = response.candidates?.[0]?.content?.parts ?? [];
-			const followUp: Content[] = [
-				...contents,
-				{
-					role: "model",
-					parts: modelParts,
-				},
-				{
-					role: "user",
-					parts: [
-						{
-							functionResponse: {
-								name: call.name,
-								response: { result: weatherResult },
-							},
-						},
-					],
-				},
-			];
-
-			const followUpResponse = await ai.models.generateContent({
-				model: MODEL,
-				config: {
-					systemInstruction: systemPrompt,
-					tools: [{ functionDeclarations: [weatherTool] }],
-				},
-				contents: followUp,
-			});
-			logTokenUsage("generateResponse:followUp", followUpResponse);
-			const text = followUpResponse.text ?? "";
-			if (isDev)
-				console.log(
-					"[generateResponse] Follow-up response:",
-					text.slice(0, 200),
-				);
-			return text;
-		}
-	}
-
-	const text = response.text ?? "";
-	if (isDev) console.log("[generateResponse] Response:", text.slice(0, 200));
-	return text;
+	const provider = createChatProvider();
+	return provider.generateResponse(systemPrompt, messages);
 }
 
 export async function textToSpeech(text: string): Promise<string> {

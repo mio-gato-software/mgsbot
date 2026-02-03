@@ -21,7 +21,7 @@ import {
 	saveLongTerm,
 	saveShortTerm,
 } from "./memory.ts";
-import { buildContents, buildSystemPrompt } from "./prompt.ts";
+import { buildMessages, buildSystemPrompt } from "./prompt.ts";
 import type { ConversationMessage, ShortTermMemory } from "./types.ts";
 
 const EVAL_EVERY_N_MESSAGES = 5;
@@ -152,7 +152,7 @@ async function processConversation(
 		memberMemory,
 		shouldGenImage,
 	);
-	const contents = buildContents(shortTerm);
+	const messages = buildMessages(shortTerm);
 
 	// In groups, only respond when mentioned or replied to
 	const effectiveSystemPrompt = systemPrompt;
@@ -164,7 +164,7 @@ async function processConversation(
 	await ctx.replyWithChatAction("typing");
 
 	// Generate response
-	let responseText = await generateResponse(effectiveSystemPrompt, contents);
+	let responseText = await generateResponse(effectiveSystemPrompt, messages);
 
 	// Reply options
 	const replyOptions = {

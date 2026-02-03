@@ -2,6 +2,7 @@ import type { Content } from "@google/genai";
 import { getDailyWeatherForImage } from "./daily-weather.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent } from "./memory.ts";
+import type { ChatMessage } from "./providers/types.ts";
 import type {
 	LongTermMemoryEntry,
 	MemberMemory,
@@ -247,4 +248,20 @@ export function buildContents(memory: ShortTermMemory): Content[] {
 	}
 
 	return contents;
+}
+
+export function buildMessages(memory: ShortTermMemory): ChatMessage[] {
+	const messages: ChatMessage[] = [];
+
+	for (const msg of memory.messages) {
+		const role = msg.role === "user" ? "user" : "assistant";
+		const content =
+			msg.role === "user" && msg.name
+				? `[${msg.name}]: ${msg.content}`
+				: msg.content;
+
+		messages.push({ role, content });
+	}
+
+	return messages;
 }
