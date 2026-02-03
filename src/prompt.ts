@@ -50,7 +50,7 @@ export async function buildSystemPrompt(
 
 	if (shouldGenerateImage) {
 		systemPrompt += `\n\n## Generación de imagen
-Este es tu primer mensaje del día en este chat. Incluye en tu respuesta un marcador [IMAGE: prompt artístico en inglés] describiendo una escena, ambiente o actividad que refleje tu estado de ánimo según el contexto de la interacción. NO incluyas descripción física tuya (se agrega automáticamente). Incluye en el prompt la ropa y el outfit que llevas en la escena. Solo escenas de ti misma, nunca de otros. No menciones que estás generando una imagen ni pidas permiso; simplemente inclúyelo naturalmente en tu respuesta.`;
+Este es tu primer mensaje del día en este chat. Incluye en tu respuesta un marcador [IMAGE: prompt artístico en inglés] describiendo una escena, ambiente o actividad que refleje tu estado de ánimo según el contexto de la interacción. NO incluyas descripción física tuya (se agrega automáticamente). Incluye en el prompt la ropa y el outfit que llevas en la escena. La escena debe ser coherente con la hora actual (son las ${new Date().toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Santo_Domingo" })}): elige actividades y lugares apropiados para este momento del día (ej. de noche: en casa, en la cama, en un restaurante, viendo TV; de mañana: tomando café, arreglándote; de tarde: en el mall, en la playa, trabajando, etc.). Solo escenas de ti misma, nunca de otros. No menciones que estás generando una imagen ni pidas permiso; simplemente inclúyelo naturalmente en tu respuesta.`;
 	}
 
 	return systemPrompt;
