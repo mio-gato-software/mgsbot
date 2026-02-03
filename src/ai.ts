@@ -283,7 +283,7 @@ export async function generateImage(
 		contents: createUserContent([
 			{ inlineData: { mimeType, data: base64Data } },
 			{
-				text: `This is a reference image of a character. Generate a new image of this same character (same face, body features, and art style) but with a completely different outfit, pose, and setting. The scene: ${prompt}. The current local time is ${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Santo_Domingo" })} — the setting and atmosphere should feel natural for this time of day (e.g. late night could be cozy in bed, at a bar, watching TV; morning could be having coffee, getting ready; afternoon could be at a mall, working, etc.). Only the character's identity should match the reference — everything else should be new and fit the scene.`,
+				text: `This is a reference image of a character. Generate a new image of this same character (same face, body features, and art style) but with a completely different outfit, pose, and setting. The scene: ${prompt}. The setting and atmosphere should feel natural for the described scene (e.g. indoor scenes like a bedroom, living room, restaurant, bar, mall, gym, or coffee shop should have appropriate indoor lighting; outdoor scenes like a beach, park, city street, rooftop, garden, or poolside should have appropriate natural lighting). IMPORTANT: Do NOT render any text, clocks, timestamps, or time indicators in the image. Only the character's identity should match the reference — everything else should be new and fit the scene.`,
 			},
 		]),
 		config: {
