@@ -6,7 +6,6 @@ import {
 import { executeWeatherFunction, weatherTool } from "../weather.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
-const ai = new GoogleGenAI({});
 const MODEL = "gemini-3-flash-preview";
 const isDev = process.env.NODE_ENV === "development";
 
@@ -27,6 +26,17 @@ function messagesToContents(messages: ChatMessage[]): Content[] {
 
 export class GeminiChatProvider implements ChatProvider {
 	readonly name = "gemini";
+	private readonly ai: GoogleGenAI;
+
+	constructor() {
+		const apiKey = process.env.GOOGLE_API_KEY;
+		if (!apiKey) {
+			throw new Error(
+				"GOOGLE_API_KEY is required when CHAT_PROVIDER=gemini (or unset)",
+			);
+		}
+		this.ai = new GoogleGenAI({ apiKey });
+	}
 
 	async generateResponse(
 		systemPrompt: string,
@@ -42,7 +52,7 @@ export class GeminiChatProvider implements ChatProvider {
 			);
 		}
 
-		const response = await ai.models.generateContent({
+		const response = await this.ai.models.generateContent({
 			model: MODEL,
 			config: {
 				systemInstruction: systemPrompt,
@@ -86,7 +96,7 @@ export class GeminiChatProvider implements ChatProvider {
 					},
 				];
 
-				const followUpResponse = await ai.models.generateContent({
+				const followUpResponse = await this.ai.models.generateContent({
 					model: MODEL,
 					config: {
 						systemInstruction: systemPrompt,
