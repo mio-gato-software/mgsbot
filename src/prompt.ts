@@ -1,4 +1,5 @@
 import type { Content } from "@google/genai";
+import { getDailyWeatherForImage } from "./daily-weather.ts";
 import { loadPermanent } from "./memory.ts";
 import type {
 	LongTermMemoryEntry,
@@ -49,8 +50,14 @@ export async function buildSystemPrompt(
 	}
 
 	if (shouldGenerateImage) {
+		const weatherContext = await getDailyWeatherForImage();
+		const weatherInstruction = weatherContext
+			? `\n\n**Clima actual:** ${weatherContext}. Si tu escena es al aire libre (playa, parque, calle, terraza, piscina, jardín, balcón, ventana con vista exterior), incorpora este clima visualmente en el prompt: cielo, iluminación, lluvia si aplica, etc. No lo menciones en texto, solo muéstralo. Para escenas completamente interiores sin vista al exterior, ignora el clima.`
+			: "";
 		systemPrompt += `\n\n## Generación de imagen
-Este es tu primer mensaje del día en este chat. Incluye en tu respuesta un marcador [IMAGE: prompt artístico en inglés] describiendo una escena, ambiente o actividad que refleje tu estado de ánimo según el contexto de la interacción. NO incluyas descripción física tuya (se agrega automáticamente). Incluye en el prompt la ropa y el outfit que llevas en la escena. La escena debe ser coherente con la hora actual (son las ${new Date().toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Santo_Domingo" })}): elige actividades y lugares apropiados para este momento del día (ej. de noche: en casa, en la cama, en un restaurante, viendo TV; de mañana: tomando café, arreglándote; de tarde: en el mall, en la playa, trabajando, etc.). Solo escenas de ti misma, nunca de otros. No menciones que estás generando una imagen ni pidas permiso; simplemente inclúyelo naturalmente en tu respuesta.`;
+Este es tu primer mensaje del día en este chat. Incluye en tu respuesta un marcador [IMAGE: prompt artístico en inglés] describiendo una escena, ambiente o actividad que refleje tu estado de ánimo según el contexto de la interacción.${weatherInstruction}
+
+NO incluyas descripción física tuya (se agrega automáticamente). Incluye en el prompt la ropa y el outfit que llevas en la escena. La escena debe ser coherente con la hora actual (son las ${new Date().toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "America/Santo_Domingo" })}): elige actividades y lugares apropiados para este momento del día (ej. de noche: en casa, en la cama, en un restaurante, viendo TV; de mañana: tomando café, arreglándote; de tarde: en el mall, en la playa, trabajando, etc.). Solo escenas de ti misma, nunca de otros. No menciones que estás generando una imagen ni pidas permiso; simplemente inclúyelo naturalmente en tu respuesta.`;
 	}
 
 	return systemPrompt;

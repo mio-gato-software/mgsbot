@@ -6,6 +6,7 @@
 		"grammy": "^1.39.3"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "2.3.13",
 		"@types/bun": "latest"
 	},
 	"private": true,
