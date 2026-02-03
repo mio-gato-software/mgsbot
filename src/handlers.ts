@@ -135,8 +135,13 @@ async function processConversation(
 		reply_to_message_id: isGroupChat(ctx) ? ctx.message?.message_id : undefined,
 	};
 
-	// Check for image marker and generate image
-	const imageMatch = responseText.match(IMAGE_MARKER_REGEX);
+	// Check for image marker and generate image (only if allowed today)
+	const imageMatch = shouldGenImage
+		? responseText.match(IMAGE_MARKER_REGEX)
+		: null;
+	if (!shouldGenImage) {
+		responseText = responseText.replace(IMAGE_MARKER_REGEX, "").trim();
+	}
 	let imageSent = false;
 
 	if (imageMatch) {
