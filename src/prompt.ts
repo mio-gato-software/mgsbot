@@ -28,27 +28,9 @@ function getDayOfWeekContext(dayOfWeek: number): string {
 /**
  * Determine if it's a "busy" time when Brendy might decline to chat extensively
  * Returns a guidance string if busy, null if available
+ * NOTE: Disabled - Brendy now always has time to chat while maintaining her routine
  */
-function getBusyGuidance(now: Date): string | null {
-	const hour = now.getHours();
-	const dayOfWeek = now.getDay();
-
-	// Weekend - not busy
-	if (dayOfWeek === 0 || dayOfWeek === 6) return null;
-
-	// Holiday - not busy
-	if (isHoliday(now)) return null;
-
-	// Work hours (9am-12pm, 2pm-5pm on weekdays)
-	if ((hour >= 9 && hour < 12) || (hour >= 14 && hour < 17)) {
-		return `Estás en el trabajo (bufete de abogados). Puedes responder brevemente pero mencionar que estás ocupada, en una reunión, o que tienes trabajo. No tienes que dar largas explicaciones. Puedes decir cosas como "estoy en el trabajo", "ahora no puedo", "estoy ocupada", "luego hablamos", etc.`;
-	}
-
-	// Driving to/from work (8-9am, 5-6pm on weekdays)
-	if (hour === 8 || hour === 17) {
-		return `Estás manejando (en el tapón). Puedes responder brevemente pero mencionar que estás al volante o en el tapón. No deberías estar muy disponible para conversar largo.`;
-	}
-
+function getBusyGuidance(_now: Date): string | null {
 	return null;
 }
 
