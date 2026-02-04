@@ -42,29 +42,34 @@ function isGroupChat(ctx: Context): boolean {
 	return type === "group" || type === "supergroup";
 }
 
-function isBotMentionedOrRepliedTo(ctx: Context, botId: number): boolean {
-	// Check if replied to the bot
-	if (ctx.message?.reply_to_message?.from?.id === botId) return true;
+/**
+ * Type of mention detected in a message
+ * - "none": Bot not mentioned at all
+ * - "reply": User replied to bot's message (always respond)
+ * - "tag": User @mentioned the bot (always respond)
+ * - "name": User mentioned bot's name (AI decides if addressed or just mentioned)
+ */
+export type MentionType = "none" | "reply" | "tag" | "name";
 
-	// Check if bot is mentioned in entities
+function detectMentionType(ctx: Context, botId: number): MentionType {
+	// Check if replied to the bot - always respond
+	if (ctx.message?.reply_to_message?.from?.id === botId) return "reply";
+
 	const entities = ctx.message?.entities ?? [];
 	const text = ctx.message?.text ?? ctx.message?.caption ?? "";
+
+	// Check if @mentioned - always respond
 	for (const entity of entities) {
 		if (entity.type === "mention") {
 			const mention = text.slice(entity.offset, entity.offset + entity.length);
-			if (mention === `@${ctx.me?.username}`) return true;
+			if (mention === `@${ctx.me?.username}`) return "tag";
 		}
 	}
 
-	// Check if called by name
-	if (/\bbrendy\b/i.test(text)) return true;
+	// Check if called by name - AI decides if addressed or just mentioned
+	if (/\bbrendy\b/i.test(text)) return "name";
 
-	return false;
-}
-
-function shouldIgnoreInGroup(ctx: Context): boolean {
-	if (!isGroupChat(ctx)) return false;
-	return !isBotMentionedOrRepliedTo(ctx, ctx.me.id);
+	return "none";
 }
 
 function getTodayDateRD(): string {
@@ -114,15 +119,17 @@ function shouldGenerateImageNow(shortTerm: ShortTermMemory): boolean {
 }
 
 const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
+const REACTION_MARKER_REGEX = /^\[REACT:([^\]]+)\]$/;
+const SILENCE_MARKER = "[SILENCE]";
 
 async function processConversation(
 	ctx: Context,
 	userContent: string,
 	userName: string,
+	mentionType: MentionType = "none",
 ): Promise<void> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
-	const botInfo = ctx.me;
 
 	// Load memories
 	const shortTerm = await loadShortTerm(chatId);
@@ -151,20 +158,34 @@ async function processConversation(
 		shortTerm.previousSummary,
 		memberMemory,
 		shouldGenImage,
+		isGroupChat(ctx) ? mentionType : undefined,
 	);
 	const messages = buildMessages(shortTerm);
-
-	// In groups, only respond when mentioned or replied to
-	const effectiveSystemPrompt = systemPrompt;
-	if (isGroupChat(ctx) && !isBotMentionedOrRepliedTo(ctx, botInfo.id)) {
-		return;
-	}
 
 	// Show typing indicator
 	await ctx.replyWithChatAction("typing");
 
 	// Generate response
-	let responseText = await generateResponse(effectiveSystemPrompt, messages);
+	let responseText = await generateResponse(systemPrompt, messages);
+
+	// Check for [SILENCE] marker - bot chose not to respond
+	if (responseText.trim() === SILENCE_MARKER) {
+		if (isDev) console.log("[response] Bot chose to stay silent");
+		return;
+	}
+
+	// Check for [REACT:emoji] marker - bot wants to react with emoji instead of text
+	const reactionMatch = responseText.trim().match(REACTION_MARKER_REGEX);
+	if (reactionMatch) {
+		const emoji = reactionMatch[1].trim();
+		if (isDev) console.log("[response] Bot reacting with emoji:", emoji);
+		try {
+			await ctx.react(emoji);
+		} catch (error) {
+			console.error("[reaction] Error reacting:", error);
+		}
+		return;
+	}
 
 	// Reply options
 	const replyOptions = {
@@ -443,7 +464,8 @@ export function registerHandlers(bot: Bot): void {
 
 	// Voice messages
 	bot.on("message:voice", async (ctx) => {
-		if (shouldIgnoreInGroup(ctx)) return;
+		const mentionType = detectMentionType(ctx, ctx.me.id);
+		if (isGroupChat(ctx) && mentionType === "none") return;
 		try {
 			const transcription = await downloadAndTranscribe(
 				ctx,
@@ -454,7 +476,7 @@ export function registerHandlers(bot: Bot): void {
 			);
 			const userName = getUserDisplayName(ctx);
 			const content = `[Audio from ${userName}]: ${transcription}`;
-			await processConversation(ctx, content, userName);
+			await processConversation(ctx, content, userName, mentionType);
 		} catch (error) {
 			console.error("[voice handler] Error:", error);
 			if (isDev)
@@ -464,7 +486,8 @@ export function registerHandlers(bot: Bot): void {
 
 	// Audio files
 	bot.on("message:audio", async (ctx) => {
-		if (shouldIgnoreInGroup(ctx)) return;
+		const mentionType = detectMentionType(ctx, ctx.me.id);
+		if (isGroupChat(ctx) && mentionType === "none") return;
 		try {
 			const ext = ctx.message.audio.mime_type?.split("/")[1] ?? "mp3";
 			const mimeType = ctx.message.audio.mime_type ?? "audio/mp3";
@@ -477,7 +500,7 @@ export function registerHandlers(bot: Bot): void {
 			);
 			const userName = getUserDisplayName(ctx);
 			const content = `[Audio from ${userName}]: ${transcription}`;
-			await processConversation(ctx, content, userName);
+			await processConversation(ctx, content, userName, mentionType);
 		} catch (error) {
 			console.error("[audio handler] Error:", error);
 			if (isDev)
@@ -487,7 +510,8 @@ export function registerHandlers(bot: Bot): void {
 
 	// Photos
 	bot.on("message:photo", async (ctx) => {
-		if (shouldIgnoreInGroup(ctx)) return;
+		const mentionType = detectMentionType(ctx, ctx.me.id);
+		if (isGroupChat(ctx) && mentionType === "none") return;
 		try {
 			const { filePath, mimeType } = await downloadImage(ctx, botToken);
 			const caption = ctx.message.caption;
@@ -496,7 +520,7 @@ export function registerHandlers(bot: Bot): void {
 			const content = caption
 				? `[Image from ${userName}, caption: "${caption}"]: ${description}`
 				: `[Image from ${userName}]: ${description}`;
-			await processConversation(ctx, content, userName);
+			await processConversation(ctx, content, userName, mentionType);
 		} catch (error) {
 			console.error("[photo handler] Error:", error);
 			if (isDev)
@@ -509,10 +533,11 @@ export function registerHandlers(bot: Bot): void {
 		const text = ctx.message.text;
 		if (!text) return;
 		const userName = getUserDisplayName(ctx);
+		const mentionType = detectMentionType(ctx, ctx.me.id);
 
 		const yt = extractYouTubeUrl(ctx);
 		if (yt) {
-			if (shouldIgnoreInGroup(ctx)) return;
+			if (isGroupChat(ctx) && mentionType === "none") return;
 			const analysis = await analyzeYouTube(
 				yt.url,
 				yt.remainingText || undefined,
@@ -520,10 +545,13 @@ export function registerHandlers(bot: Bot): void {
 			const content = yt.remainingText
 				? `[YouTube video from ${userName}, message: "${yt.remainingText}"]: ${analysis}`
 				: `[YouTube video from ${userName}]: ${analysis}`;
-			await processConversation(ctx, content, userName);
+			await processConversation(ctx, content, userName, mentionType);
 			return;
 		}
 
-		await processConversation(ctx, text, userName);
+		// In groups, only respond when mentioned
+		if (isGroupChat(ctx) && mentionType === "none") return;
+
+		await processConversation(ctx, text, userName, mentionType);
 	});
 }

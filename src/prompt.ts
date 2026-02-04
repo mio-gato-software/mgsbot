@@ -1,5 +1,6 @@
 import type { Content } from "@google/genai";
 import { getDailyWeatherForImage } from "./daily-weather.ts";
+import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent } from "./memory.ts";
 import type { ChatMessage } from "./providers/types.ts";
@@ -140,6 +141,7 @@ export async function buildSystemPrompt(
 	previousSummary: string,
 	memberMemory: MemberMemory,
 	shouldGenerateImage = false,
+	mentionType?: MentionType,
 ): Promise<string> {
 	const permanent = await loadPermanent();
 
@@ -208,6 +210,14 @@ Este es tu primer mensaje del día en este chat. Incluye en tu respuesta un marc
 NO incluyas descripción física tuya (se agrega automáticamente). Incluye en el prompt la ropa y el outfit que llevas en la escena. La escena debe ser coherente con la hora actual (son las ${currentTime}).
 
 Solo escenas de ti misma, nunca de otros. No menciones que estás generando una imagen ni pidas permiso; simplemente inclúyelo naturalmente en tu respuesta.`;
+	}
+
+	// Add mention type context for groups
+	if (mentionType === "name") {
+		systemPrompt += `\n\n## Contexto de mención (grupo)
+El usuario mencionó tu nombre en el mensaje. Evalúa si te está hablando DIRECTAMENTE a ti o solo te mencionó al hablar con otros.
+- Si te hablan a ti (ej: "Brendy, qué opinas?", "Hey Brendy"): responde normalmente
+- Si solo te mencionan sin dirigirse a ti (ej: "Le estaba contando a María sobre Brendy", "Brendy dijo algo chistoso ayer"): responde exactamente \`[SILENCE]\` para no interrumpir`;
 	}
 
 	return systemPrompt;
