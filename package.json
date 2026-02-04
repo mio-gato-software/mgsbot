@@ -12,7 +12,10 @@
 	"private": true,
 	"scripts": {
 		"start": "bun run index.ts",
-		"dev": "bun --watch run index.ts"
+		"dev": "bun --watch run index.ts",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write ."
 	},
 	"type": "module"
 }

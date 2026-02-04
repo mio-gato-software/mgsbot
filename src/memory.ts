@@ -18,6 +18,88 @@ const SUMMARIZE_THRESHOLD = 30;
 const SUMMARIZE_COUNT = 15;
 const MAX_LONG_TERM_ENTRIES = 50;
 const INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+const SIMILARITY_THRESHOLD = 0.6; // 60% similarity = duplicate
+
+// --- Text Similarity Utilities ---
+
+function normalizeForComparison(text: string): string {
+	return text
+		.toLowerCase()
+		.normalize("NFD")
+		.replace(/[\u0300-\u036f]/g, "") // Remove diacritics
+		.replace(/[^\w\s]/g, " ") // Remove punctuation
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function extractKeyTerms(text: string): Set<string> {
+	const normalized = normalizeForComparison(text);
+	const words = normalized.split(" ").filter((w) => w.length > 2);
+	const terms = new Set<string>(words);
+
+	// Add bigrams for better matching
+	for (let i = 0; i < words.length - 1; i++) {
+		terms.add(`${words[i]}_${words[i + 1]}`);
+	}
+
+	return terms;
+}
+
+function calculateSimilarity(text1: string, text2: string): number {
+	const terms1 = extractKeyTerms(text1);
+	const terms2 = extractKeyTerms(text2);
+
+	if (terms1.size === 0 || terms2.size === 0) return 0;
+
+	let intersection = 0;
+	for (const term of terms1) {
+		if (terms2.has(term)) intersection++;
+	}
+
+	// Jaccard similarity
+	const union = terms1.size + terms2.size - intersection;
+	return union === 0 ? 0 : intersection / union;
+}
+
+// --- Key Canonicalization for Member Facts ---
+
+const KEY_ALIASES: Record<string, string> = {
+	empleo: "trabajo",
+	ocupacion: "trabajo",
+	profesion: "trabajo",
+	oficio: "trabajo",
+	bebida: "preferencia-bebida",
+	"bebida-favorita": "preferencia-bebida",
+	"habito-cafe": "preferencia-bebida",
+	cafe: "preferencia-bebida",
+	comida: "preferencia-comida",
+	"comida-favorita": "preferencia-comida",
+	plato: "preferencia-comida",
+	"estado-civil": "relacion",
+	pareja: "relacion",
+	esposo: "relacion",
+	esposa: "relacion",
+	novio: "relacion",
+	novia: "relacion",
+	telefono: "contacto-telefono",
+	celular: "contacto-telefono",
+	movil: "contacto-telefono",
+	email: "contacto-email",
+	correo: "contacto-email",
+	cumpleanos: "fecha-nacimiento",
+	nacimiento: "fecha-nacimiento",
+	"fecha-cumple": "fecha-nacimiento",
+	residencia: "ubicacion",
+	ciudad: "ubicacion",
+	pais: "ubicacion",
+	direccion: "ubicacion",
+	casa: "ubicacion",
+};
+
+function canonicalizeKey(key: string): string {
+	const normalized = normalizeForComparison(key);
+	return KEY_ALIASES[normalized] ?? normalized;
+}
 
 // --- Permanent Memory ---
 
@@ -63,22 +145,41 @@ export async function addLongTermMemories(
 	const now = Date.now();
 
 	for (const mem of newMemories) {
-		entries.push({
-			id: `mem_${now}_${Math.random().toString(36).slice(2, 8)}`,
-			content: mem.content,
-			context: mem.context,
-			createdAt: now,
-			lastAccessed: now,
-			importance: mem.importance,
-		});
+		// Check for duplicates by similarity
+		let isDuplicate = false;
+		for (const existing of entries) {
+			const similarity = calculateSimilarity(mem.content, existing.content);
+			if (similarity >= SIMILARITY_THRESHOLD) {
+				// Update if new memory has higher importance
+				if (mem.importance > existing.importance) {
+					existing.content = mem.content;
+					existing.context = mem.context;
+					existing.importance = mem.importance;
+				}
+				existing.lastAccessed = now;
+				isDuplicate = true;
+				break;
+			}
+		}
+
+		if (!isDuplicate) {
+			entries.push({
+				id: `mem_${now}_${Math.random().toString(36).slice(2, 8)}`,
+				content: mem.content,
+				context: mem.context,
+				createdAt: now,
+				lastAccessed: now,
+				importance: mem.importance,
+			});
+		}
 	}
 
 	// Prune if over limit
 	if (entries.length > MAX_LONG_TERM_ENTRIES) {
-		const now = Date.now();
+		const currentTime = Date.now();
 		entries.sort((a, b) => {
-			const recencyA = 1 / (1 + (now - a.lastAccessed) / 86_400_000);
-			const recencyB = 1 / (1 + (now - b.lastAccessed) / 86_400_000);
+			const recencyA = 1 / (1 + (currentTime - a.lastAccessed) / 86_400_000);
+			const recencyB = 1 / (1 + (currentTime - b.lastAccessed) / 86_400_000);
 			return b.importance * recencyB - a.importance * recencyA;
 		});
 		entries.length = MAX_LONG_TERM_ENTRIES;
@@ -89,24 +190,46 @@ export async function addLongTermMemories(
 
 export function getRelevantMemories(
 	entries: LongTermMemoryEntry[],
+	currentContext?: string,
+	maxCount = 12,
 ): LongTermMemoryEntry[] {
 	if (entries.length === 0) return [];
 
 	const now = Date.now();
+	const contextTerms = currentContext ? extractKeyTerms(currentContext) : null;
 
-	// Get 10 most recently accessed
-	const byRecency = [...entries]
-		.sort((a, b) => b.lastAccessed - a.lastAccessed)
-		.slice(0, 10);
+	// Score each entry with composite scoring
+	const scored = entries.map((entry) => {
+		// Relevance score (0-1): overlap with current context
+		let relevanceScore = 0;
+		if (contextTerms && contextTerms.size > 0) {
+			const entryTerms = extractKeyTerms(entry.content);
+			let overlap = 0;
+			for (const term of entryTerms) {
+				if (contextTerms.has(term)) overlap++;
+			}
+			relevanceScore = entryTerms.size > 0 ? overlap / entryTerms.size : 0;
+		}
 
-	// Get 5 highest importance (excluding those already selected)
-	const recencyIds = new Set(byRecency.map((e) => e.id));
-	const byImportance = entries
-		.filter((e) => !recencyIds.has(e.id))
-		.sort((a, b) => b.importance - a.importance)
-		.slice(0, 5);
+		// Importance score (0-1): normalized from 1-5 scale
+		const importanceScore = (entry.importance - 1) / 4;
 
-	const selected = [...byRecency, ...byImportance];
+		// Recency score (0-1): exponential decay over days
+		const daysSinceAccess = (now - entry.lastAccessed) / 86_400_000;
+		const recencyScore = Math.exp(-daysSinceAccess / 7); // Half-life of ~5 days
+
+		// Composite score: 50% relevance, 30% importance, 20% recency
+		// If no context provided, use 60% importance, 40% recency
+		const score = contextTerms
+			? 0.5 * relevanceScore + 0.3 * importanceScore + 0.2 * recencyScore
+			: 0.6 * importanceScore + 0.4 * recencyScore;
+
+		return { entry, score };
+	});
+
+	// Sort by score and take top entries
+	scored.sort((a, b) => b.score - a.score);
+	const selected = scored.slice(0, maxCount).map((s) => s.entry);
 
 	// Update lastAccessed for selected entries
 	const selectedIds = new Set(selected.map((e) => e.id));
@@ -240,11 +363,21 @@ export async function addMemberFacts(
 			data[memberKey] = [];
 		}
 
-		// Find existing fact with the same key
-		const existingIndex = data[memberKey].findIndex((f) => f.key === fact.key);
-		const newFact = { key: fact.key, content: fact.content, updatedAt: now };
+		// Canonicalize the key to avoid duplicates with different naming
+		const canonicalKey = canonicalizeKey(fact.key);
+		const newFact = {
+			key: canonicalKey,
+			content: fact.content,
+			updatedAt: now,
+		};
+
+		// Find existing fact with the same canonical key
+		const existingIndex = data[memberKey].findIndex(
+			(f) => canonicalizeKey(f.key) === canonicalKey,
+		);
 
 		if (existingIndex >= 0) {
+			// Update existing fact, keeping the canonical key
 			data[memberKey][existingIndex] = newFact;
 		} else {
 			data[memberKey].push(newFact);

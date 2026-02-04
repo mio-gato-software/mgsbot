@@ -127,7 +127,7 @@ async function processConversation(
 	// Load memories
 	const shortTerm = await loadShortTerm(chatId);
 	const longTermEntries = await loadLongTerm();
-	const relevantMemories = getRelevantMemories(longTermEntries);
+	const relevantMemories = getRelevantMemories(longTermEntries, userContent);
 	const memberMemory = await loadMemberMemory();
 
 	// Save updated lastAccessed times
@@ -276,7 +276,26 @@ async function triggerMemoryEvaluation(
 		)
 		.join("\n");
 
-	const evaluation = await evaluateMemory(recentText);
+	// Load existing context to avoid duplicates
+	const [longTermEntries, memberMemory] = await Promise.all([
+		loadLongTerm(),
+		loadMemberMemory(),
+	]);
+
+	const existingContext = {
+		memories: longTermEntries.map((e) => ({
+			content: e.content,
+			importance: e.importance,
+		})),
+		memberFacts: Object.fromEntries(
+			Object.entries(memberMemory).map(([member, facts]) => [
+				member,
+				facts.map((f) => f.key),
+			]),
+		),
+	};
+
+	const evaluation = await evaluateMemory(recentText, existingContext);
 
 	if (evaluation.save && evaluation.memories.length > 0) {
 		await addLongTermMemories(evaluation.memories);

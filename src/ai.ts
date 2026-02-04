@@ -235,14 +235,46 @@ export async function generateImage(
 	throw new Error("No image data in response");
 }
 
+interface ExistingMemoryContext {
+	memories: Array<{ content: string; importance: number }>;
+	memberFacts: Record<string, string[]>; // member -> list of keys
+}
+
 export async function evaluateMemory(
 	recentMessages: string,
+	existingContext?: ExistingMemoryContext,
 ): Promise<MemoryEvaluation> {
+	// Build context section if we have existing memories
+	let contextSection = "";
+	if (existingContext) {
+		const memSummary = existingContext.memories
+			.slice(0, 10)
+			.map((m) => `- ${m.content} (imp: ${m.importance})`)
+			.join("\n");
+
+		const factsSummary = Object.entries(existingContext.memberFacts)
+			.map(([member, keys]) => `- ${member}: ${keys.join(", ")}`)
+			.join("\n");
+
+		if (memSummary || factsSummary) {
+			contextSection = `
+MEMORIAS YA GUARDADAS (NO duplicar):
+${memSummary || "(ninguna)"}
+
+KEYS YA USADAS POR MIEMBRO:
+${factsSummary || "(ninguno)"}
+
+IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba. Si la información ya existe (aunque con diferentes palabras), NO la incluyas.
+
+`;
+		}
+	}
+
 	const prompt = `Analiza el siguiente extracto de conversación. Haz dos cosas:
 
 1. **Memorias generales**: información compartida que vale la pena recordar a largo plazo (hechos, preferencias, eventos importantes, decisiones, etc.).
 2. **Hechos por miembro**: datos personales sobre personas específicas mencionadas en la conversación (eventos de vida, trabajo, preferencias, logros, relaciones, etc.). Usa un key corto en español para cada hecho (ej: "estado-civil", "empleo", "telefono", "hobby", "mascota"). Si un hecho actualiza algo previo, usa el mismo key para reemplazarlo. Identifica a los miembros por sus nombres tal como aparecen en la conversación.
-
+${contextSection}
 Responde SOLO con JSON válido en este formato exacto:
 {"save": boolean, "memories": [{"content": "qué recordar", "context": "por qué importa", "importance": N}], "memberFacts": [{"member": "Nombre", "key": "tema", "content": "el hecho completo"}]}
 
