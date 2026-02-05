@@ -10,6 +10,11 @@ import type {
 	ShortTermMemory,
 } from "./types.ts";
 
+export const isSimpleAssistantMode =
+	process.env.SIMPLE_ASSISTANT_MODE === "true";
+
+const SIMPLE_ASSISTANT_PROMPT = `You are a helpful assistant. Respond clearly and concisely to user questions.`;
+
 /**
  * Get day-of-week context for mood and routines
  */
@@ -143,6 +148,11 @@ export async function buildSystemPrompt(
 	shouldGenerateImage = false,
 	mentionType?: MentionType,
 ): Promise<string> {
+	// Simple assistant mode: return minimal prompt
+	if (isSimpleAssistantMode) {
+		return SIMPLE_ASSISTANT_PROMPT;
+	}
+
 	const permanent = await loadPermanent();
 
 	const now = new Date().toLocaleString("es-DO", {

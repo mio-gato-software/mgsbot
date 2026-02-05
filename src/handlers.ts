@@ -21,7 +21,11 @@ import {
 	saveLongTerm,
 	saveShortTerm,
 } from "./memory.ts";
-import { buildMessages, buildSystemPrompt } from "./prompt.ts";
+import {
+	buildMessages,
+	buildSystemPrompt,
+	isSimpleAssistantMode,
+} from "./prompt.ts";
 import type { ConversationMessage, ShortTermMemory } from "./types.ts";
 
 const EVAL_EVERY_N_MESSAGES = 5;
@@ -131,16 +135,8 @@ async function processConversation(
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
 
-	// Load memories
+	// Load short-term memory (always needed for conversation history)
 	const shortTerm = await loadShortTerm(chatId);
-	const longTermEntries = await loadLongTerm();
-	const relevantMemories = getRelevantMemories(longTermEntries, userContent);
-	const memberMemory = await loadMemberMemory();
-
-	// Save updated lastAccessed times
-	if (relevantMemories.length > 0) {
-		await saveLongTerm(longTermEntries);
-	}
 
 	// Add user message to short-term
 	const userMessage: ConversationMessage = {
@@ -151,15 +147,33 @@ async function processConversation(
 	};
 	await addMessageToShortTerm(shortTerm, userMessage);
 
-	// Build prompt
-	const shouldGenImage = shouldGenerateImageNow(shortTerm);
-	const systemPrompt = await buildSystemPrompt(
-		relevantMemories,
-		shortTerm.previousSummary,
-		memberMemory,
-		shouldGenImage,
-		isGroupChat(ctx) ? mentionType : undefined,
-	);
+	// Build prompt and messages
+	let systemPrompt: string;
+	let shouldGenImage = false;
+
+	if (isSimpleAssistantMode) {
+		// Simple mode: skip memory loading, use minimal prompt
+		systemPrompt = await buildSystemPrompt([], "", {}, false);
+	} else {
+		// Full mode: load all memories
+		const longTermEntries = await loadLongTerm();
+		const relevantMemories = getRelevantMemories(longTermEntries, userContent);
+		const memberMemory = await loadMemberMemory();
+
+		// Save updated lastAccessed times
+		if (relevantMemories.length > 0) {
+			await saveLongTerm(longTermEntries);
+		}
+
+		shouldGenImage = shouldGenerateImageNow(shortTerm);
+		systemPrompt = await buildSystemPrompt(
+			relevantMemories,
+			shortTerm.previousSummary,
+			memberMemory,
+			shouldGenImage,
+			isGroupChat(ctx) ? mentionType : undefined,
+		);
+	}
 	const messages = buildMessages(shortTerm);
 
 	// Show typing indicator
@@ -242,8 +256,11 @@ async function processConversation(
 
 	// Send text reply if image wasn't sent (or had no caption)
 	if (!imageSent) {
+		// TTS is disabled in simple assistant mode
 		const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/TTS\]/;
-		const ttsMatch = responseText.match(TTS_REGEX);
+		const ttsMatch = isSimpleAssistantMode
+			? null
+			: responseText.match(TTS_REGEX);
 
 		if (isDev)
 			console.log(
@@ -279,8 +296,11 @@ async function processConversation(
 		}
 	}
 
-	// Trigger long-term memory evaluation every N messages
-	if (shortTerm.messageCountSinceEval >= EVAL_EVERY_N_MESSAGES) {
+	// Trigger long-term memory evaluation every N messages (disabled in simple mode)
+	if (
+		!isSimpleAssistantMode &&
+		shortTerm.messageCountSinceEval >= EVAL_EVERY_N_MESSAGES
+	) {
 		shortTerm.messageCountSinceEval = 0;
 		// Run evaluation in background (don't await)
 		triggerMemoryEvaluation(shortTerm.messages).catch(console.error);
@@ -462,8 +482,9 @@ export function registerHandlers(bot: Bot): void {
 		await next();
 	});
 
-	// Voice messages
+	// Voice messages (disabled in simple assistant mode)
 	bot.on("message:voice", async (ctx) => {
+		if (isSimpleAssistantMode) return;
 		const mentionType = detectMentionType(ctx, ctx.me.id);
 		if (isGroupChat(ctx) && mentionType === "none") return;
 		try {
@@ -484,8 +505,9 @@ export function registerHandlers(bot: Bot): void {
 		}
 	});
 
-	// Audio files
+	// Audio files (disabled in simple assistant mode)
 	bot.on("message:audio", async (ctx) => {
+		if (isSimpleAssistantMode) return;
 		const mentionType = detectMentionType(ctx, ctx.me.id);
 		if (isGroupChat(ctx) && mentionType === "none") return;
 		try {
@@ -508,8 +530,9 @@ export function registerHandlers(bot: Bot): void {
 		}
 	});
 
-	// Photos
+	// Photos (disabled in simple assistant mode)
 	bot.on("message:photo", async (ctx) => {
+		if (isSimpleAssistantMode) return;
 		const mentionType = detectMentionType(ctx, ctx.me.id);
 		if (isGroupChat(ctx) && mentionType === "none") return;
 		try {
@@ -535,7 +558,8 @@ export function registerHandlers(bot: Bot): void {
 		const userName = getUserDisplayName(ctx);
 		const mentionType = detectMentionType(ctx, ctx.me.id);
 
-		const yt = extractYouTubeUrl(ctx);
+		// YouTube analysis disabled in simple assistant mode
+		const yt = isSimpleAssistantMode ? null : extractYouTubeUrl(ctx);
 		if (yt) {
 			if (isGroupChat(ctx) && mentionType === "none") return;
 			const analysis = await analyzeYouTube(
