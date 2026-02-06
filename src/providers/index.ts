@@ -1,3 +1,4 @@
+import { AnthropicChatProvider } from "./anthropic.ts";
 import { GeminiChatProvider } from "./gemini.ts";
 import { OpenRouterChatProvider } from "./openrouter.ts";
 import type { ChatProvider } from "./types.ts";
@@ -16,6 +17,9 @@ export function createChatProvider(): ChatProvider {
 	switch (providerName) {
 		case "openrouter":
 			cachedProvider = new OpenRouterChatProvider();
+			break;
+		case "anthropic":
+			cachedProvider = new AnthropicChatProvider();
 			break;
 		default:
 			cachedProvider = new GeminiChatProvider();
@@ -36,6 +40,9 @@ export function switchChatProvider(
 			break;
 		case "gemini":
 			cachedProvider = new GeminiChatProvider(model);
+			break;
+		case "anthropic":
+			cachedProvider = new AnthropicChatProvider(model);
 			break;
 		default:
 			throw new Error(`Unknown provider: ${providerName}`);

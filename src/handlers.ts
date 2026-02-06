@@ -556,6 +556,7 @@ export function registerHandlers(bot: Bot): void {
 	const MODEL_ALIASES: Record<string, { provider: string; model: string }> = {
 		opus: { provider: "openrouter", model: "anthropic/claude-opus-4.5" },
 		flash: { provider: "gemini", model: "gemini-3-flash-preview" },
+		sonnet: { provider: "anthropic", model: "claude-sonnet-4-5-20250929" },
 	};
 
 	bot.command("model", async (ctx) => {
@@ -592,7 +593,9 @@ export function registerHandlers(bot: Bot): void {
 		const model = parts.slice(1).join(" ");
 
 		if (
-			(providerName !== "gemini" && providerName !== "openrouter") ||
+			(providerName !== "gemini" &&
+				providerName !== "openrouter" &&
+				providerName !== "anthropic") ||
 			!model
 		) {
 			const aliases = Object.entries(MODEL_ALIASES)
