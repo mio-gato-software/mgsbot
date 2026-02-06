@@ -25,3 +25,29 @@ export function createChatProvider(): ChatProvider {
 	console.log(`[chat] Using provider: ${cachedProvider.name}`);
 	return cachedProvider;
 }
+
+export function switchChatProvider(
+	providerName: string,
+	model: string,
+): ChatProvider {
+	switch (providerName) {
+		case "openrouter":
+			cachedProvider = new OpenRouterChatProvider(model);
+			break;
+		case "gemini":
+			cachedProvider = new GeminiChatProvider(model);
+			break;
+		default:
+			throw new Error(`Unknown provider: ${providerName}`);
+	}
+
+	console.log(
+		`[chat] Switched to provider: ${cachedProvider.name}, model: ${cachedProvider.model}`,
+	);
+	return cachedProvider;
+}
+
+export function getChatProviderInfo(): { provider: string; model: string } {
+	const provider = createChatProvider();
+	return { provider: provider.name, model: provider.model };
+}

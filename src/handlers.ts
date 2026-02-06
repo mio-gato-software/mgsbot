@@ -26,6 +26,7 @@ import {
 	buildSystemPrompt,
 	isSimpleAssistantMode,
 } from "./prompt.ts";
+import { getChatProviderInfo, switchChatProvider } from "./providers/index.ts";
 import type { ConversationMessage, ShortTermMemory } from "./types.ts";
 
 const EVAL_EVERY_N_MESSAGES = 5;
@@ -548,6 +549,68 @@ export function registerHandlers(bot: Bot): void {
 			console.error("[photo handler] Error:", error);
 			if (isDev)
 				await ctx.reply(`[Dev] Photo handler error: ${error}`).catch(() => {});
+		}
+	});
+
+	// /model command — switch chat provider/model (DM only, owner only)
+	const MODEL_ALIASES: Record<string, { provider: string; model: string }> = {
+		opus: { provider: "openrouter", model: "anthropic/claude-opus-4.5" },
+		flash: { provider: "gemini", model: "gemini-3-flash-preview" },
+	};
+
+	bot.command("model", async (ctx) => {
+		if (isGroupChat(ctx)) return;
+
+		const args = ctx.match?.toString().trim() ?? "";
+
+		if (!args) {
+			const info = getChatProviderInfo();
+			const aliases = Object.keys(MODEL_ALIASES).join(", ");
+			await ctx.reply(
+				`Proveedor: ${info.provider}\nModelo: ${info.model}\n\nAliases: ${aliases}`,
+			);
+			return;
+		}
+
+		// Check alias first
+		const alias = MODEL_ALIASES[args.toLowerCase()];
+		if (alias) {
+			try {
+				const provider = switchChatProvider(alias.provider, alias.model);
+				await ctx.reply(
+					`Cambiado a proveedor: ${provider.name}\nModelo: ${provider.model}`,
+				);
+			} catch (error) {
+				await ctx.reply(`Error cambiando modelo: ${error}`);
+			}
+			return;
+		}
+
+		// Full syntax: /model <provider> <model>
+		const parts = args.split(/\s+/);
+		const providerName = parts[0].toLowerCase();
+		const model = parts.slice(1).join(" ");
+
+		if (
+			(providerName !== "gemini" && providerName !== "openrouter") ||
+			!model
+		) {
+			const aliases = Object.entries(MODEL_ALIASES)
+				.map(([k, v]) => `  ${k} → ${v.provider}/${v.model}`)
+				.join("\n");
+			await ctx.reply(
+				`Uso:\n/model — ver modelo actual\n/model <alias>\n/model <provider> <modelo>\n\nAliases:\n${aliases}`,
+			);
+			return;
+		}
+
+		try {
+			const provider = switchChatProvider(providerName, model);
+			await ctx.reply(
+				`Cambiado a proveedor: ${provider.name}\nModelo: ${provider.model}`,
+			);
+		} catch (error) {
+			await ctx.reply(`Error cambiando modelo: ${error}`);
 		}
 	});
 

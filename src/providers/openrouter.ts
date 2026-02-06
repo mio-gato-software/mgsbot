@@ -22,11 +22,11 @@ interface OpenRouterResponse {
 
 export class OpenRouterChatProvider implements ChatProvider {
 	readonly name = "openrouter";
+	model: string;
 
 	private readonly apiKey: string;
-	private readonly model: string;
 
-	constructor() {
+	constructor(model?: string) {
 		const apiKey = process.env.OPENROUTER_API_KEY;
 		if (!apiKey) {
 			throw new Error(
@@ -34,7 +34,8 @@ export class OpenRouterChatProvider implements ChatProvider {
 			);
 		}
 		this.apiKey = apiKey;
-		this.model = process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-sonnet";
+		this.model =
+			model ?? process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-sonnet";
 	}
 
 	async generateResponse(

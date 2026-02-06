@@ -6,7 +6,7 @@ import {
 import { executeWeatherFunction, weatherTool } from "../weather.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
-const MODEL = "gemini-3-flash-preview";
+const DEFAULT_MODEL = "gemini-3-flash-preview";
 const isDev = process.env.NODE_ENV === "development";
 
 function logTokenUsage(label: string, response: GenerateContentResponse): void {
@@ -28,9 +28,10 @@ function messagesToContents(messages: ChatMessage[]): Content[] {
 
 export class GeminiChatProvider implements ChatProvider {
 	readonly name = "gemini";
+	model: string;
 	private readonly ai: GoogleGenAI;
 
-	constructor() {
+	constructor(model?: string) {
 		const apiKey = process.env.GOOGLE_API_KEY;
 		if (!apiKey) {
 			throw new Error(
@@ -38,6 +39,7 @@ export class GeminiChatProvider implements ChatProvider {
 			);
 		}
 		this.ai = new GoogleGenAI({ apiKey });
+		this.model = model ?? DEFAULT_MODEL;
 	}
 
 	async generateResponse(
@@ -61,7 +63,7 @@ export class GeminiChatProvider implements ChatProvider {
 		}
 
 		const response = await this.ai.models.generateContent({
-			model: MODEL,
+			model: this.model,
 			config: {
 				systemInstruction: systemPrompt,
 				tools: [{ functionDeclarations: [weatherTool] }],
@@ -105,7 +107,7 @@ export class GeminiChatProvider implements ChatProvider {
 				];
 
 				const followUpResponse = await this.ai.models.generateContent({
-					model: MODEL,
+					model: this.model,
 					config: {
 						systemInstruction: systemPrompt,
 						tools: [{ functionDeclarations: [weatherTool] }],

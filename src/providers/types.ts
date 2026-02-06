@@ -5,6 +5,7 @@ export interface ChatMessage {
 
 export interface ChatProvider {
 	readonly name: string;
+	model: string;
 	generateResponse(
 		systemPrompt: string,
 		messages: ChatMessage[],
