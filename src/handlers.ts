@@ -553,7 +553,12 @@ export function registerHandlers(bot: Bot): void {
 	});
 
 	// /provider command — switch chat provider (DM only, owner only)
-	const VALID_PROVIDERS = ["gemini", "openrouter", "anthropic"] as const;
+	const VALID_PROVIDERS = [
+		"gemini",
+		"openrouter",
+		"anthropic",
+		"azure",
+	] as const;
 
 	bot.command("provider", async (ctx) => {
 		if (isGroupChat(ctx)) return;

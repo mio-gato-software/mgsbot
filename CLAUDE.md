@@ -46,6 +46,7 @@ src/
     gemini.ts                ← Gemini provider implementation
     openrouter.ts            ← OpenRouter provider implementation
     anthropic.ts             ← Anthropic API provider implementation
+    azure.ts                 ← Azure OpenAI provider implementation
   brendy-appearance.ts       ← Locates base character image for image generation
   holidays.ts                ← Dominican Republic holidays (hardcoded for current year, needs annual update)
   daily-weather.ts           ← Fetches weather from Open-Meteo API, cached daily in memory/daily-weather.json
@@ -61,7 +62,7 @@ audios/                      ← Downloaded audio files and generated TTS
 
 ### Chat Provider System
 
-`generateResponse()` delegates to a pluggable chat provider selected by `CHAT_PROVIDER` env var. The provider is a cached singleton implementing the `ChatProvider` interface. Available providers: `gemini` (default), `openrouter`, `anthropic`.
+`generateResponse()` delegates to a pluggable chat provider selected by `CHAT_PROVIDER` env var. The provider is a cached singleton implementing the `ChatProvider` interface. Available providers: `gemini` (default), `openrouter`, `anthropic`, `azure`.
 
 ### Memory System
 
@@ -89,11 +90,12 @@ Once daily (random time between 8am–11pm DR time), the bot includes an `[IMAGE
 Requires a `.env` file (see `.env.sample`). Key variables:
 
 - `BOT_TOKEN` (required): Telegram bot token
-- `CHAT_PROVIDER`: `gemini` (default), `openrouter`, or `anthropic`
+- `CHAT_PROVIDER`: `gemini` (default), `openrouter`, `anthropic`, or `azure`
 - `GOOGLE_API_KEY`: Required for Gemini provider and all media processing (transcription, image gen, etc.)
 - `GEMINI_MODEL`: Gemini chat model (default: `gemini-3-flash-preview`)
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic
+- `AZURE_API_KEY` / `AZURE_ENDPOINT` / `AZURE_MODEL`: Required if using Azure
 - `ALLOWED_GROUP_ID` / `OWNER_USER_ID`: Access control
 - `LEMON_FOX_API_KEY`: For TTS voice responses
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
