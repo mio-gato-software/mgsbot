@@ -388,6 +388,49 @@ async function downloadAndTranscribe(
 	return transcription;
 }
 
+async function downloadAndTranscribeByFileId(
+	api: Context["api"],
+	botToken: string,
+	fileId: string,
+	mimeType: string,
+	fileExtension: string,
+	prefix: string,
+	messageId: number,
+): Promise<string> {
+	const file = await api.getFile(fileId);
+	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+	if (isDev)
+		console.log("[downloadAndTranscribeByFileId] Downloading from:", url);
+
+	const response = await fetch(url);
+	if (!response.ok) {
+		console.error(
+			"[downloadAndTranscribeByFileId] Download failed:",
+			response.status,
+			response.statusText,
+		);
+		return "[transcription failed]";
+	}
+
+	const buffer = Buffer.from(await response.arrayBuffer());
+	const filePath = `./audios/${prefix}_${messageId}.${fileExtension}`;
+	await Bun.write(filePath, buffer);
+	if (isDev)
+		console.log(
+			"[downloadAndTranscribeByFileId] Saved to:",
+			filePath,
+			`(${buffer.length} bytes)`,
+		);
+
+	const transcription = await transcribeAudio(filePath, mimeType);
+	if (isDev)
+		console.log(
+			"[downloadAndTranscribeByFileId] Transcription:",
+			transcription.slice(0, 200),
+		);
+	return transcription;
+}
+
 async function downloadImage(
 	ctx: Context,
 	botToken: string,
@@ -610,6 +653,61 @@ export function registerHandlers(bot: Bot): void {
 				: `[YouTube video from ${userName}]: ${analysis}`;
 			await processConversation(ctx, content, userName, mentionType);
 			return;
+		}
+
+		// Reply-to-audio: transcribe audio from replied message
+		if (!isSimpleAssistantMode) {
+			const replyMsg = ctx.message.reply_to_message;
+			const replyVoice = replyMsg?.voice;
+			const replyAudio = replyMsg?.audio;
+
+			if (replyVoice || replyAudio) {
+				if (isGroupChat(ctx) && mentionType === "none") return;
+
+				try {
+					const fileId = replyVoice
+						? replyVoice.file_id
+						: (replyAudio?.file_id as string);
+					const mimeType = replyVoice
+						? "audio/ogg"
+						: (replyAudio?.mime_type ?? "audio/mp3");
+					const fileExtension = replyVoice
+						? "ogg"
+						: (mimeType.split("/")[1] ?? "mp3");
+					const prefix = replyVoice ? "voice_reply" : "audio_reply";
+					const replyMessageId = replyMsg?.message_id as number;
+
+					const transcription = await downloadAndTranscribeByFileId(
+						ctx.api,
+						botToken,
+						fileId,
+						mimeType,
+						fileExtension,
+						prefix,
+						replyMessageId,
+					);
+
+					const audioSenderUser = replyMsg?.from;
+					const audioSender = audioSenderUser
+						? (audioSenderUser.first_name ??
+							audioSenderUser.username ??
+							"Unknown")
+						: "Unknown";
+
+					const content = text
+						? `[Audio from ${audioSender}, transcription requested by ${userName}]: ${transcription}\n\n${userName}'s message: "${text}"`
+						: `[Audio from ${audioSender}, transcription requested by ${userName}]: ${transcription}`;
+
+					await processConversation(ctx, content, userName, mentionType);
+				} catch (error) {
+					console.error("[reply-to-audio handler] Error:", error);
+					if (isDev)
+						await ctx
+							.reply(`[Dev] Reply-to-audio error: ${error}`)
+							.catch(() => {});
+				}
+				return;
+			}
 		}
 
 		// In groups, only respond when mentioned
