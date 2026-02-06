@@ -32,17 +32,23 @@ export function createChatProvider(): ChatProvider {
 
 export function switchChatProvider(
 	providerName: string,
-	model: string,
+	model?: string,
 ): ChatProvider {
 	switch (providerName) {
 		case "openrouter":
-			cachedProvider = new OpenRouterChatProvider(model);
+			cachedProvider = model
+				? new OpenRouterChatProvider(model)
+				: new OpenRouterChatProvider();
 			break;
 		case "gemini":
-			cachedProvider = new GeminiChatProvider(model);
+			cachedProvider = model
+				? new GeminiChatProvider(model)
+				: new GeminiChatProvider();
 			break;
 		case "anthropic":
-			cachedProvider = new AnthropicChatProvider(model);
+			cachedProvider = model
+				? new AnthropicChatProvider(model)
+				: new AnthropicChatProvider();
 			break;
 		default:
 			throw new Error(`Unknown provider: ${providerName}`);

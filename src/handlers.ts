@@ -552,68 +552,36 @@ export function registerHandlers(bot: Bot): void {
 		}
 	});
 
-	// /model command — switch chat provider/model (DM only, owner only)
-	const MODEL_ALIASES: Record<string, { provider: string; model: string }> = {
-		opus: { provider: "openrouter", model: "anthropic/claude-opus-4.5" },
-		flash: { provider: "gemini", model: "gemini-3-flash-preview" },
-		sonnet: { provider: "anthropic", model: "claude-sonnet-4-5-20250929" },
-	};
+	// /provider command — switch chat provider (DM only, owner only)
+	const VALID_PROVIDERS = ["gemini", "openrouter", "anthropic"] as const;
 
-	bot.command("model", async (ctx) => {
+	bot.command("provider", async (ctx) => {
 		if (isGroupChat(ctx)) return;
 
-		const args = ctx.match?.toString().trim() ?? "";
+		const args = ctx.match?.toString().trim().toLowerCase() ?? "";
 
 		if (!args) {
 			const info = getChatProviderInfo();
-			const aliases = Object.keys(MODEL_ALIASES).join(", ");
 			await ctx.reply(
-				`Proveedor: ${info.provider}\nModelo: ${info.model}\n\nAliases: ${aliases}`,
+				`Proveedor: ${info.provider}\nModelo: ${info.model}\n\nProveedores: ${VALID_PROVIDERS.join(", ")}`,
 			);
 			return;
 		}
 
-		// Check alias first
-		const alias = MODEL_ALIASES[args.toLowerCase()];
-		if (alias) {
-			try {
-				const provider = switchChatProvider(alias.provider, alias.model);
-				await ctx.reply(
-					`Cambiado a proveedor: ${provider.name}\nModelo: ${provider.model}`,
-				);
-			} catch (error) {
-				await ctx.reply(`Error cambiando modelo: ${error}`);
-			}
-			return;
-		}
-
-		// Full syntax: /model <provider> <model>
-		const parts = args.split(/\s+/);
-		const providerName = parts[0].toLowerCase();
-		const model = parts.slice(1).join(" ");
-
-		if (
-			(providerName !== "gemini" &&
-				providerName !== "openrouter" &&
-				providerName !== "anthropic") ||
-			!model
-		) {
-			const aliases = Object.entries(MODEL_ALIASES)
-				.map(([k, v]) => `  ${k} → ${v.provider}/${v.model}`)
-				.join("\n");
+		if (!VALID_PROVIDERS.includes(args as (typeof VALID_PROVIDERS)[number])) {
 			await ctx.reply(
-				`Uso:\n/model — ver modelo actual\n/model <alias>\n/model <provider> <modelo>\n\nAliases:\n${aliases}`,
+				`Uso:\n/provider — ver proveedor actual\n/provider <proveedor>\n\nProveedores: ${VALID_PROVIDERS.join(", ")}`,
 			);
 			return;
 		}
 
 		try {
-			const provider = switchChatProvider(providerName, model);
+			const provider = switchChatProvider(args);
 			await ctx.reply(
 				`Cambiado a proveedor: ${provider.name}\nModelo: ${provider.model}`,
 			);
 		} catch (error) {
-			await ctx.reply(`Error cambiando modelo: ${error}`);
+			await ctx.reply(`Error cambiando proveedor: ${error}`);
 		}
 	});
 

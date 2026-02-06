@@ -91,6 +91,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `BOT_TOKEN` (required): Telegram bot token
 - `CHAT_PROVIDER`: `gemini` (default), `openrouter`, or `anthropic`
 - `GOOGLE_API_KEY`: Required for Gemini provider and all media processing (transcription, image gen, etc.)
+- `GEMINI_MODEL`: Gemini chat model (default: `gemini-3-flash-preview`)
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic
 - `ALLOWED_GROUP_ID` / `OWNER_USER_ID`: Access control

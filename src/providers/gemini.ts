@@ -39,7 +39,7 @@ export class GeminiChatProvider implements ChatProvider {
 			);
 		}
 		this.ai = new GoogleGenAI({ apiKey });
-		this.model = model ?? DEFAULT_MODEL;
+		this.model = model ?? process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
 	}
 
 	async generateResponse(
