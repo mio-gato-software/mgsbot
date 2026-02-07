@@ -86,32 +86,54 @@ function getTodayDateRD(): string {
 const IMAGE_EARLIEST_HOUR = 8;
 const IMAGE_LATEST_HOUR = 23;
 
-function generateRandomTargetTime(): string {
+function getWeekStartRD(): string {
+	const rdDate = getTodayDateRD();
+	const [year, month, day] = rdDate.split("-").map(Number);
+	const date = new Date(year, month - 1, day);
+	const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ...6=Sat
+	const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+	date.setDate(date.getDate() + mondayOffset);
+	const y = date.getFullYear();
+	const m = String(date.getMonth() + 1).padStart(2, "0");
+	const d = String(date.getDate()).padStart(2, "0");
+	return `${y}-${m}-${d}`;
+}
+
+function generateRandomWeeklyTargetTime(): string {
+	const rdDate = getTodayDateRD();
+	const [year, month, day] = rdDate.split("-").map(Number);
+	const today = new Date(year, month - 1, day);
+	const todayDayOfWeek = today.getDay();
+
+	// Days remaining in the week (Mon–Sun): Sun=0 left, Mon=6, Tue=5, ...Sat=1
+	const daysLeftInWeek = todayDayOfWeek === 0 ? 0 : 7 - todayDayOfWeek;
+
+	// Pick a random day from today through end of week
+	const randomDayOffset = Math.floor(Math.random() * (daysLeftInWeek + 1));
+	const targetDate = new Date(year, month - 1, day + randomDayOffset);
+
 	const randomHour =
 		IMAGE_EARLIEST_HOUR +
 		Math.floor(Math.random() * (IMAGE_LATEST_HOUR - IMAGE_EARLIEST_HOUR + 1));
 	const randomMinute = Math.floor(Math.random() * 60);
+	targetDate.setHours(randomHour, randomMinute, 0, 0);
 
-	const rdDate = getTodayDateRD();
-	const [year, month, day] = rdDate.split("-").map(Number);
-
-	const target = new Date(year, month - 1, day, randomHour, randomMinute, 0, 0);
-	return target.toISOString();
+	return targetDate.toISOString();
 }
 
 function shouldGenerateImageNow(shortTerm: ShortTermMemory): boolean {
-	const todayRD = getTodayDateRD();
+	const currentWeek = getWeekStartRD();
 
-	// Already generated today
-	if (shortTerm.lastImageDate === todayRD) return false;
+	// Already generated this week
+	if (shortTerm.lastImageDate === currentWeek) return false;
 
-	// New day or missing target - generate random target time
-	if (shortTerm.imageTargetDate !== todayRD || !shortTerm.imageTargetTime) {
-		shortTerm.imageTargetTime = generateRandomTargetTime();
-		shortTerm.imageTargetDate = todayRD;
+	// New week or missing target — pick a random day+time this week
+	if (shortTerm.imageTargetDate !== currentWeek || !shortTerm.imageTargetTime) {
+		shortTerm.imageTargetTime = generateRandomWeeklyTargetTime();
+		shortTerm.imageTargetDate = currentWeek;
 		if (isDev) {
 			console.log(
-				"[image] New target time generated:",
+				"[image] New weekly target generated:",
 				shortTerm.imageTargetTime,
 			);
 		}
@@ -234,7 +256,7 @@ async function processConversation(
 				});
 				imageSent = true;
 
-				shortTerm.lastImageDate = getTodayDateRD();
+				shortTerm.lastImageDate = getWeekStartRD();
 				await saveShortTerm(shortTerm);
 			} catch (error) {
 				console.error("[image] Error generating image:", error);
