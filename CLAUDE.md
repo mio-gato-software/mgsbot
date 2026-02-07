@@ -39,11 +39,12 @@ src/
   memory.ts                  ← Read/write for all memory tiers + text similarity/dedup utilities
   prompt.ts                  ← Prompt assembly: buildSystemPrompt(), buildMessages(), activity/time context
   handlers.ts                ← grammY handlers: voice, audio, photo, text (catch-all), YouTube detection,
-                               security middleware (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
+                               /provider command, security middleware (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
+  weather.ts                 ← Gemini function-calling tool: get_current_weather (Open-Meteo API, Santo Domingo)
   providers/
     types.ts                 ← ChatProvider interface and ChatMessage type
-    index.ts                 ← Provider factory: createChatProvider() (cached singleton)
-    gemini.ts                ← Gemini provider implementation
+    index.ts                 ← Provider factory: createChatProvider(), switchChatProvider(), getChatProviderInfo()
+    gemini.ts                ← Gemini provider implementation (with weather function calling)
     openrouter.ts            ← OpenRouter provider implementation
     anthropic.ts             ← Anthropic API provider implementation
     azure.ts                 ← Azure OpenAI provider implementation
@@ -62,7 +63,11 @@ audios/                      ← Downloaded audio files and generated TTS
 
 ### Chat Provider System
 
-`generateResponse()` delegates to a pluggable chat provider selected by `CHAT_PROVIDER` env var. The provider is a cached singleton implementing the `ChatProvider` interface. Available providers: `gemini` (default), `openrouter`, `anthropic`, `azure`.
+`generateResponse()` delegates to a pluggable chat provider selected by `CHAT_PROVIDER` env var. The provider is a cached singleton implementing the `ChatProvider` interface. Available providers: `gemini` (default), `openrouter`, `anthropic`, `azure`. The provider can be switched at runtime via the `/provider` Telegram command (DM only, owner only).
+
+### Weather Function Calling
+
+The Gemini provider registers a `get_current_weather` function tool. When the model decides weather info is relevant (user asks about weather, plans outdoor activities, etc.), it triggers a function call that fetches real-time data from the Open-Meteo API (Santo Domingo). The result is fed back to the model for a natural response. This is separate from `daily-weather.ts` which provides weather context for image generation prompts.
 
 ### Memory System
 
@@ -83,7 +88,7 @@ audios/                      ← Downloaded audio files and generated TTS
 
 ### Image Generation
 
-Once daily (random time between 8am–11pm DR time), the bot includes an `[IMAGE: ...]` marker. The prompt is sent to `gemini-3-pro-image-preview` along with the base character image. The daily schedule is tracked per-chat via `lastImageDate`/`imageTargetTime` in short-term memory.
+Once weekly (random day and time between 8am–11pm DR time), the bot includes an `[IMAGE: ...]` marker. The prompt is sent to `gemini-3-pro-image-preview` along with the base character image. The weekly schedule is tracked per-chat via `lastImageDate` (week start date), `imageTargetDate` (current week), and `imageTargetTime` (ISO timestamp of the chosen moment) in short-term memory.
 
 ## Environment
 
@@ -108,5 +113,5 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - **AI:** Google GenAI (`@google/genai` ^1) — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen)
 - **Language:** TypeScript (strict mode, ESNext target, bundler module resolution)
 - **Source code language:** English (variables, functions, comments, file names)
-- **Linter/Formatter:** Biome (`@biomejs/biome` ^2.3.13)
+- **Linter/Formatter:** Biome (`@biomejs/biome` 2.3.14)
 - **Bot conversational language:** Adapts to user (default Spanish, configured in `memory/permanent.md`)
