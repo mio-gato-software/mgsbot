@@ -146,7 +146,7 @@ function shouldGenerateImageNow(shortTerm: ShortTermMemory): boolean {
 }
 
 const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
-const REACTION_MARKER_REGEX = /^\[REACT:([^\]]+)\]$/;
+const REACTION_MARKER_REGEX = /\[REACT:\s*([^\]]+)\]/;
 const SILENCE_MARKER = "[SILENCE]";
 
 async function processConversation(
@@ -223,7 +223,7 @@ async function processConversation(
 	}
 
 	// Check for [REACT:emoji] marker - bot wants to react with emoji instead of text
-	const reactionMatch = responseText.trim().match(REACTION_MARKER_REGEX);
+	const reactionMatch = responseText.match(REACTION_MARKER_REGEX);
 	if (reactionMatch) {
 		const emoji = reactionMatch[1].trim();
 		if (isDev) console.log("[response] Bot reacting with emoji:", emoji);
@@ -232,7 +232,9 @@ async function processConversation(
 		} catch (error) {
 			console.error("[reaction] Error reacting:", error);
 		}
-		return;
+		// Strip the marker; if no remaining text, just react
+		responseText = responseText.replace(REACTION_MARKER_REGEX, "").trim();
+		if (!responseText) return;
 	}
 
 	// Reply options
