@@ -211,6 +211,17 @@ async function processConversation(
 		return;
 	}
 
+	// Handle [SILENCE] mixed with text - send the text part, strip the marker
+	if (responseText.includes(SILENCE_MARKER)) {
+		responseText = responseText.replace(SILENCE_MARKER, "").trim();
+		if (isDev)
+			console.log(
+				"[response] Stripped [SILENCE] marker, remaining text:",
+				responseText,
+			);
+		if (!responseText) return;
+	}
+
 	// Check for [REACT:emoji] marker - bot wants to react with emoji instead of text
 	const reactionMatch = responseText.trim().match(REACTION_MARKER_REGEX);
 	if (reactionMatch) {
