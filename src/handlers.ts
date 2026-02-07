@@ -232,8 +232,11 @@ async function processConversation(
 		} catch (error) {
 			console.error("[reaction] Error reacting:", error);
 		}
-		// Strip the marker; if no remaining text, just react
-		responseText = responseText.replace(REACTION_MARKER_REGEX, "").trim();
+		// Strip the marker and any surrounding backticks; if no remaining text, just react
+		responseText = responseText
+			.replace(REACTION_MARKER_REGEX, "")
+			.replace(/`/g, "")
+			.trim();
 		if (!responseText) return;
 	}
 
