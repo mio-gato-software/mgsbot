@@ -312,7 +312,7 @@ async function triggerMemoryEvaluation(
 	messages: ConversationMessage[],
 ): Promise<void> {
 	const recentText = messages
-		.slice(-10)
+		.slice(-8)
 		.map(
 			(m) => `${m.role === "user" ? (m.name ?? "User") : "Bot"}: ${m.content}`,
 		)

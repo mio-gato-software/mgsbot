@@ -14,8 +14,8 @@ const LONG_TERM_PATH = "./memory/long-term.json";
 const SHORT_TERM_DIR = "./memory/short-term";
 const MEMBER_MEMORY_PATH = "./memory/members.json";
 
-const SUMMARIZE_THRESHOLD = 30;
-const SUMMARIZE_COUNT = 15;
+const SUMMARIZE_THRESHOLD = 20;
+const SUMMARIZE_COUNT = 10;
 const MAX_LONG_TERM_ENTRIES = 50;
 const INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const SIMILARITY_THRESHOLD = 0.6; // 60% similarity = duplicate
@@ -191,7 +191,7 @@ export async function addLongTermMemories(
 export function getRelevantMemories(
 	entries: LongTermMemoryEntry[],
 	currentContext?: string,
-	maxCount = 12,
+	maxCount = 8,
 ): LongTermMemoryEntry[] {
 	if (entries.length === 0) return [];
 
@@ -302,7 +302,7 @@ export async function addMessageToShortTerm(
 			: "";
 
 		const summary = await generateResponse(
-			"You are a summarizer. Create a concise summary of the conversation, preserving key facts, decisions, and context. Keep it under 200 words.",
+			"You are a summarizer. Create a concise summary of the conversation, preserving key facts, decisions, and context. Keep it under 150 words.",
 			[
 				{
 					role: "user",

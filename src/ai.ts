@@ -248,7 +248,7 @@ export async function evaluateMemory(
 	let contextSection = "";
 	if (existingContext) {
 		const memSummary = existingContext.memories
-			.slice(0, 10)
+			.slice(0, 7)
 			.map((m) => `- ${m.content} (imp: ${m.importance})`)
 			.join("\n");
 
@@ -270,16 +270,13 @@ IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba. Si l
 		}
 	}
 
-	const prompt = `Analiza el siguiente extracto de conversación. Haz dos cosas:
-
-1. **Memorias generales**: información compartida que vale la pena recordar a largo plazo (hechos, preferencias, eventos importantes, decisiones, etc.).
-2. **Hechos por miembro**: datos personales sobre personas específicas mencionadas en la conversación (eventos de vida, trabajo, preferencias, logros, relaciones, etc.). Usa un key corto en español para cada hecho (ej: "estado-civil", "empleo", "telefono", "hobby", "mascota"). Si un hecho actualiza algo previo, usa el mismo key para reemplazarlo. Identifica a los miembros por sus nombres tal como aparecen en la conversación.
+	const prompt = `Extrae de esta conversación:
+1. **Memorias**: hechos, preferencias, eventos o decisiones importantes para recordar.
+2. **Hechos por miembro**: datos personales (trabajo, hobby, relación, etc.). Key corto en español (ej: "empleo", "hobby", "mascota"). Mismo key para actualizar info previa.
 ${contextSection}
-Responde SOLO con JSON válido en este formato exacto:
-{"save": boolean, "memories": [{"content": "qué recordar", "context": "por qué importa", "importance": N}], "memberFacts": [{"member": "Nombre", "key": "tema", "content": "el hecho completo"}]}
-
-Donde importance es 1-5 (1=trivial, 5=crítico).
-Si no hay nada que recordar: {"save": false, "memories": [], "memberFacts": []}
+Responde SOLO JSON:
+{"save": boolean, "memories": [{"content": "qué", "context": "por qué", "importance": 1-5}], "memberFacts": [{"member": "Nombre", "key": "tema", "content": "hecho"}]}
+Si no hay nada: {"save": false, "memories": [], "memberFacts": []}
 
 Conversación:
 ${recentMessages}`;
