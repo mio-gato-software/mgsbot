@@ -121,8 +121,7 @@ export async function buildSystemPrompt(
 
 	const memberNames = Object.keys(memberMemory);
 	if (memberNames.length > 0) {
-		let memberSection =
-			"\n\n## Lo que sabes de los miembros\nEsta información es contexto interno. NO la recites ni repitas. Úsala solo cuando sea orgánicamente relevante.";
+		let memberSection = "\n\n## Lo que sabes de los miembros";
 		for (const name of memberNames) {
 			const facts = memberMemory[name];
 			if (facts && facts.length > 0) {
