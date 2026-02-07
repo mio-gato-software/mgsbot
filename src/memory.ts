@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { generateResponse } from "./ai.ts";
+import { summarizeConversation } from "./ai.ts";
 import type {
 	ConversationMessage,
 	LongTermMemoryEntry,
@@ -297,18 +297,9 @@ export async function addMessageToShortTerm(
 			)
 			.join("\n");
 
-		const existingSummary = memory.previousSummary
-			? `Previous context: ${memory.previousSummary}\n\n`
-			: "";
-
-		const summary = await generateResponse(
-			"You are a summarizer. Create a concise summary of the conversation, preserving key facts, decisions, and context. Keep it under 150 words.",
-			[
-				{
-					role: "user",
-					content: `${existingSummary}Conversation to summarize:\n${conversationText}`,
-				},
-			],
+		const summary = await summarizeConversation(
+			conversationText,
+			memory.previousSummary || undefined,
 		);
 
 		memory.previousSummary = summary;

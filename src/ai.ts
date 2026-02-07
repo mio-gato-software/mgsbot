@@ -240,6 +240,25 @@ interface ExistingMemoryContext {
 	memberFacts: Record<string, string[]>; // member -> list of keys
 }
 
+export async function summarizeConversation(
+	conversationText: string,
+	existingSummary?: string,
+): Promise<string> {
+	const context = existingSummary
+		? `Previous context: ${existingSummary}\n\n`
+		: "";
+
+	const prompt = `You are a summarizer. Create a concise summary of the conversation, preserving key facts, decisions, and context. Keep it under 150 words.\n\n${context}Conversation to summarize:\n${conversationText}`;
+
+	const response = await ai.models.generateContent({
+		model: MODEL,
+		contents: createUserContent([prompt]),
+	});
+
+	logTokenUsage("summarize", response);
+	return response.text ?? "";
+}
+
 export async function evaluateMemory(
 	recentMessages: string,
 	existingContext?: ExistingMemoryContext,
