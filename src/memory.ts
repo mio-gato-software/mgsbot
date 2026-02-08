@@ -21,6 +21,7 @@ const MAX_LONG_TERM_ENTRIES = 50;
 const INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const SIMILARITY_THRESHOLD = 0.6; // 60% similarity = duplicate
 const MAX_FACTS_PER_MEMBER = 20;
+const FACT_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // --- Text Similarity Utilities ---
 
@@ -310,6 +311,27 @@ export async function addMessageToShortTerm(
 	await saveShortTerm(memory);
 }
 
+// --- Member Fact Expiry ---
+
+function pruneExpiredFacts(data: MemberMemory): boolean {
+	const now = Date.now();
+	let pruned = false;
+
+	for (const memberKey of Object.keys(data)) {
+		const before = data[memberKey].length;
+		data[memberKey] = data[memberKey].filter(
+			(f) => f.updatedAt && now - f.updatedAt <= FACT_EXPIRY_MS,
+		);
+		if (data[memberKey].length !== before) pruned = true;
+
+		if (data[memberKey].length === 0) {
+			delete data[memberKey];
+		}
+	}
+
+	return pruned;
+}
+
 // --- Member Memory ---
 
 export function normalizeName(name: string): string {
@@ -416,6 +438,7 @@ export async function addMemberFacts(
 		}
 	}
 
+	pruneExpiredFacts(data);
 	await saveMemberMemory(data);
 }
 
@@ -431,6 +454,7 @@ export interface OptimizeResult {
 
 export async function optimizeAllMemberFacts(): Promise<OptimizeResult> {
 	const data = await loadMemberMemory();
+	pruneExpiredFacts(data);
 	const targetSize = Math.ceil(CONSOLIDATION_THRESHOLD / 2);
 	let totalBefore = 0;
 	let totalAfter = 0;
