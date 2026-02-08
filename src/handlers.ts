@@ -189,12 +189,18 @@ async function processConversation(
 		}
 
 		shouldGenImage = shouldGenerateImageNow(shortTerm);
+		const activeNames = [
+			...new Set(
+				shortTerm.messages.map((m) => m.name).filter((n): n is string => !!n),
+			),
+		];
 		systemPrompt = await buildSystemPrompt(
 			relevantMemories,
 			shortTerm.previousSummary,
 			memberMemory,
 			shouldGenImage,
 			isGroupChat(ctx) ? mentionType : undefined,
+			activeNames,
 		);
 	}
 	const messages = buildMessages(shortTerm);

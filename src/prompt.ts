@@ -2,7 +2,7 @@ import type { Content } from "@google/genai";
 import { getDailyWeatherForImage } from "./daily-weather.ts";
 import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
-import { loadPermanent } from "./memory.ts";
+import { loadPermanent, normalizeName } from "./memory.ts";
 import type { ChatMessage } from "./providers/types.ts";
 import type {
 	LongTermMemoryEntry,
@@ -97,6 +97,7 @@ export async function buildSystemPrompt(
 	memberMemory: MemberMemory,
 	shouldGenerateImage = false,
 	mentionType?: MentionType,
+	activeNames?: string[],
 ): Promise<string> {
 	// Simple assistant mode: return minimal prompt
 	if (isSimpleAssistantMode) {
@@ -119,19 +120,30 @@ export async function buildSystemPrompt(
 		systemPrompt += `\n\n## Long-term memories\nThings you remember from past interactions:\n${memoriesText}`;
 	}
 
-	const memberNames = Object.keys(memberMemory);
-	if (memberNames.length > 0) {
-		let memberSection = "\n\n## Lo que sabes de los miembros";
-		for (const name of memberNames) {
-			const facts = memberMemory[name];
-			if (facts && facts.length > 0) {
-				memberSection += `\n### ${name}`;
-				for (const fact of facts) {
-					memberSection += `\n  - ${fact.content}`;
+	const memberEntries = Object.entries(memberMemory);
+	if (memberEntries.length > 0) {
+		// Filter to only active participants if provided
+		const filteredMembers = activeNames?.length
+			? (() => {
+					const activeNormalized = new Set(activeNames.map(normalizeName));
+					return memberEntries.filter(([name]) =>
+						activeNormalized.has(normalizeName(name)),
+					);
+				})()
+			: memberEntries;
+
+		if (filteredMembers.length > 0) {
+			let memberSection = "\n\n## Lo que sabes de los miembros";
+			for (const [name, facts] of filteredMembers) {
+				if (facts && facts.length > 0) {
+					memberSection += `\n### ${name}`;
+					for (const fact of facts) {
+						memberSection += `\n  - ${fact.content}`;
+					}
 				}
 			}
+			systemPrompt += memberSection;
 		}
-		systemPrompt += memberSection;
 	}
 
 	if (previousSummary) {

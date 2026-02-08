@@ -310,7 +310,7 @@ export async function addMessageToShortTerm(
 
 // --- Member Memory ---
 
-function normalizeName(name: string): string {
+export function normalizeName(name: string): string {
 	return name
 		.toLowerCase()
 		.normalize("NFD")
