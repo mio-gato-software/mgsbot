@@ -36,6 +36,8 @@ const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
 const OWNER_USER_ID = Number(process.env.OWNER_USER_ID);
 const isDev = process.env.NODE_ENV === "development";
 
+let botOff = false;
+
 function getUserDisplayName(ctx: Context): string {
 	const user = ctx.from;
 	if (!user) return "Unknown";
@@ -161,6 +163,15 @@ async function processConversation(
 ): Promise<void> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
+
+	if (botOff) {
+		try {
+			await ctx.react("😴");
+		} catch (error) {
+			if (isDev) console.error("[off] Error reacting:", error);
+		}
+		return;
+	}
 
 	// Load short-term memory (always needed for conversation history)
 	const shortTerm = await loadShortTerm(chatId);
@@ -679,6 +690,20 @@ export function registerHandlers(bot: Bot): void {
 		} catch (error) {
 			await ctx.reply(`Error cambiando proveedor: ${error}`);
 		}
+	});
+
+	// /off command — disable bot responses (DM only, owner only)
+	bot.command("off", async (ctx) => {
+		if (isGroupChat(ctx)) return;
+		botOff = true;
+		await ctx.reply("😴 Bot apagado. Responderé con 😴 hasta que uses /on.");
+	});
+
+	// /on command — re-enable bot responses (DM only, owner only)
+	bot.command("on", async (ctx) => {
+		if (isGroupChat(ctx)) return;
+		botOff = false;
+		await ctx.reply("✅ Bot encendido. Respondiendo normalmente.");
 	});
 
 	// /optimize command — consolidate member facts (DM only, owner only)

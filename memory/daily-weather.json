@@ -1,9 +1,9 @@
 {
-  "date": "2026-02-07",
-  "period": "night",
-  "description": "Parcialmente nublado",
-  "temperature": 21.3,
-  "humidity": 84,
-  "windSpeed": 7.1,
-  "fetchedAt": 1770521814743
+	"date": "2026-02-07",
+	"period": "night",
+	"description": "Parcialmente nublado",
+	"temperature": 21.3,
+	"humidity": 84,
+	"windSpeed": 7.1,
+	"fetchedAt": 1770521814743
 }
