@@ -6,11 +6,7 @@ import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
 import type { ChatMessage } from "./providers/types.ts";
-import type {
-	LongTermMemoryEntry,
-	MemberMemory,
-	ShortTermMemory,
-} from "./types.ts";
+import type { Episode, SemanticFact, SensoryBuffer } from "./types.ts";
 
 export const isSimpleAssistantMode =
 	process.env.SIMPLE_ASSISTANT_MODE === "true";
@@ -19,7 +15,6 @@ const SIMPLE_ASSISTANT_PROMPT = `You are a helpful assistant. Respond clearly an
 
 /**
  * Determine if it's a "busy" time when Brendy might decline to chat extensively
- * Returns a guidance string if busy, null if available
  * NOTE: Disabled - Brendy now always has time to chat while maintaining her routine
  */
 function getBusyGuidance(_now: Date): string | null {
@@ -93,10 +88,22 @@ function getActivityGuidance(now: Date): string {
 	return `${dayName} noche: en casa relajándote, viendo TV.`;
 }
 
+function formatTimeAgo(timestamp: number): string {
+	const now = Date.now();
+	const diffMs = now - timestamp;
+	const diffHours = diffMs / (1000 * 60 * 60);
+	const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+	if (diffHours < 1) return "hace un momento";
+	if (diffHours < 24) return `hace ${Math.round(diffHours)} horas`;
+	if (diffDays < 2) return "ayer";
+	if (diffDays < 7) return `hace ${Math.round(diffDays)} días`;
+	return `hace ${Math.round(diffDays / 7)} semanas`;
+}
+
 export async function buildSystemPrompt(
-	relevantMemories: LongTermMemoryEntry[],
-	previousSummary: string,
-	memberMemory: MemberMemory,
+	relevantEpisodes: Episode[],
+	relevantFacts: SemanticFact[],
 	shouldGenerateImage = false,
 	mentionType?: MentionType,
 	activeNames?: string[],
@@ -115,44 +122,58 @@ export async function buildSystemPrompt(
 	});
 	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (hora de República Dominicana)`;
 
-	if (relevantMemories.length > 0) {
-		const memoriesText = relevantMemories
-			.map((m) => `- ${m.content} (context: ${m.context})`)
+	// Episodes (recent conversation memories)
+	if (relevantEpisodes.length > 0) {
+		const episodesText = relevantEpisodes
+			.map((e) => `- [${formatTimeAgo(e.timestamp)}] ${e.summary}`)
 			.join("\n");
-		systemPrompt += `\n\n## Long-term memories\nThings you remember from past interactions:\n${memoriesText}`;
+		systemPrompt += `\n\n## Recuerdos recientes\nEpisodios de conversaciones pasadas:\n${episodesText}`;
 	}
 
-	const memberEntries = Object.entries(memberMemory);
-	if (memberEntries.length > 0) {
-		// Filter to only active participants if provided
-		const filteredMembers = activeNames?.length
+	// Separate person facts from general facts
+	const personFacts = relevantFacts.filter((f) => f.category === "person");
+	const generalFacts = relevantFacts.filter((f) => f.category !== "person");
+
+	// Person facts grouped by subject
+	if (personFacts.length > 0) {
+		// Filter to active participants if specified
+		const filteredPersonFacts = activeNames?.length
 			? (() => {
 					const activeNormalized = new Set(activeNames.map(normalizeName));
-					return memberEntries.filter(([name]) =>
-						activeNormalized.has(normalizeName(name)),
+					return personFacts.filter(
+						(f) => f.subject && activeNormalized.has(normalizeName(f.subject)),
 					);
 				})()
-			: memberEntries;
+			: personFacts;
 
-		if (filteredMembers.length > 0) {
+		if (filteredPersonFacts.length > 0) {
+			// Group by subject
+			const grouped = new Map<string, SemanticFact[]>();
+			for (const fact of filteredPersonFacts) {
+				const key = fact.subject ?? "Desconocido";
+				const existing = grouped.get(key) ?? [];
+				existing.push(fact);
+				grouped.set(key, existing);
+			}
+
 			let memberSection = "\n\n## Lo que sabes de los miembros";
-			for (const [name, facts] of filteredMembers) {
-				if (facts && facts.length > 0) {
-					memberSection += `\n### ${name}`;
-					for (const fact of facts) {
-						memberSection += `\n  - ${fact.content}`;
-					}
+			for (const [name, facts] of grouped) {
+				memberSection += `\n### ${name}`;
+				for (const fact of facts) {
+					memberSection += `\n  - ${fact.content}`;
 				}
 			}
 			systemPrompt += memberSection;
 		}
 	}
 
-	if (previousSummary) {
-		systemPrompt += `\n\n## Previous conversation context\n${previousSummary}`;
+	// General facts (group, rule, event)
+	if (generalFacts.length > 0) {
+		const generalText = generalFacts.map((f) => `- ${f.content}`).join("\n");
+		systemPrompt += `\n\n## Hechos generales\n${generalText}`;
 	}
 
-	// Always add activity context so bot knows what she's "doing"
+	// Activity context
 	const nowDR = new Date(
 		new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
 	);
@@ -201,10 +222,10 @@ El usuario mencionó tu nombre en el mensaje. Evalúa si te está hablando DIREC
 	return systemPrompt;
 }
 
-export function buildMessages(memory: ShortTermMemory): ChatMessage[] {
+export function buildMessages(buffer: SensoryBuffer): ChatMessage[] {
 	const messages: ChatMessage[] = [];
 
-	for (const msg of memory.messages) {
+	for (const msg of buffer.messages) {
 		const role = msg.role === "user" ? "user" : "assistant";
 		const content =
 			msg.role === "user" && msg.name

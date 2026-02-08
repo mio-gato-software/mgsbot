@@ -5,48 +5,54 @@ export interface ConversationMessage {
 	timestamp: number;
 }
 
-export interface ShortTermMemory {
+// --- New Memory Architecture ---
+
+export interface SensoryBuffer {
 	chatId: number;
-	messages: ConversationMessage[];
-	previousSummary: string;
+	messages: ConversationMessage[]; // max 10, FIFO
 	lastActivity: number;
-	messageCountSinceEval: number;
+	messageCountSincePromotion: number;
+	// Image scheduling (migrated from old ShortTermMemory)
 	lastImageDate?: string;
 	imageTargetTime?: string;
 	imageTargetDate?: string;
 }
 
-export interface LongTermMemoryEntry {
+export interface Episode {
 	id: string;
-	content: string;
-	context: string;
-	createdAt: number;
-	lastAccessed: number;
-	importance: number;
+	summary: string; // 1-2 sentences
+	participants: string[];
+	timestamp: number;
+	importance: number; // 1-5
+	embedding: number[]; // 768-dim vector
 }
 
-export interface MemoryEvaluation {
-	save: boolean;
-	memories: Array<{
+export interface WorkingMemory {
+	chatId: number;
+	episodes: Episode[]; // max 20
+}
+
+export interface SemanticFact {
+	id: string;
+	content: string; // atomic fact
+	category: "person" | "group" | "rule" | "event";
+	subject?: string; // person name (if category="person")
+	context?: string; // why it matters
+	embedding: number[]; // 768-dim vector
+	importance: number; // 1-5
+	confidence: number; // 0-1, decays if not reconfirmed
+	createdAt: number;
+	lastConfirmed: number;
+}
+
+export interface PromotionResult {
+	summary: string; // episode summary
+	importance: number; // 1-5
+	facts: Array<{
 		content: string;
-		context: string;
+		category: "person" | "group" | "rule" | "event";
+		subject?: string;
+		context?: string;
 		importance: number;
 	}>;
-	memberFacts: MemberFactExtraction[];
-}
-
-export interface MemberFact {
-	key: string;
-	content: string;
-	updatedAt: number;
-}
-
-export interface MemberMemory {
-	[memberName: string]: MemberFact[];
-}
-
-export interface MemberFactExtraction {
-	member: string;
-	key: string;
-	content: string;
 }
