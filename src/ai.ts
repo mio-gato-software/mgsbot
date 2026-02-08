@@ -301,8 +301,8 @@ IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba. Si l
 		"Eres un asistente que extrae información importante de conversaciones. Responde SOLO con JSON válido, sin texto adicional.";
 
 	const userMessage = `Extrae de esta conversación:
-1. **Memorias**: hechos, preferencias, eventos o decisiones importantes para recordar.
-2. **Hechos por miembro**: datos personales (trabajo, hobby, relación, etc.). Key corto en español (ej: "empleo", "hobby", "mascota"). Mismo key para actualizar info previa.
+1. **Memorias**: SOLO información general que NO sea sobre un miembro específico. Ejemplos: eventos grupales, reglas de interacción, dinámicas de la relación, fechas importantes compartidas. NUNCA incluyas aquí datos personales de alguien (trabajo, familia, horario, ubicación, preferencias individuales) — esos van SOLO en memberFacts.
+2. **Hechos por miembro**: datos personales de miembros específicos (trabajo, hobby, relación, familia, horario, ubicación, preferencias). Key corto en español (ej: "empleo", "hobby", "mascota"). Mismo key para actualizar info previa.
 ${contextSection}
 Responde SOLO JSON:
 {"save": boolean, "memories": [{"content": "qué", "context": "por qué", "importance": 1-5}], "memberFacts": [{"member": "Nombre", "key": "tema", "content": "hecho"}]}
@@ -372,4 +372,58 @@ function fallbackPrune(facts: MemberFact[], maxFacts: number): MemberFact[] {
 	return [...facts]
 		.sort((a, b) => b.updatedAt - a.updatedAt)
 		.slice(0, maxFacts);
+}
+
+export async function consolidateLongTermMemories(
+	entries: Array<{ content: string; context: string; importance: number }>,
+	targetCount: number,
+	memberFacts?: Record<string, string[]>,
+): Promise<Array<{ content: string; context: string; importance: number }>> {
+	const entriesText = entries
+		.map((e) => `- [imp:${e.importance}] ${e.content} (${e.context})`)
+		.join("\n");
+
+	let memberFactsSection = "";
+	if (memberFacts && Object.keys(memberFacts).length > 0) {
+		const factsText = Object.entries(memberFacts)
+			.map(([member, facts]) => `- ${member}: ${facts.join(", ")}`)
+			.join("\n");
+		memberFactsSection = `\nDATOS YA GUARDADOS POR MIEMBRO (ELIMINAR de memorias si aparecen aquí):
+${factsText}\n`;
+	}
+
+	const systemPrompt =
+		"Eres un asistente que consolida memorias. Responde SOLO con un JSON array, sin texto adicional.";
+
+	const userMessage = `Consolida estas ${entries.length} memorias en máximo ${targetCount}. Reglas:
+- Combina duplicados y paráfrasis en una sola entrada más completa
+- Elimina trivialidades (clima pasado, actividades momentáneas, saludos)
+- Preserva: eventos con fecha, reglas de interacción, dinámicas grupales, decisiones importantes
+- ELIMINA cualquier memoria que sea un dato personal de un miembro (trabajo, familia, horario, ubicación, preferencias individuales) — esos ya están en member facts
+- Mantén la importancia más alta cuando combines entradas
+${memberFactsSection}
+Memorias actuales:
+${entriesText}
+
+Responde SOLO JSON array:
+[{"content": "qué", "context": "por qué", "importance": 1-5}]`;
+
+	const text = await generateResponse(systemPrompt, [
+		{ role: "user", content: userMessage },
+	]);
+
+	try {
+		const jsonMatch = text.match(/\[[\s\S]*\]/);
+		if (!jsonMatch) return entries.slice(0, targetCount);
+		const parsed = JSON.parse(jsonMatch[0]) as Array<{
+			content: string;
+			context: string;
+			importance: number;
+		}>;
+		if (!Array.isArray(parsed) || parsed.length === 0)
+			return entries.slice(0, targetCount);
+		return parsed;
+	} catch {
+		return entries.slice(0, targetCount);
+	}
 }

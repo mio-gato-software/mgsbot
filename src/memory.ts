@@ -1,6 +1,10 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { consolidateMemberFacts, summarizeConversation } from "./ai.ts";
+import {
+	consolidateLongTermMemories,
+	consolidateMemberFacts,
+	summarizeConversation,
+} from "./ai.ts";
 import type {
 	ConversationMessage,
 	LongTermMemoryEntry,
@@ -19,8 +23,10 @@ const SUMMARIZE_THRESHOLD = 20;
 const SUMMARIZE_COUNT = 10;
 const MAX_LONG_TERM_ENTRIES = 50;
 const INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
-const SIMILARITY_THRESHOLD = 0.6; // 60% similarity = duplicate
+const SIMILARITY_THRESHOLD = 0.45; // 45% similarity = duplicate (catches paraphrases)
 const MAX_FACTS_PER_MEMBER = 20;
+const LT_CONSOLIDATION_THRESHOLD = 35;
+const LT_CONSOLIDATION_TARGET = 20;
 const FACT_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // --- Text Similarity Utilities ---
@@ -177,8 +183,46 @@ export async function addLongTermMemories(
 		}
 	}
 
-	// Prune if over limit
-	if (entries.length > MAX_LONG_TERM_ENTRIES) {
+	// Consolidate via AI when exceeding threshold
+	if (entries.length > LT_CONSOLIDATION_THRESHOLD) {
+		try {
+			if (isDev)
+				console.log(
+					`[long-term] Consolidating ${entries.length} entries → target ${LT_CONSOLIDATION_TARGET}`,
+				);
+			const consolidated = await consolidateLongTermMemories(
+				entries.map((e) => ({
+					content: e.content,
+					context: e.context,
+					importance: e.importance,
+				})),
+				LT_CONSOLIDATION_TARGET,
+			);
+			const now2 = Date.now();
+			entries.length = 0;
+			for (const c of consolidated) {
+				entries.push({
+					id: `mem_${now2}_${Math.random().toString(36).slice(2, 8)}`,
+					content: c.content,
+					context: c.context,
+					createdAt: now2,
+					lastAccessed: now2,
+					importance: c.importance,
+				});
+			}
+		} catch (error) {
+			console.error("[long-term] Consolidation failed:", error);
+			// Fallback: simple prune by score
+			const currentTime = Date.now();
+			entries.sort((a, b) => {
+				const recencyA = 1 / (1 + (currentTime - a.lastAccessed) / 86_400_000);
+				const recencyB = 1 / (1 + (currentTime - b.lastAccessed) / 86_400_000);
+				return b.importance * recencyB - a.importance * recencyA;
+			});
+			entries.length = MAX_LONG_TERM_ENTRIES;
+		}
+	} else if (entries.length > MAX_LONG_TERM_ENTRIES) {
+		// Simple prune if between MAX and consolidation threshold
 		const currentTime = Date.now();
 		entries.sort((a, b) => {
 			const recencyA = 1 / (1 + (currentTime - a.lastAccessed) / 86_400_000);
@@ -493,6 +537,59 @@ export async function optimizeAllMemberFacts(): Promise<OptimizeResult> {
 
 	await saveMemberMemory(data);
 	return { totalBefore, totalAfter, membersConsolidated };
+}
+
+export interface LongTermOptimizeResult {
+	totalBefore: number;
+	totalAfter: number;
+}
+
+export async function optimizeLongTermMemories(): Promise<LongTermOptimizeResult> {
+	const [entries, memberMemory] = await Promise.all([
+		loadLongTerm(),
+		loadMemberMemory(),
+	]);
+	const totalBefore = entries.length;
+
+	if (totalBefore <= LT_CONSOLIDATION_TARGET) {
+		return { totalBefore, totalAfter: totalBefore };
+	}
+
+	// Build member facts summary for cross-store dedup
+	const memberFacts: Record<string, string[]> = {};
+	for (const [member, facts] of Object.entries(memberMemory)) {
+		memberFacts[member] = facts.map((f) => `${f.key}: ${f.content}`);
+	}
+
+	try {
+		if (isDev)
+			console.log(
+				`[optimize-lt] Consolidating ${totalBefore} entries → target ${LT_CONSOLIDATION_TARGET}`,
+			);
+		const consolidated = await consolidateLongTermMemories(
+			entries.map((e) => ({
+				content: e.content,
+				context: e.context,
+				importance: e.importance,
+			})),
+			LT_CONSOLIDATION_TARGET,
+			memberFacts,
+		);
+		const now = Date.now();
+		const newEntries = consolidated.map((c) => ({
+			id: `mem_${now}_${Math.random().toString(36).slice(2, 8)}`,
+			content: c.content,
+			context: c.context,
+			createdAt: now,
+			lastAccessed: now,
+			importance: c.importance,
+		}));
+		await saveLongTerm(newEntries);
+		return { totalBefore, totalAfter: newEntries.length };
+	} catch (error) {
+		console.error("[optimize-lt] Consolidation failed:", error);
+		return { totalBefore, totalAfter: totalBefore };
+	}
 }
 
 // --- Initialization ---

@@ -20,6 +20,7 @@ import {
 	loadMemberMemory,
 	loadShortTerm,
 	optimizeAllMemberFacts,
+	optimizeLongTermMemories,
 	saveLongTerm,
 	saveShortTerm,
 } from "./memory.ts";
@@ -719,19 +720,22 @@ export function registerHandlers(bot: Bot): void {
 		await ctx.reply("✅ Bot encendido. Respondiendo normalmente.");
 	});
 
-	// /optimize command — consolidate member facts (DM only, owner only)
+	// /optimize command — consolidate member facts + long-term memories (DM only, owner only)
 	bot.command("optimize", async (ctx) => {
 		if (isGroupChat(ctx)) return;
 
-		await ctx.reply("Optimizando memoria de miembros...");
+		await ctx.reply("Optimizando memorias...");
 		try {
-			const result = await optimizeAllMemberFacts();
+			const [memberResult, ltResult] = await Promise.all([
+				optimizeAllMemberFacts(),
+				optimizeLongTermMemories(),
+			]);
 			const consolidated =
-				result.membersConsolidated.length > 0
-					? result.membersConsolidated.join(", ")
+				memberResult.membersConsolidated.length > 0
+					? memberResult.membersConsolidated.join(", ")
 					: "ninguno";
 			await ctx.reply(
-				`Optimizado:\n- Hechos antes: ${result.totalBefore}\n- Hechos ahora: ${result.totalAfter}\n- Miembros consolidados: ${consolidated}`,
+				`Optimizado:\n\nMiembros:\n- Hechos antes: ${memberResult.totalBefore}\n- Hechos ahora: ${memberResult.totalAfter}\n- Consolidados: ${consolidated}\n\nLong-term:\n- Antes: ${ltResult.totalBefore}\n- Ahora: ${ltResult.totalAfter}`,
 			);
 		} catch (error) {
 			await ctx.reply(`Error optimizando: ${error}`);
