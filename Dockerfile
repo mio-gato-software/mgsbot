@@ -15,9 +15,8 @@ COPY src/ ./src/
 COPY memory/permanent.md ./memory/permanent.md
 
 # Create writable directories and empty runtime data files
-RUN mkdir -p memory/short-term audios \
-    && echo '{}' > memory/members.json \
-    && echo '[]' > memory/long-term.json
+RUN mkdir -p memory/sensory memory/episodes audios \
+    && echo '[]' > memory/semantic.json
 
 ENV NODE_ENV=production
 

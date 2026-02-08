@@ -2,8 +2,13 @@ node_modules
 .env
 .env.*
 audios/
+memory/semantic.json
+memory/sensory/
+memory/episodes/
 memory/short-term/
 memory/long-term.json
+memory/members.json
+memory/*.backup.json
 .git
 .gitignore
 .idea
