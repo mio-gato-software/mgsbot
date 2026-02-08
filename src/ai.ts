@@ -7,7 +7,7 @@ import {
 	type Part,
 } from "@google/genai";
 import { type ChatMessage, createChatProvider } from "./providers/index.ts";
-import type { MemoryEvaluation } from "./types.ts";
+import type { MemberFact, MemoryEvaluation } from "./types.ts";
 
 const ai = new GoogleGenAI({});
 const MODEL = "gemini-3-flash-preview";
@@ -318,4 +318,51 @@ ${recentMessages}`;
 	} catch {
 		return { save: false, memories: [], memberFacts: [] };
 	}
+}
+
+export async function consolidateMemberFacts(
+	memberName: string,
+	facts: MemberFact[],
+	maxFacts: number,
+): Promise<MemberFact[]> {
+	const factsText = facts.map((f) => `- ${f.key}: ${f.content}`).join("\n");
+
+	const systemPrompt = `Eres un asistente que consolida datos sobre personas. Responde SOLO con un JSON array, sin texto adicional.`;
+
+	const userMessage = `Consolida estos datos sobre "${memberName}" en máximo ${maxFacts} hechos. Combina información relacionada en un solo hecho más completo (ej: gustos de comida en uno, datos laborales en uno). Mantén lo más importante y reciente. Usa keys cortos en español.
+
+Datos actuales:
+${factsText}
+
+Responde SOLO JSON array:
+[{"key": "tema-corto", "content": "hecho consolidado"}]`;
+
+	const text = await generateResponse(systemPrompt, [
+		{ role: "user", content: userMessage },
+	]);
+
+	try {
+		const jsonMatch = text.match(/\[[\s\S]*\]/);
+		if (!jsonMatch) return fallbackPrune(facts, maxFacts);
+		const parsed = JSON.parse(jsonMatch[0]) as Array<{
+			key: string;
+			content: string;
+		}>;
+		if (!Array.isArray(parsed) || parsed.length === 0)
+			return fallbackPrune(facts, maxFacts);
+		const now = Date.now();
+		return parsed.map((f) => ({
+			key: f.key,
+			content: f.content,
+			updatedAt: now,
+		}));
+	} catch {
+		return fallbackPrune(facts, maxFacts);
+	}
+}
+
+function fallbackPrune(facts: MemberFact[], maxFacts: number): MemberFact[] {
+	return [...facts]
+		.sort((a, b) => b.updatedAt - a.updatedAt)
+		.slice(0, maxFacts);
 }

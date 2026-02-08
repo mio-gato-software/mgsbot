@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { summarizeConversation } from "./ai.ts";
+import { consolidateMemberFacts, summarizeConversation } from "./ai.ts";
 import type {
 	ConversationMessage,
 	LongTermMemoryEntry,
@@ -9,6 +9,7 @@ import type {
 	ShortTermMemory,
 } from "./types.ts";
 
+const isDev = process.env.NODE_ENV === "development";
 const PERMANENT_PATH = "./memory/permanent.md";
 const LONG_TERM_PATH = "./memory/long-term.json";
 const SHORT_TERM_DIR = "./memory/short-term";
@@ -19,6 +20,7 @@ const SUMMARIZE_COUNT = 10;
 const MAX_LONG_TERM_ENTRIES = 50;
 const INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const SIMILARITY_THRESHOLD = 0.6; // 60% similarity = duplicate
+const MAX_FACTS_PER_MEMBER = 20;
 
 // --- Text Similarity Utilities ---
 
@@ -372,6 +374,45 @@ export async function addMemberFacts(
 			data[memberKey][existingIndex] = newFact;
 		} else {
 			data[memberKey].push(newFact);
+		}
+	}
+
+	// Consolidate facts for members that exceed the limit
+	const modifiedMembers = new Set(facts.map((f) => f.member));
+	for (const memberName of modifiedMembers) {
+		// Find the actual key used in data (may differ in casing/accents)
+		const normalizedNew = normalizeName(memberName);
+		const memberKey = Object.keys(data).find(
+			(k) => normalizeName(k) === normalizedNew,
+		);
+		const memberFacts = memberKey ? data[memberKey] : undefined;
+		if (
+			!memberKey ||
+			!memberFacts ||
+			memberFacts.length <= MAX_FACTS_PER_MEMBER
+		)
+			continue;
+
+		try {
+			const targetSize = Math.ceil(MAX_FACTS_PER_MEMBER / 2);
+			if (isDev)
+				console.log(
+					`[member-facts] Consolidating ${memberFacts.length} facts for "${memberKey}" → target ${targetSize}`,
+				);
+			data[memberKey] = await consolidateMemberFacts(
+				memberKey,
+				memberFacts,
+				targetSize,
+			);
+		} catch (error) {
+			console.error(
+				`[member-facts] Consolidation failed for "${memberKey}":`,
+				error,
+			);
+			// Fallback: keep most recent facts
+			data[memberKey] = memberFacts
+				.sort((a, b) => b.updatedAt - a.updatedAt)
+				.slice(0, MAX_FACTS_PER_MEMBER);
 		}
 	}
 
