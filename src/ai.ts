@@ -7,7 +7,7 @@ import {
 	type Part,
 } from "@google/genai";
 import { type ChatMessage, createChatProvider } from "./providers/index.ts";
-import type { MemberFact, MemoryEvaluation } from "./types.ts";
+import type { PromotionResult } from "./types.ts";
 
 const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
 const ai = new GoogleGenAI({});
@@ -245,17 +245,12 @@ export async function generateImage(
 	throw new Error("No image data in response");
 }
 
-interface ExistingMemoryContext {
-	memories: Array<{ content: string; importance: number }>;
-	memberFacts: Record<string, string[]>; // member -> list of keys
-}
-
 export async function summarizeConversation(
 	conversationText: string,
-	existingSummary?: string,
+	existingEpisodes?: string[],
 ): Promise<string> {
-	const context = existingSummary
-		? `Previous context: ${existingSummary}\n\n`
+	const context = existingEpisodes?.length
+		? `Previous episode summaries:\n${existingEpisodes.map((e) => `- ${e}`).join("\n")}\n\n`
 		: "";
 
 	const systemPrompt =
@@ -267,46 +262,38 @@ export async function summarizeConversation(
 	]);
 }
 
-export async function evaluateMemory(
+export async function evaluateConversationChunk(
 	recentMessages: string,
-	existingContext?: ExistingMemoryContext,
-): Promise<MemoryEvaluation> {
-	// Build context section if we have existing memories
+	existingFactSummary?: string,
+): Promise<PromotionResult> {
 	let contextSection = "";
-	if (existingContext) {
-		const memSummary = existingContext.memories
-			.slice(0, 7)
-			.map((m) => `- ${m.content} (imp: ${m.importance})`)
-			.join("\n");
+	if (existingFactSummary) {
+		contextSection = `
+HECHOS YA GUARDADOS (NO duplicar):
+${existingFactSummary}
 
-		const factsSummary = Object.entries(existingContext.memberFacts)
-			.map(([member, keys]) => `- ${member}: ${keys.join(", ")}`)
-			.join("\n");
-
-		if (memSummary || factsSummary) {
-			contextSection = `
-MEMORIAS YA GUARDADAS (NO duplicar):
-${memSummary || "(ninguna)"}
-
-KEYS YA USADAS POR MIEMBRO:
-${factsSummary || "(ninguno)"}
-
-IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba. Si la información ya existe (aunque con diferentes palabras), NO la incluyas.
+IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba.
 
 `;
-		}
 	}
 
 	const systemPrompt =
 		"Eres un asistente que extrae información importante de conversaciones. Responde SOLO con JSON válido, sin texto adicional.";
 
-	const userMessage = `Extrae de esta conversación:
-1. **Memorias**: SOLO información general que NO sea sobre un miembro específico. Ejemplos: eventos grupales, reglas de interacción, dinámicas de la relación, fechas importantes compartidas. NUNCA incluyas aquí datos personales de alguien (trabajo, familia, horario, ubicación, preferencias individuales) — esos van SOLO en memberFacts.
-2. **Hechos por miembro**: datos personales de miembros específicos (trabajo, hobby, relación, familia, horario, ubicación, preferencias). Key corto en español (ej: "empleo", "hobby", "mascota"). Mismo key para actualizar info previa.
+	const userMessage = `Analiza esta conversación y extrae:
+
+1. **Resumen del episodio**: Una oración breve describiendo de qué se trató la conversación.
+2. **Importancia**: 1-5 (5 = muy importante).
+3. **Hechos atómicos**: Datos específicos extraídos. Cada hecho debe ser una oración independiente.
+   - category "person": dato sobre una persona específica (incluye "subject" con el nombre)
+   - category "group": dinámica grupal o regla de interacción
+   - category "rule": regla o límite establecido en la relación
+   - category "event": evento, fecha o plan
 ${contextSection}
 Responde SOLO JSON:
-{"save": boolean, "memories": [{"content": "qué", "context": "por qué", "importance": 1-5}], "memberFacts": [{"member": "Nombre", "key": "tema", "content": "hecho"}]}
-Si no hay nada: {"save": false, "memories": [], "memberFacts": []}
+{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5}]}
+
+Si no hay nada relevante: {"summary": "conversación casual", "importance": 1, "facts": []}
 
 Conversación:
 ${recentMessages}`;
@@ -316,114 +303,13 @@ ${recentMessages}`;
 	]);
 
 	try {
-		// Extract JSON from possible markdown code block
 		const jsonMatch = text.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) return { save: false, memories: [], memberFacts: [] };
-		const parsed = JSON.parse(jsonMatch[0]) as MemoryEvaluation;
-		parsed.memberFacts = parsed.memberFacts ?? [];
+		if (!jsonMatch)
+			return { summary: "conversación casual", importance: 1, facts: [] };
+		const parsed = JSON.parse(jsonMatch[0]) as PromotionResult;
+		parsed.facts = parsed.facts ?? [];
 		return parsed;
 	} catch {
-		return { save: false, memories: [], memberFacts: [] };
-	}
-}
-
-export async function consolidateMemberFacts(
-	memberName: string,
-	facts: MemberFact[],
-	maxFacts: number,
-): Promise<MemberFact[]> {
-	const factsText = facts.map((f) => `- ${f.key}: ${f.content}`).join("\n");
-
-	const systemPrompt = `Eres un asistente que consolida datos sobre personas. Responde SOLO con un JSON array, sin texto adicional.`;
-
-	const userMessage = `Consolida estos datos sobre "${memberName}" en máximo ${maxFacts} hechos. Combina información relacionada en un solo hecho más completo (ej: gustos de comida en uno, datos laborales en uno). Mantén lo más importante y reciente. Usa keys cortos en español.
-
-Datos actuales:
-${factsText}
-
-Responde SOLO JSON array:
-[{"key": "tema-corto", "content": "hecho consolidado"}]`;
-
-	const text = await generateResponse(systemPrompt, [
-		{ role: "user", content: userMessage },
-	]);
-
-	try {
-		const jsonMatch = text.match(/\[[\s\S]*\]/);
-		if (!jsonMatch) return fallbackPrune(facts, maxFacts);
-		const parsed = JSON.parse(jsonMatch[0]) as Array<{
-			key: string;
-			content: string;
-		}>;
-		if (!Array.isArray(parsed) || parsed.length === 0)
-			return fallbackPrune(facts, maxFacts);
-		const now = Date.now();
-		return parsed.map((f) => ({
-			key: f.key,
-			content: f.content,
-			updatedAt: now,
-		}));
-	} catch {
-		return fallbackPrune(facts, maxFacts);
-	}
-}
-
-function fallbackPrune(facts: MemberFact[], maxFacts: number): MemberFact[] {
-	return [...facts]
-		.sort((a, b) => b.updatedAt - a.updatedAt)
-		.slice(0, maxFacts);
-}
-
-export async function consolidateLongTermMemories(
-	entries: Array<{ content: string; context: string; importance: number }>,
-	targetCount: number,
-	memberFacts?: Record<string, string[]>,
-): Promise<Array<{ content: string; context: string; importance: number }>> {
-	const entriesText = entries
-		.map((e) => `- [imp:${e.importance}] ${e.content} (${e.context})`)
-		.join("\n");
-
-	let memberFactsSection = "";
-	if (memberFacts && Object.keys(memberFacts).length > 0) {
-		const factsText = Object.entries(memberFacts)
-			.map(([member, facts]) => `- ${member}: ${facts.join(", ")}`)
-			.join("\n");
-		memberFactsSection = `\nDATOS YA GUARDADOS POR MIEMBRO (ELIMINAR de memorias si aparecen aquí):
-${factsText}\n`;
-	}
-
-	const systemPrompt =
-		"Eres un asistente que consolida memorias. Responde SOLO con un JSON array, sin texto adicional.";
-
-	const userMessage = `Consolida estas ${entries.length} memorias en máximo ${targetCount}. Reglas:
-- Combina duplicados y paráfrasis en una sola entrada más completa
-- Elimina trivialidades (clima pasado, actividades momentáneas, saludos)
-- Preserva: eventos con fecha, reglas de interacción, dinámicas grupales, decisiones importantes
-- ELIMINA cualquier memoria que sea un dato personal de un miembro (trabajo, familia, horario, ubicación, preferencias individuales) — esos ya están en member facts
-- Mantén la importancia más alta cuando combines entradas
-${memberFactsSection}
-Memorias actuales:
-${entriesText}
-
-Responde SOLO JSON array:
-[{"content": "qué", "context": "por qué", "importance": 1-5}]`;
-
-	const text = await generateResponse(systemPrompt, [
-		{ role: "user", content: userMessage },
-	]);
-
-	try {
-		const jsonMatch = text.match(/\[[\s\S]*\]/);
-		if (!jsonMatch) return entries.slice(0, targetCount);
-		const parsed = JSON.parse(jsonMatch[0]) as Array<{
-			content: string;
-			context: string;
-			importance: number;
-		}>;
-		if (!Array.isArray(parsed) || parsed.length === 0)
-			return entries.slice(0, targetCount);
-		return parsed;
-	} catch {
-		return entries.slice(0, targetCount);
+		return { summary: "conversación casual", importance: 1, facts: [] };
 	}
 }

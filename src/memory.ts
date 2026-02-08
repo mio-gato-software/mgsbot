@@ -1,120 +1,34 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import {
-	consolidateLongTermMemories,
-	consolidateMemberFacts,
-	summarizeConversation,
-} from "./ai.ts";
+import { cosineSimilarity, generateEmbedding } from "./embeddings.ts";
 import type {
 	ConversationMessage,
-	LongTermMemoryEntry,
-	MemberFactExtraction,
-	MemberMemory,
-	ShortTermMemory,
+	Episode,
+	SemanticFact,
+	SensoryBuffer,
+	WorkingMemory,
 } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
+
 const PERMANENT_PATH = "./memory/permanent.md";
-const LONG_TERM_PATH = "./memory/long-term.json";
-const SHORT_TERM_DIR = "./memory/short-term";
-const MEMBER_MEMORY_PATH = "./memory/members.json";
+const SEMANTIC_PATH = "./memory/semantic.json";
+const SENSORY_DIR = "./memory/sensory";
+const EPISODES_DIR = "./memory/episodes";
 
-const SUMMARIZE_THRESHOLD = 20;
-const SUMMARIZE_COUNT = 10;
-const MAX_LONG_TERM_ENTRIES = 50;
+const SENSORY_MAX_MESSAGES = 10;
+const SENSORY_OVERFLOW_COUNT = 5; // Messages returned on overflow
+const MAX_EPISODES_PER_CHAT = 20;
 const INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
-const SIMILARITY_THRESHOLD = 0.45; // 45% similarity = duplicate (catches paraphrases)
-const MAX_FACTS_PER_MEMBER = 20;
-const LT_CONSOLIDATION_THRESHOLD = 35;
-const LT_CONSOLIDATION_TARGET = 20;
-const FACT_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const SEMANTIC_DEDUP_THRESHOLD = 0.85;
+const CONFIDENCE_DECAY_RATE = 0.02; // Per day
+const MIN_CONFIDENCE = 0.1;
 
-// --- Text Similarity Utilities ---
+// --- Permanent Memory (unchanged) ---
 
-function normalizeForComparison(text: string): string {
-	return text
-		.toLowerCase()
-		.normalize("NFD")
-		.replace(/[\u0300-\u036f]/g, "") // Remove diacritics
-		.replace(/[^\w\s]/g, " ") // Remove punctuation
-		.replace(/\s+/g, " ")
-		.trim();
-}
-
-function extractKeyTerms(text: string): Set<string> {
-	const normalized = normalizeForComparison(text);
-	const words = normalized.split(" ").filter((w) => w.length > 2);
-	const terms = new Set<string>(words);
-
-	// Add bigrams for better matching
-	for (let i = 0; i < words.length - 1; i++) {
-		terms.add(`${words[i]}_${words[i + 1]}`);
-	}
-
-	return terms;
-}
-
-function calculateSimilarity(text1: string, text2: string): number {
-	const terms1 = extractKeyTerms(text1);
-	const terms2 = extractKeyTerms(text2);
-
-	if (terms1.size === 0 || terms2.size === 0) return 0;
-
-	let intersection = 0;
-	for (const term of terms1) {
-		if (terms2.has(term)) intersection++;
-	}
-
-	// Jaccard similarity
-	const union = terms1.size + terms2.size - intersection;
-	return union === 0 ? 0 : intersection / union;
-}
-
-// --- Key Canonicalization for Member Facts ---
-
-const KEY_ALIASES: Record<string, string> = {
-	empleo: "trabajo",
-	ocupacion: "trabajo",
-	profesion: "trabajo",
-	oficio: "trabajo",
-	bebida: "preferencia-bebida",
-	"bebida-favorita": "preferencia-bebida",
-	"habito-cafe": "preferencia-bebida",
-	cafe: "preferencia-bebida",
-	comida: "preferencia-comida",
-	"comida-favorita": "preferencia-comida",
-	plato: "preferencia-comida",
-	"estado-civil": "relacion",
-	pareja: "relacion",
-	esposo: "relacion",
-	esposa: "relacion",
-	novio: "relacion",
-	novia: "relacion",
-	telefono: "contacto-telefono",
-	celular: "contacto-telefono",
-	movil: "contacto-telefono",
-	email: "contacto-email",
-	correo: "contacto-email",
-	cumpleanos: "fecha-nacimiento",
-	nacimiento: "fecha-nacimiento",
-	"fecha-cumple": "fecha-nacimiento",
-	residencia: "ubicacion",
-	ciudad: "ubicacion",
-	pais: "ubicacion",
-	direccion: "ubicacion",
-	casa: "ubicacion",
-};
-
-function canonicalizeKey(key: string): string {
-	const normalized = normalizeForComparison(key);
-	return KEY_ALIASES[normalized] ?? normalized;
-}
-
-// --- Permanent Memory ---
-
-let permanentCache: string = "";
+let permanentCache = "";
 let permanentLastRead = 0;
-const PERMANENT_CACHE_MS = 60_000; // Re-read every minute
+const PERMANENT_CACHE_MS = 60_000;
 
 export async function loadPermanent(): Promise<string> {
 	const now = Date.now();
@@ -130,253 +44,7 @@ export async function loadPermanent(): Promise<string> {
 	return permanentCache;
 }
 
-// --- Long-Term Memory ---
-
-export async function loadLongTerm(): Promise<LongTermMemoryEntry[]> {
-	try {
-		const data = await readFile(LONG_TERM_PATH, "utf-8");
-		return JSON.parse(data) as LongTermMemoryEntry[];
-	} catch {
-		return [];
-	}
-}
-
-export async function saveLongTerm(
-	entries: LongTermMemoryEntry[],
-): Promise<void> {
-	await writeFile(LONG_TERM_PATH, JSON.stringify(entries, null, 2));
-}
-
-export async function addLongTermMemories(
-	newMemories: Array<{ content: string; context: string; importance: number }>,
-): Promise<void> {
-	const entries = await loadLongTerm();
-	const now = Date.now();
-
-	for (const mem of newMemories) {
-		// Check for duplicates by similarity
-		let isDuplicate = false;
-		for (const existing of entries) {
-			const similarity = calculateSimilarity(mem.content, existing.content);
-			if (similarity >= SIMILARITY_THRESHOLD) {
-				// Update if new memory has higher importance
-				if (mem.importance > existing.importance) {
-					existing.content = mem.content;
-					existing.context = mem.context;
-					existing.importance = mem.importance;
-				}
-				existing.lastAccessed = now;
-				isDuplicate = true;
-				break;
-			}
-		}
-
-		if (!isDuplicate) {
-			entries.push({
-				id: `mem_${now}_${Math.random().toString(36).slice(2, 8)}`,
-				content: mem.content,
-				context: mem.context,
-				createdAt: now,
-				lastAccessed: now,
-				importance: mem.importance,
-			});
-		}
-	}
-
-	// Consolidate via AI when exceeding threshold
-	if (entries.length > LT_CONSOLIDATION_THRESHOLD) {
-		try {
-			if (isDev)
-				console.log(
-					`[long-term] Consolidating ${entries.length} entries → target ${LT_CONSOLIDATION_TARGET}`,
-				);
-			const consolidated = await consolidateLongTermMemories(
-				entries.map((e) => ({
-					content: e.content,
-					context: e.context,
-					importance: e.importance,
-				})),
-				LT_CONSOLIDATION_TARGET,
-			);
-			const now2 = Date.now();
-			entries.length = 0;
-			for (const c of consolidated) {
-				entries.push({
-					id: `mem_${now2}_${Math.random().toString(36).slice(2, 8)}`,
-					content: c.content,
-					context: c.context,
-					createdAt: now2,
-					lastAccessed: now2,
-					importance: c.importance,
-				});
-			}
-		} catch (error) {
-			console.error("[long-term] Consolidation failed:", error);
-			// Fallback: simple prune by score
-			const currentTime = Date.now();
-			entries.sort((a, b) => {
-				const recencyA = 1 / (1 + (currentTime - a.lastAccessed) / 86_400_000);
-				const recencyB = 1 / (1 + (currentTime - b.lastAccessed) / 86_400_000);
-				return b.importance * recencyB - a.importance * recencyA;
-			});
-			entries.length = MAX_LONG_TERM_ENTRIES;
-		}
-	} else if (entries.length > MAX_LONG_TERM_ENTRIES) {
-		// Simple prune if between MAX and consolidation threshold
-		const currentTime = Date.now();
-		entries.sort((a, b) => {
-			const recencyA = 1 / (1 + (currentTime - a.lastAccessed) / 86_400_000);
-			const recencyB = 1 / (1 + (currentTime - b.lastAccessed) / 86_400_000);
-			return b.importance * recencyB - a.importance * recencyA;
-		});
-		entries.length = MAX_LONG_TERM_ENTRIES;
-	}
-
-	await saveLongTerm(entries);
-}
-
-export function getRelevantMemories(
-	entries: LongTermMemoryEntry[],
-	currentContext?: string,
-	maxCount = 8,
-): LongTermMemoryEntry[] {
-	if (entries.length === 0) return [];
-
-	const now = Date.now();
-	const contextTerms = currentContext ? extractKeyTerms(currentContext) : null;
-
-	// Score each entry with composite scoring
-	const scored = entries.map((entry) => {
-		// Relevance score (0-1): overlap with current context
-		let relevanceScore = 0;
-		if (contextTerms && contextTerms.size > 0) {
-			const entryTerms = extractKeyTerms(entry.content);
-			let overlap = 0;
-			for (const term of entryTerms) {
-				if (contextTerms.has(term)) overlap++;
-			}
-			relevanceScore = entryTerms.size > 0 ? overlap / entryTerms.size : 0;
-		}
-
-		// Importance score (0-1): normalized from 1-5 scale
-		const importanceScore = (entry.importance - 1) / 4;
-
-		// Recency score (0-1): exponential decay over days
-		const daysSinceAccess = (now - entry.lastAccessed) / 86_400_000;
-		const recencyScore = Math.exp(-daysSinceAccess / 7); // Half-life of ~5 days
-
-		// Composite score: 50% relevance, 30% importance, 20% recency
-		// If no context provided, use 60% importance, 40% recency
-		const score = contextTerms
-			? 0.5 * relevanceScore + 0.3 * importanceScore + 0.2 * recencyScore
-			: 0.6 * importanceScore + 0.4 * recencyScore;
-
-		return { entry, score };
-	});
-
-	// Sort by score and take top entries
-	scored.sort((a, b) => b.score - a.score);
-	const selected = scored.slice(0, maxCount).map((s) => s.entry);
-
-	// Update lastAccessed for selected entries
-	const selectedIds = new Set(selected.map((e) => e.id));
-	for (const entry of entries) {
-		if (selectedIds.has(entry.id)) {
-			entry.lastAccessed = now;
-		}
-	}
-
-	return selected;
-}
-
-// --- Short-Term Memory ---
-
-function shortTermPath(chatId: number): string {
-	return `${SHORT_TERM_DIR}/${chatId}.json`;
-}
-
-export async function loadShortTerm(chatId: number): Promise<ShortTermMemory> {
-	try {
-		const data = await readFile(shortTermPath(chatId), "utf-8");
-		const memory = JSON.parse(data) as ShortTermMemory;
-
-		// Clear messages if inactive for > 3 days
-		if (Date.now() - memory.lastActivity > INACTIVITY_THRESHOLD_MS) {
-			memory.messages = [];
-		}
-
-		return memory;
-	} catch {
-		return {
-			chatId,
-			messages: [],
-			previousSummary: "",
-			lastActivity: Date.now(),
-			messageCountSinceEval: 0,
-		};
-	}
-}
-
-export async function saveShortTerm(memory: ShortTermMemory): Promise<void> {
-	memory.lastActivity = Date.now();
-	await writeFile(
-		shortTermPath(memory.chatId),
-		JSON.stringify(memory, null, 2),
-	);
-}
-
-export async function addMessageToShortTerm(
-	memory: ShortTermMemory,
-	message: ConversationMessage,
-): Promise<void> {
-	memory.messages.push(message);
-	memory.messageCountSinceEval++;
-
-	// Rolling window: summarize oldest messages when exceeding threshold
-	if (memory.messages.length > SUMMARIZE_THRESHOLD) {
-		const toSummarize = memory.messages.slice(0, SUMMARIZE_COUNT);
-		memory.messages = memory.messages.slice(SUMMARIZE_COUNT);
-
-		const conversationText = toSummarize
-			.map(
-				(m) =>
-					`${m.role === "user" ? (m.name ?? "User") : "Bot"}: ${m.content}`,
-			)
-			.join("\n");
-
-		const summary = await summarizeConversation(
-			conversationText,
-			memory.previousSummary || undefined,
-		);
-
-		memory.previousSummary = summary;
-	}
-
-	await saveShortTerm(memory);
-}
-
-// --- Member Fact Expiry ---
-
-function pruneExpiredFacts(data: MemberMemory): boolean {
-	const now = Date.now();
-	let pruned = false;
-
-	for (const memberKey of Object.keys(data)) {
-		const before = data[memberKey].length;
-		data[memberKey] = data[memberKey].filter(
-			(f) => f.updatedAt && now - f.updatedAt <= FACT_EXPIRY_MS,
-		);
-		if (data[memberKey].length !== before) pruned = true;
-
-		if (data[memberKey].length === 0) {
-			delete data[memberKey];
-		}
-	}
-
-	return pruned;
-}
-
-// --- Member Memory ---
+// --- Name Utilities ---
 
 export function normalizeName(name: string): string {
 	return name
@@ -385,219 +53,353 @@ export function normalizeName(name: string): string {
 		.replace(/[\u0300-\u036f]/g, "");
 }
 
-export async function loadMemberMemory(): Promise<MemberMemory> {
+// --- Sensory Buffer ---
+
+function sensoryPath(chatId: number): string {
+	return `${SENSORY_DIR}/${chatId}.json`;
+}
+
+export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 	try {
-		const data = await readFile(MEMBER_MEMORY_PATH, "utf-8");
-		return JSON.parse(data) as MemberMemory;
+		const data = await readFile(sensoryPath(chatId), "utf-8");
+		const buffer = JSON.parse(data) as SensoryBuffer;
+
+		// Clear messages if inactive for > 3 days
+		if (Date.now() - buffer.lastActivity > INACTIVITY_THRESHOLD_MS) {
+			buffer.messages = [];
+		}
+
+		return buffer;
 	} catch {
-		return {};
+		return {
+			chatId,
+			messages: [],
+			lastActivity: Date.now(),
+			messageCountSincePromotion: 0,
+		};
 	}
 }
 
-async function saveMemberMemory(data: MemberMemory): Promise<void> {
-	await writeFile(MEMBER_MEMORY_PATH, JSON.stringify(data, null, 2));
+export async function saveSensory(buffer: SensoryBuffer): Promise<void> {
+	buffer.lastActivity = Date.now();
+	await writeFile(sensoryPath(buffer.chatId), JSON.stringify(buffer, null, 2));
 }
 
-export async function addMemberFacts(
-	facts: MemberFactExtraction[],
+/**
+ * Add a message to the sensory buffer.
+ * Returns overflow messages (oldest 5) if buffer exceeds 10, otherwise null.
+ */
+export async function addMessageToSensory(
+	buffer: SensoryBuffer,
+	message: ConversationMessage,
+): Promise<ConversationMessage[] | null> {
+	buffer.messages.push(message);
+	buffer.messageCountSincePromotion++;
+
+	let overflow: ConversationMessage[] | null = null;
+
+	if (buffer.messages.length > SENSORY_MAX_MESSAGES) {
+		overflow = buffer.messages.slice(0, SENSORY_OVERFLOW_COUNT);
+		buffer.messages = buffer.messages.slice(SENSORY_OVERFLOW_COUNT);
+	}
+
+	await saveSensory(buffer);
+	return overflow;
+}
+
+// --- Working Memory (Episodes) ---
+
+function episodesPath(chatId: number): string {
+	return `${EPISODES_DIR}/${chatId}.json`;
+}
+
+export async function loadWorkingMemory(
+	chatId: number,
+): Promise<WorkingMemory> {
+	try {
+		const data = await readFile(episodesPath(chatId), "utf-8");
+		return JSON.parse(data) as WorkingMemory;
+	} catch {
+		return { chatId, episodes: [] };
+	}
+}
+
+export async function saveWorkingMemory(wm: WorkingMemory): Promise<void> {
+	await writeFile(episodesPath(wm.chatId), JSON.stringify(wm, null, 2));
+}
+
+export async function addEpisode(
+	chatId: number,
+	episode: Episode,
 ): Promise<void> {
-	if (facts.length === 0) return;
-	const data = await loadMemberMemory();
+	const wm = await loadWorkingMemory(chatId);
+	wm.episodes.push(episode);
+
+	// Prune to max episodes by composite score (importance x recency)
+	if (wm.episodes.length > MAX_EPISODES_PER_CHAT) {
+		const now = Date.now();
+		wm.episodes.sort((a, b) => {
+			const recencyA = 1 / (1 + (now - a.timestamp) / 86_400_000);
+			const recencyB = 1 / (1 + (now - b.timestamp) / 86_400_000);
+			return b.importance * recencyB - a.importance * recencyA;
+		});
+		wm.episodes = wm.episodes.slice(0, MAX_EPISODES_PER_CHAT);
+	}
+
+	await saveWorkingMemory(wm);
+}
+
+export async function getRelevantEpisodes(
+	chatId: number,
+	queryEmbedding: number[],
+	maxCount = 5,
+): Promise<Episode[]> {
+	const wm = await loadWorkingMemory(chatId);
+	if (wm.episodes.length === 0) return [];
+
 	const now = Date.now();
 
-	for (const fact of facts) {
-		const normalizedNew = normalizeName(fact.member);
+	const scored = wm.episodes.map((episode) => {
+		const similarity = cosineSimilarity(queryEmbedding, episode.embedding);
+		const importanceScore = (episode.importance - 1) / 4;
+		const daysSince = (now - episode.timestamp) / 86_400_000;
+		const recencyScore = Math.exp(-daysSince / 7);
 
-		// Find existing member key by normalized comparison
-		let existingKey: string | undefined;
-		for (const key of Object.keys(data)) {
-			if (normalizeName(key) === normalizedNew) {
-				existingKey = key;
+		// 50% semantic similarity, 30% importance, 20% recency
+		const score = 0.5 * similarity + 0.3 * importanceScore + 0.2 * recencyScore;
+		return { episode, score };
+	});
+
+	scored.sort((a, b) => b.score - a.score);
+	return scored.slice(0, maxCount).map((s) => s.episode);
+}
+
+// --- Semantic Memory ---
+
+let semanticCache: SemanticFact[] | null = null;
+
+export async function loadSemanticStore(): Promise<SemanticFact[]> {
+	if (semanticCache) return semanticCache;
+	try {
+		const data = await readFile(SEMANTIC_PATH, "utf-8");
+		semanticCache = JSON.parse(data) as SemanticFact[];
+		return semanticCache;
+	} catch {
+		semanticCache = [];
+		return [];
+	}
+}
+
+export async function saveSemanticStore(facts: SemanticFact[]): Promise<void> {
+	semanticCache = facts;
+	await writeFile(SEMANTIC_PATH, JSON.stringify(facts, null, 2));
+}
+
+export async function addSemanticFacts(
+	newFacts: SemanticFact[],
+): Promise<void> {
+	const store = await loadSemanticStore();
+	const now = Date.now();
+
+	for (const newFact of newFacts) {
+		// Find similar existing facts by embedding
+		let merged = false;
+		for (const existing of store) {
+			const similarity = cosineSimilarity(
+				newFact.embedding,
+				existing.embedding,
+			);
+			if (similarity >= SEMANTIC_DEDUP_THRESHOLD) {
+				// Update existing: refresh confidence and timestamp
+				existing.lastConfirmed = now;
+				existing.confidence = Math.min(1, existing.confidence + 0.2);
+				// Update content if new fact has higher importance
+				if (newFact.importance > existing.importance) {
+					existing.content = newFact.content;
+					existing.context = newFact.context;
+					existing.importance = newFact.importance;
+					existing.embedding = newFact.embedding;
+				}
+				merged = true;
+				if (isDev)
+					console.log(
+						`[semantic] Merged duplicate (similarity=${similarity.toFixed(2)}): "${newFact.content.slice(0, 60)}"`,
+					);
 				break;
 			}
 		}
 
-		const memberKey = existingKey ?? fact.member;
-		if (!data[memberKey]) {
-			data[memberKey] = [];
-		}
-
-		// Canonicalize the key to avoid duplicates with different naming
-		const canonicalKey = canonicalizeKey(fact.key);
-		const newFact = {
-			key: canonicalKey,
-			content: fact.content,
-			updatedAt: now,
-		};
-
-		// Find existing fact with the same canonical key
-		const existingIndex = data[memberKey].findIndex(
-			(f) => canonicalizeKey(f.key) === canonicalKey,
-		);
-
-		if (existingIndex >= 0) {
-			// Update existing fact, keeping the canonical key
-			data[memberKey][existingIndex] = newFact;
-		} else {
-			data[memberKey].push(newFact);
-		}
-	}
-
-	// Consolidate facts for members that exceed the limit
-	const modifiedMembers = new Set(facts.map((f) => f.member));
-	for (const memberName of modifiedMembers) {
-		// Find the actual key used in data (may differ in casing/accents)
-		const normalizedNew = normalizeName(memberName);
-		const memberKey = Object.keys(data).find(
-			(k) => normalizeName(k) === normalizedNew,
-		);
-		const memberFacts = memberKey ? data[memberKey] : undefined;
-		if (
-			!memberKey ||
-			!memberFacts ||
-			memberFacts.length <= MAX_FACTS_PER_MEMBER
-		)
-			continue;
-
-		try {
-			const targetSize = Math.ceil(MAX_FACTS_PER_MEMBER / 2);
+		if (!merged) {
+			store.push(newFact);
 			if (isDev)
 				console.log(
-					`[member-facts] Consolidating ${memberFacts.length} facts for "${memberKey}" → target ${targetSize}`,
+					`[semantic] Added new fact: "${newFact.content.slice(0, 60)}"`,
 				);
-			data[memberKey] = await consolidateMemberFacts(
-				memberKey,
-				memberFacts,
-				targetSize,
-			);
-		} catch (error) {
-			console.error(
-				`[member-facts] Consolidation failed for "${memberKey}":`,
-				error,
-			);
-			// Fallback: keep most recent facts
-			data[memberKey] = memberFacts
-				.sort((a, b) => b.updatedAt - a.updatedAt)
-				.slice(0, MAX_FACTS_PER_MEMBER);
 		}
 	}
 
-	pruneExpiredFacts(data);
-	await saveMemberMemory(data);
+	await saveSemanticStore(store);
 }
 
-// --- Optimization ---
+export async function getRelevantFacts(
+	queryEmbedding: number[],
+	options?: {
+		category?: SemanticFact["category"];
+		subject?: string;
+		maxCount?: number;
+	},
+): Promise<SemanticFact[]> {
+	const store = await loadSemanticStore();
+	if (store.length === 0) return [];
 
-const CONSOLIDATION_THRESHOLD = 10;
+	const maxCount = options?.maxCount ?? 15;
+	const now = Date.now();
 
-export interface OptimizeResult {
-	totalBefore: number;
-	totalAfter: number;
-	membersConsolidated: string[];
-}
+	let candidates = store;
 
-export async function optimizeAllMemberFacts(): Promise<OptimizeResult> {
-	const data = await loadMemberMemory();
-	pruneExpiredFacts(data);
-	const targetSize = Math.ceil(CONSOLIDATION_THRESHOLD / 2);
-	let totalBefore = 0;
-	let totalAfter = 0;
-	const membersConsolidated: string[] = [];
-
-	for (const [memberKey, facts] of Object.entries(data)) {
-		if (!facts) continue;
-		totalBefore += facts.length;
-
-		if (facts.length > CONSOLIDATION_THRESHOLD) {
-			try {
-				if (isDev)
-					console.log(
-						`[optimize] Consolidating ${facts.length} facts for "${memberKey}" → target ${targetSize}`,
-					);
-				data[memberKey] = await consolidateMemberFacts(
-					memberKey,
-					facts,
-					targetSize,
-				);
-				membersConsolidated.push(memberKey);
-			} catch (error) {
-				console.error(
-					`[optimize] Consolidation failed for "${memberKey}":`,
-					error,
-				);
-				data[memberKey] = facts
-					.sort((a, b) => b.updatedAt - a.updatedAt)
-					.slice(0, CONSOLIDATION_THRESHOLD);
-				membersConsolidated.push(memberKey);
-			}
-		}
-
-		totalAfter += data[memberKey]?.length ?? 0;
+	// Filter by category if specified
+	if (options?.category) {
+		candidates = candidates.filter((f) => f.category === options.category);
 	}
 
-	await saveMemberMemory(data);
-	return { totalBefore, totalAfter, membersConsolidated };
-}
-
-export interface LongTermOptimizeResult {
-	totalBefore: number;
-	totalAfter: number;
-}
-
-export async function optimizeLongTermMemories(): Promise<LongTermOptimizeResult> {
-	const [entries, memberMemory] = await Promise.all([
-		loadLongTerm(),
-		loadMemberMemory(),
-	]);
-	const totalBefore = entries.length;
-
-	if (totalBefore <= LT_CONSOLIDATION_TARGET) {
-		return { totalBefore, totalAfter: totalBefore };
-	}
-
-	// Build member facts summary for cross-store dedup
-	const memberFacts: Record<string, string[]> = {};
-	for (const [member, facts] of Object.entries(memberMemory)) {
-		memberFacts[member] = facts.map((f) => `${f.key}: ${f.content}`);
-	}
-
-	try {
-		if (isDev)
-			console.log(
-				`[optimize-lt] Consolidating ${totalBefore} entries → target ${LT_CONSOLIDATION_TARGET}`,
-			);
-		const consolidated = await consolidateLongTermMemories(
-			entries.map((e) => ({
-				content: e.content,
-				context: e.context,
-				importance: e.importance,
-			})),
-			LT_CONSOLIDATION_TARGET,
-			memberFacts,
+	// Filter by subject if specified
+	if (options?.subject) {
+		const normalizedSubject = normalizeName(options.subject);
+		candidates = candidates.filter(
+			(f) => f.subject && normalizeName(f.subject) === normalizedSubject,
 		);
-		const now = Date.now();
-		const newEntries = consolidated.map((c) => ({
-			id: `mem_${now}_${Math.random().toString(36).slice(2, 8)}`,
-			content: c.content,
-			context: c.context,
-			createdAt: now,
-			lastAccessed: now,
-			importance: c.importance,
-		}));
-		await saveLongTerm(newEntries);
-		return { totalBefore, totalAfter: newEntries.length };
-	} catch (error) {
-		console.error("[optimize-lt] Consolidation failed:", error);
-		return { totalBefore, totalAfter: totalBefore };
 	}
+
+	const scored = candidates.map((fact) => {
+		const similarity = cosineSimilarity(queryEmbedding, fact.embedding);
+		const importanceScore = (fact.importance - 1) / 4;
+		const daysSinceConfirmed = (now - fact.lastConfirmed) / 86_400_000;
+		const recencyScore = Math.exp(-daysSinceConfirmed / 14); // Half-life ~10 days
+
+		// 50% semantic similarity, 25% importance, 15% confidence, 10% recency
+		const score =
+			0.5 * similarity +
+			0.25 * importanceScore +
+			0.15 * fact.confidence +
+			0.1 * recencyScore;
+
+		return { fact, score };
+	});
+
+	scored.sort((a, b) => b.score - a.score);
+	return scored.slice(0, maxCount).map((s) => s.fact);
+}
+
+/**
+ * Get all facts for specific subjects (for prompt building).
+ * No embedding query needed — returns all facts for the given names.
+ */
+export async function getFactsForSubjects(
+	names: string[],
+): Promise<SemanticFact[]> {
+	const store = await loadSemanticStore();
+	const normalizedNames = new Set(names.map(normalizeName));
+	return store.filter(
+		(f) =>
+			f.category === "person" &&
+			f.subject &&
+			normalizedNames.has(normalizeName(f.subject)),
+	);
+}
+
+let lastDecayDate = "";
+
+export async function decayConfidence(): Promise<{
+	total: number;
+	removed: number;
+}> {
+	const today = new Date().toISOString().slice(0, 10);
+	if (lastDecayDate === today) {
+		const store = await loadSemanticStore();
+		return { total: store.length, removed: 0 };
+	}
+
+	const store = await loadSemanticStore();
+	const totalBefore = store.length;
+	const now = Date.now();
+
+	for (const fact of store) {
+		const daysSinceConfirmed = (now - fact.lastConfirmed) / 86_400_000;
+		fact.confidence = Math.max(
+			0,
+			fact.confidence - CONFIDENCE_DECAY_RATE * daysSinceConfirmed,
+		);
+	}
+
+	// Remove facts below minimum confidence
+	const filtered = store.filter((f) => f.confidence >= MIN_CONFIDENCE);
+	const removed = totalBefore - filtered.length;
+
+	if (removed > 0 && isDev) {
+		console.log(`[semantic] Decayed confidence: removed ${removed} facts`);
+	}
+
+	await saveSemanticStore(filtered);
+	lastDecayDate = today;
+
+	return { total: filtered.length, removed };
+}
+
+// --- Heuristic Pre-filter ---
+
+const SIGNIFICANT_PATTERNS = [
+	// Personal declarations (Spanish)
+	/\b(soy|trabajo en|me gusta|tengo|vivo en|estudio|naci)\b/i,
+	// Dates and events
+	/\b\d{1,2}\s*de\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i,
+	// Memory references
+	/\b(recuerdas?|te cont[eé]|te dije|ya te|mencion[eé])\b/i,
+	// Names (capitalized words after common intro patterns)
+	/\b(se llama|mi (hijo|hija|esposo|esposa|novio|novia|amigo|amiga|hermano|hermana|padre|madre|jefe)|soy)\s+[A-Z]/,
+	// Numbers that could be ages, dates, amounts
+	/\b\d{2,4}\s*(años|año)\b/i,
+];
+
+const MIN_SIGNIFICANT_LENGTH = 120;
+
+export function hasSignificantContent(
+	messages: ConversationMessage[],
+): boolean {
+	for (const msg of messages) {
+		// Long messages are often significant
+		if (msg.content.length > MIN_SIGNIFICANT_LENGTH) return true;
+
+		// Check for significant patterns
+		for (const pattern of SIGNIFICANT_PATTERNS) {
+			if (pattern.test(msg.content)) return true;
+		}
+	}
+	return false;
+}
+
+// --- Query Embedding Helper ---
+
+/**
+ * Generate a query embedding from recent messages for retrieval.
+ */
+export async function getQueryEmbedding(
+	messages: ConversationMessage[],
+): Promise<number[]> {
+	// Use the last few messages as context for the query
+	const recentText = messages
+		.slice(-3)
+		.map((m) => m.content)
+		.join(" ");
+	return generateEmbedding(recentText);
 }
 
 // --- Initialization ---
 
 export async function initMemoryDirs(): Promise<void> {
-	await mkdir("./memory/short-term", { recursive: true }).catch(() => {});
-	// Create long-term.json if it doesn't exist
-	if (!existsSync(LONG_TERM_PATH)) {
-		await writeFile(LONG_TERM_PATH, "[]");
+	await mkdir(SENSORY_DIR, { recursive: true }).catch(() => {});
+	await mkdir(EPISODES_DIR, { recursive: true }).catch(() => {});
+	// Create semantic.json if it doesn't exist
+	if (!existsSync(SEMANTIC_PATH)) {
+		await writeFile(SEMANTIC_PATH, "[]");
 	}
 }

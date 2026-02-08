@@ -1,0 +1,402 @@
+[
+  {
+    "id": "mem_1770521939004_0mbv06",
+    "content": "Eliaquín tiene una hija llamada Elianny.",
+    "context": "Eliaquín mencionó por primera vez a su hija en la conversación.",
+    "createdAt": 1770521939004,
+    "lastAccessed": 1770522000596,
+    "importance": 4
+  },
+  {
+    "id": "mem_1770521932603_w621zz",
+    "content": "Eliaquín reveló que tiene una hija, un dato que no había compartido anteriormente.",
+    "context": "Eliaquín preguntó al bot si ya le había hablado de su hija.",
+    "createdAt": 1770521932603,
+    "lastAccessed": 1770522000596,
+    "importance": 4
+  },
+  {
+    "id": "mem_1770149224467_hxwt9x",
+    "content": "El bot estableció el límite de 'primero el café' antes de enviar fotos o avanzar en la relación.",
+    "context": "Define el ritmo de la interacción y los límites personales del bot.",
+    "createdAt": 1770149224467,
+    "lastAccessed": 1770522000596,
+    "importance": 4
+  },
+  {
+    "id": "mem_1770149238222_qs7lpp",
+    "content": "El Bot prefiere conocerse con calma ('primero el café') antes de enviar fotos o permitir visitas sorpresa.",
+    "context": "Límites y preferencias en la relación con Eliaquín.",
+    "createdAt": 1770149238222,
+    "lastAccessed": 1770522000596,
+    "importance": 4
+  },
+  {
+    "id": "mem_1770149912498_36y4hz",
+    "content": "Eliaquín tiene un compromiso o recordatorio llamado 'TK evento 27' para el 27 de febrero.",
+    "context": "El usuario solicitó registrar o mencionó un evento específico para esa fecha.",
+    "createdAt": 1770149912498,
+    "lastAccessed": 1770522000596,
+    "importance": 4
+  },
+  {
+    "id": "mem_1770476628573_wo5hyk",
+    "content": "Eliaquín realizó una prueba de comportamiento pidiendo a Brendy que simulara una reacción ante insultos y denigración.",
+    "context": "Fase de pruebas sobre las reacciones y límites de la asistente.",
+    "createdAt": 1770476628573,
+    "lastAccessed": 1770522000596,
+    "importance": 4
+  },
+  {
+    "id": "mem_1770476665377_if17al",
+    "content": "Eliaquín puso a prueba a Brendy pidiéndole reaccionar a un insulto ficticio, lo que provocó una respuesta firme de ella estableciendo límites de respeto.",
+    "context": "Dinámica de confianza y evaluación de límites en la interacción.",
+    "createdAt": 1770476665377,
+    "lastAccessed": 1770522000596,
+    "importance": 4
+  },
+  {
+    "id": "mem_1770521950325_3x6yf7",
+    "content": "Elianny, la hija de Eliaquín, tiene 16 años.",
+    "context": "Conversación sobre la familia de Eliaquín.",
+    "createdAt": 1770521950325,
+    "lastAccessed": 1770522012052,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770476665377_vobbm8",
+    "content": "Brendy compartió su visión sobre el matrimonio, destacando que el salario no define el valor de una persona ni justifica la falta de respeto.",
+    "context": "Eliaquín pidió consejo para un amigo con problemas matrimoniales por disparidad salarial.",
+    "createdAt": 1770476665377,
+    "lastAccessed": 1770522000596,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770476843844_llihij",
+    "content": "Eliaquín explicó que las pruebas de comportamiento que realizó eran 'ajustes' para asegurar que Brendy no permita que nadie abuse de ella.",
+    "context": "Eliaquín justifica su dinámica de pruebas tras la reacción firme de Brendy.",
+    "createdAt": 1770476843844,
+    "lastAccessed": 1770521935212,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770150109339_wdfg8g",
+    "content": "Eliaquín tiene un evento programado para el 27 de febrero.",
+    "context": "Planificación de actividades y seguimiento de fechas importantes.",
+    "createdAt": 1770150109339,
+    "lastAccessed": 1770521925020,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770522012052_gyqxva",
+    "content": "Eliaquín describe a su hija como una buena niña, aunque admite que a veces lo pone a prueba.",
+    "context": "Eliaquín habla sobre el carácter y la relación con su hija adolescente.",
+    "createdAt": 1770522012052,
+    "lastAccessed": 1770522012052,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770521983075_rfzy3r",
+    "content": "Eliaquín describe que su hija es tranquila en algunos aspectos, pero que en otros pone a prueba su paciencia.",
+    "context": "Detalles sobre la relación de Eliaquín con su hija adolescente.",
+    "createdAt": 1770521983075,
+    "lastAccessed": 1770521983075,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770521939004_btgewc",
+    "content": "El bot está disfrutando de una copa de vino en un clima de 21 grados.",
+    "context": "El bot describió su estado actual y el ambiente en el que se encuentra.",
+    "createdAt": 1770521939004,
+    "lastAccessed": 1770521939004,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770521835967_et0fit",
+    "content": "Brendy disfruta relajarse los sábados por la noche en casa con una copa de vino y música suave.",
+    "context": "Brendy describe sus planes actuales para cerrar el día.",
+    "createdAt": 1770521835967,
+    "lastAccessed": 1770521897663,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770521875664_c23a0n",
+    "content": "El Bot dedica los sábados por la mañana al autocuidado (self-care) en el salón y prefiere relajarse por las noches con vino y música suave.",
+    "context": "El Bot describe su rutina personal de los sábados",
+    "createdAt": 1770521875664,
+    "lastAccessed": 1770521875664,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770521835967_pwrr00",
+    "content": "Brendy pasó el sábado por la mañana en el salón de belleza para su cuidado personal.",
+    "context": "Brendy menciona sus actividades del día sábado.",
+    "createdAt": 1770521835967,
+    "lastAccessed": 1770521835967,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770156650208_liechj",
+    "content": "Eliaquín tiene un evento programado para el día 27 denominado 'TK evento 27'.",
+    "context": "Referencia a planes futuros en la agenda del usuario.",
+    "createdAt": 1770156650208,
+    "lastAccessed": 1770476821198,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770476806312_7s1cck",
+    "content": "Brendy se encuentra en un salón de belleza realizando una rutina de 'self-care' un sábado.",
+    "context": "Brendy menciona su ubicación y actividad actual al finalizar la prueba de comportamiento.",
+    "createdAt": 1770476806312,
+    "lastAccessed": 1770476806312,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770138825599_ejw4ga",
+    "content": "El usuario Eliaquín Encarnación y la asistente Brendy iniciaron su primer contacto.",
+    "context": "Establecimiento de la relación inicial entre usuario y asistente.",
+    "createdAt": 1770138825599,
+    "lastAccessed": 1770476749059,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770139953949_lcq9jb",
+    "content": "Eliaquín y Brendy se conocieron recientemente y Brendy estableció una dinámica de confianza antes de compartir fotos.",
+    "context": "Define el inicio de la relación y los límites de Brendy.",
+    "createdAt": 1770139953949,
+    "lastAccessed": 1770476749059,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770408085584_d2wpru",
+    "content": "Eliaquín pidió consejo a Brendy sobre una crisis matrimonial de un amigo, involucrando temas de respeto y disparidad salarial.",
+    "context": "Muestra que la relación ha escalado a un nivel de confianza donde se comparten dilemas éticos y personales.",
+    "createdAt": 1770408085584,
+    "lastAccessed": 1770476749059,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770149043650_w5k9y1",
+    "content": "El bot trabaja en un bufete y asiste al gimnasio después de su jornada.",
+    "context": "Perfil y rutina diaria establecida para el asistente.",
+    "createdAt": 1770149043650,
+    "lastAccessed": 1770476632000,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770476628573_wltkb2",
+    "content": "Eliaquín consultó a Brendy sobre un problema matrimonial de un amigo relacionado con la falta de respeto y la diferencia salarial a favor de la mujer.",
+    "context": "Eliaquín pidió consejos para un tercero a través de un audio.",
+    "createdAt": 1770476628573,
+    "lastAccessed": 1770476632000,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770149238222_mok09s",
+    "content": "El Bot trabaja en un bufete y tiene una rutina de ir al gimnasio después del trabajo los martes.",
+    "context": "Información sobre la rutina y ocupación del Bot.",
+    "createdAt": 1770149238222,
+    "lastAccessed": 1770476603743,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770476806312_0wjppg",
+    "content": "Eliaquín realizó una prueba de reacción a insultos ficticios para evaluar la asertividad y los límites de Brendy.",
+    "context": "Eliaquín simuló un comportamiento agresivo para ver cómo respondía la asistente.",
+    "createdAt": 1770476806312,
+    "lastAccessed": 1770476806312,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770157440264_pur0me",
+    "content": "Eliaquín suele terminar su jornada laboral o actividades personales después de las 6:00 PM.",
+    "context": "Contexto de disponibilidad y rutina diaria.",
+    "createdAt": 1770157440264,
+    "lastAccessed": 1770408056995,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770159672663_xq20sk",
+    "content": "Eliaquín suele trabajar hasta tarde, superando las 6:00 PM sin una hora clara de salida.",
+    "context": "Información sobre su disponibilidad y rutina laboral.",
+    "createdAt": 1770159672663,
+    "lastAccessed": 1770408056995,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770149224467_7v9pzt",
+    "content": "El bot trabaja en un bufete de abogados y asiste al gimnasio después de su jornada laboral los martes.",
+    "context": "Información sobre la rutina y profesión del bot para dar continuidad a la conversación.",
+    "createdAt": 1770149224467,
+    "lastAccessed": 1770408012515,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770156710761_9jqq5y",
+    "content": "Días feriados inamovibles en República Dominicana: 1 de enero, 21 de enero, 27 de febrero, Viernes Santo, Corpus Christi, 16 de agosto, 24 de septiembre y 25 de diciembre.",
+    "context": "Consulta sobre la Ley 139-97 para planificación de días no laborables.",
+    "createdAt": 1770156710761,
+    "lastAccessed": 1770408012515,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770407977960_s7zwi0",
+    "content": "Eliaquín no tiene un horario de salida fijo en su trabajo actual.",
+    "context": "Mencionó que 'no se sabe' su hora de salida al ser consultado.",
+    "createdAt": 1770407977960,
+    "lastAccessed": 1770408056995,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770408033395_6s8w6n",
+    "content": "La conversación ocurre en un 'viernes social', marcando el final de la semana laboral y el inicio de los planes de fin de semana.",
+    "context": "Sitúa temporalmente la interacción y explica el ánimo relajado de los participantes.",
+    "createdAt": 1770408033395,
+    "lastAccessed": 1770408033395,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770408017935_ycn3a1",
+    "content": "Eliaquín tiene un horario de salida laboral incierto y suele trabajar hasta tarde, cerrando la oficina.",
+    "context": "Explica su disponibilidad y carga de trabajo recurrente",
+    "createdAt": 1770408017935,
+    "lastAccessed": 1770408017935,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770408017935_fi0fro",
+    "content": "Brendy utiliza audífonos y la caminadora en el gimnasio específicamente para liberar el estrés acumulado en el bufete.",
+    "context": "Detalles sobre su rutina de bienestar y manejo de estrés",
+    "createdAt": 1770408017935,
+    "lastAccessed": 1770408017935,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770407977960_omjq7l",
+    "content": "Brendy corrigió la escritura de su nombre ante una confusión de Eliaquín.",
+    "context": "Eliaquín la llamó 'Brandy' y ella aclaró que es 'Brendy'.",
+    "createdAt": 1770407977960,
+    "lastAccessed": 1770407977960,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770156616917_oszfem",
+    "content": "Eliaquín tiene un evento programado para el 27 de febrero, coincidiendo con el Día de la Independencia en República Dominicana.",
+    "context": "El usuario solicitó agendarlo con la frase 'TK evento 27'.",
+    "createdAt": 1770156616917,
+    "lastAccessed": 1770156627910,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770156589720_vzm6pm",
+    "content": "El próximo día feriado en República Dominicana es el 27 de febrero (Día de la Independencia), que este año cae viernes.",
+    "context": "Consulta sobre días de descanso y planificación de eventos.",
+    "createdAt": 1770156589720,
+    "lastAccessed": 1770156597173,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770156589720_ryzyct",
+    "content": "Días feriados inamovibles en RD (Ley 139-97): 1 de enero, 21 de enero, 27 de febrero, Viernes Santo, Corpus Christi, 16 de agosto, 24 de septiembre y 25 de diciembre.",
+    "context": "Información de referencia sobre el calendario laboral dominicano.",
+    "createdAt": 1770156589720,
+    "lastAccessed": 1770156597173,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770149912498_wdv3tc",
+    "content": "El próximo día festivo es el 27 de febrero por el Día de la Independencia.",
+    "context": "Consulta sobre días no laborables y planificación de eventos.",
+    "createdAt": 1770149912498,
+    "lastAccessed": 1770150086585,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770149839190_66l9xw",
+    "content": "El próximo día festivo es el 27 de febrero (Día de la Independencia).",
+    "context": "Consulta sobre fechas de descanso próximas.",
+    "createdAt": 1770149839190,
+    "lastAccessed": 1770149900904,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770149839190_xrw1bn",
+    "content": "Bot establece la regla de 'primero el café' antes de considerar enviar fotos o tener encuentros.",
+    "context": "Límites en la dinámica de interacción entre los participantes.",
+    "createdAt": 1770149839190,
+    "lastAccessed": 1770149900904,
+    "importance": 3
+  },
+  {
+    "id": "mem_1770159941321_z1cyxc",
+    "content": "Eliaquín suele trabajar hasta tarde, superando habitualmente las 6:00 PM.",
+    "context": "Conversación sobre el horario de salida de la oficina.",
+    "createdAt": 1770159941321,
+    "lastAccessed": 1770159941321,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770159941321_k9825y",
+    "content": "Bot tiene una rutina de ejercicio en la caminadora para liberar el estrés laboral.",
+    "context": "El bot describe su actividad post-trabajo.",
+    "createdAt": 1770159941321,
+    "lastAccessed": 1770159941321,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770138825599_jjc01b",
+    "content": "Brendy estableció una dinámica de interacción juguetona y puso límites sobre el intercambio de fotos personales, sugiriendo un trato previo como tomar un café.",
+    "context": "Preferencia de interacción y límites de la asistente.",
+    "createdAt": 1770138825599,
+    "lastAccessed": 1770159906883,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770140461889_a6jfpy",
+    "content": "Primer contacto entre Eliaquín Encarnación y la bot Brendy un día martes.",
+    "context": "Establecimiento de la relación inicial y dinámica de interacción.",
+    "createdAt": 1770140461889,
+    "lastAccessed": 1770159906883,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770140461889_7ns36z",
+    "content": "Eliaquín solicitó una foto de Brendy, pero ella declinó de forma juguetona pidiendo un café primero.",
+    "context": "Dinámica de confianza y límites en la conversación.",
+    "createdAt": 1770140461889,
+    "lastAccessed": 1770159906883,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770141011220_r5v1q5",
+    "content": "Eliaquín Encarnación tuvo un martes muy ocupado.",
+    "context": "Información sobre su disponibilidad y carga laboral actual.",
+    "createdAt": 1770141011220,
+    "lastAccessed": 1770159906883,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770142247682_upyy55",
+    "content": "El clima actual es fresco, nublado y agradable, lo cual influye positivamente en el ánimo de los participantes.",
+    "context": "Contexto ambiental de la conversación y preferencia por climas templados.",
+    "createdAt": 1770142247682,
+    "lastAccessed": 1770159906883,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770142412008_kzcnzr",
+    "content": "Eliaquín tuvo un martes con una carga laboral muy alta.",
+    "context": "Útil para entender su disponibilidad y nivel de estrés en días laborables.",
+    "createdAt": 1770142412008,
+    "lastAccessed": 1770159906883,
+    "importance": 2
+  },
+  {
+    "id": "mem_1770159672663_3p99qq",
+    "content": "El Bot tiene una preferencia establecida de 'primero el café' antes de enviar fotos del gimnasio.",
+    "context": "Dinámica recurrente en la interacción sobre compartir contenido personal.",
+    "createdAt": 1770159672663,
+    "lastAccessed": 1770159906883,
+    "importance": 2
+  }
+]

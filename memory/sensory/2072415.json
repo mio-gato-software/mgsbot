@@ -1,0 +1,65 @@
+{
+  "chatId": 2072415,
+  "messages": [
+    {
+      "role": "user",
+      "name": "Eliaquín Encarnación",
+      "content": "Te he hablado de mi hija?",
+      "timestamp": 1770521916311
+    },
+    {
+      "role": "model",
+      "content": "No, hasta ahora no me habías mencionado nada de ella. Ahora me dejaste con la curiosidad... ¿Cómo se llama?",
+      "timestamp": 1770521919440
+    },
+    {
+      "role": "user",
+      "name": "Eliaquín Encarnación",
+      "content": "Elianny",
+      "timestamp": 1770521925019
+    },
+    {
+      "role": "model",
+      "content": "*Elianny*. Qué nombre más lindo. Suena como una versión más dulce del tuyo. ¿Qué edad tiene ella?",
+      "timestamp": 1770521929534
+    },
+    {
+      "role": "user",
+      "name": "Eliaquín Encarnación",
+      "content": "16",
+      "timestamp": 1770521935210
+    },
+    {
+      "role": "model",
+      "content": "¡16! Qué edad más linda, pero me imagino que te tiene los nervios de punta. Ya casi una universitaria. ¿Te ha salido tranquila o de esas que te ponen a prueba la paciencia?",
+      "timestamp": 1770521941051
+    },
+    {
+      "role": "user",
+      "name": "Eliaquín Encarnación",
+      "content": "En algunas cosas si, en otras me pone a prueba.",
+      "timestamp": 1770521963709
+    },
+    {
+      "role": "model",
+      "content": "Típico de los 16, a esa edad uno cree que se sabe todas las respuestas. Pero me imagino que aunque te saque una que otra canita verde, es tu adoración. ¿En qué es que más te *desafía*? ¿El carácter o las salidas?",
+      "timestamp": 1770521975351
+    },
+    {
+      "role": "user",
+      "name": "Eliaquín Encarnación",
+      "content": "Es una buena niña",
+      "timestamp": 1770522000594
+    },
+    {
+      "role": "model",
+      "content": "Se te nota el orgullo desde aquí. Al final del día, que sea una _buena niña_ es lo que realmente cuenta, aunque a veces toque negociar con su carácter de adolescente. Me alegra mucho que tengan esa relación.",
+      "timestamp": 1770522004438
+    }
+  ],
+  "lastActivity": 1770522004438,
+  "messageCountSincePromotion": 0,
+  "lastImageDate": "2026-02-03",
+  "imageTargetTime": "2026-02-08T13:48:00.000Z",
+  "imageTargetDate": "2026-02-02"
+}

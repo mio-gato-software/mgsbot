@@ -3,7 +3,7 @@ import { InputFile } from "grammy";
 import {
 	analyzeYouTube,
 	describeImage,
-	evaluateMemory,
+	evaluateConversationChunk,
 	generateImage,
 	generateResponse,
 	isImageGenAvailable,
@@ -11,18 +11,20 @@ import {
 	transcribeAudio,
 } from "./ai.ts";
 import { getBrendyBasePath } from "./brendy-appearance.ts";
+import { generateEmbedding } from "./embeddings.ts";
 import {
-	addLongTermMemories,
-	addMemberFacts,
-	addMessageToShortTerm,
-	getRelevantMemories,
-	loadLongTerm,
-	loadMemberMemory,
-	loadShortTerm,
-	optimizeAllMemberFacts,
-	optimizeLongTermMemories,
-	saveLongTerm,
-	saveShortTerm,
+	addEpisode,
+	addMessageToSensory,
+	addSemanticFacts,
+	decayConfidence,
+	getFactsForSubjects,
+	getQueryEmbedding,
+	getRelevantEpisodes,
+	getRelevantFacts,
+	hasSignificantContent,
+	loadSemanticStore,
+	loadSensory,
+	saveSensory,
 } from "./memory.ts";
 import {
 	buildMessages,
@@ -30,9 +32,12 @@ import {
 	isSimpleAssistantMode,
 } from "./prompt.ts";
 import { getChatProviderInfo, switchChatProvider } from "./providers/index.ts";
-import type { ConversationMessage, ShortTermMemory } from "./types.ts";
+import type {
+	ConversationMessage,
+	SemanticFact,
+	SensoryBuffer,
+} from "./types.ts";
 
-const EVAL_EVERY_N_MESSAGES = 5;
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
 const OWNER_USER_ID = Number(process.env.OWNER_USER_ID);
 const isDev = process.env.NODE_ENV === "development";
@@ -139,29 +144,29 @@ function generateRandomWeeklyTargetTime(): string {
 	return targetDate.toISOString();
 }
 
-function shouldGenerateImageNow(shortTerm: ShortTermMemory): boolean {
+function shouldGenerateImageNow(buffer: SensoryBuffer): boolean {
 	if (!isImageGenAvailable()) return false;
 
 	const currentWeek = getWeekStartRD();
 
 	// Already generated this week
-	if (shortTerm.lastImageDate === currentWeek) return false;
+	if (buffer.lastImageDate === currentWeek) return false;
 
 	// New week or missing target — pick a random day+time this week
-	if (shortTerm.imageTargetDate !== currentWeek || !shortTerm.imageTargetTime) {
-		shortTerm.imageTargetTime = generateRandomWeeklyTargetTime();
-		shortTerm.imageTargetDate = currentWeek;
+	if (buffer.imageTargetDate !== currentWeek || !buffer.imageTargetTime) {
+		buffer.imageTargetTime = generateRandomWeeklyTargetTime();
+		buffer.imageTargetDate = currentWeek;
 		if (isDev) {
 			console.log(
 				"[image] New weekly target generated:",
-				shortTerm.imageTargetTime,
+				buffer.imageTargetTime,
 			);
 		}
 	}
 
 	// Check if current time passed target
 	const now = new Date();
-	const target = new Date(shortTerm.imageTargetTime);
+	const target = new Date(buffer.imageTargetTime);
 	return now >= target;
 }
 
@@ -187,52 +192,68 @@ async function processConversation(
 		return;
 	}
 
-	// Load short-term memory (always needed for conversation history)
-	const shortTerm = await loadShortTerm(chatId);
+	// Load sensory buffer
+	const buffer = await loadSensory(chatId);
 
-	// Add user message to short-term
+	// Add user message to sensory buffer
 	const userMessage: ConversationMessage = {
 		role: "user",
 		name: userName,
 		content: userContent,
 		timestamp: Date.now(),
 	};
-	await addMessageToShortTerm(shortTerm, userMessage);
+	const overflow = await addMessageToSensory(buffer, userMessage);
+
+	// Promote overflow to memory in background
+	if (overflow) {
+		promoteToMemory(chatId, overflow).catch(console.error);
+	}
 
 	// Build prompt and messages
 	let systemPrompt: string;
 	let shouldGenImage = false;
 
 	if (isSimpleAssistantMode) {
-		// Simple mode: skip memory loading, use minimal prompt
-		systemPrompt = await buildSystemPrompt([], "", {}, false);
+		systemPrompt = await buildSystemPrompt([], [], false);
 	} else {
-		// Full mode: load all memories
-		const longTermEntries = await loadLongTerm();
-		const relevantMemories = getRelevantMemories(longTermEntries, userContent);
-		const memberMemory = await loadMemberMemory();
+		// Generate query embedding for retrieval
+		const queryEmbedding = await getQueryEmbedding(buffer.messages);
 
-		// Save updated lastAccessed times
-		if (relevantMemories.length > 0) {
-			await saveLongTerm(longTermEntries);
-		}
+		// Retrieve relevant episodes and facts
+		const [episodes, facts] = await Promise.all([
+			getRelevantEpisodes(chatId, queryEmbedding),
+			getRelevantFacts(queryEmbedding),
+		]);
 
-		shouldGenImage = shouldGenerateImageNow(shortTerm);
+		// Also get facts for active participants
 		const activeNames = [
 			...new Set(
-				shortTerm.messages.map((m) => m.name).filter((n): n is string => !!n),
+				buffer.messages.map((m) => m.name).filter((n): n is string => !!n),
 			),
 		];
+		const participantFacts =
+			activeNames.length > 0 ? await getFactsForSubjects(activeNames) : [];
+
+		// Merge and deduplicate facts
+		const allFactIds = new Set(facts.map((f) => f.id));
+		const mergedFacts = [...facts];
+		for (const pf of participantFacts) {
+			if (!allFactIds.has(pf.id)) {
+				mergedFacts.push(pf);
+				allFactIds.add(pf.id);
+			}
+		}
+
+		shouldGenImage = shouldGenerateImageNow(buffer);
 		systemPrompt = await buildSystemPrompt(
-			relevantMemories,
-			shortTerm.previousSummary,
-			memberMemory,
+			episodes,
+			mergedFacts,
 			shouldGenImage,
 			isGroupChat(ctx) ? mentionType : undefined,
 			activeNames,
 		);
 	}
-	const messages = buildMessages(shortTerm);
+	const messages = buildMessages(buffer);
 
 	// Show typing indicator
 	await ctx.replyWithChatAction("typing");
@@ -307,8 +328,8 @@ async function processConversation(
 				});
 				imageSent = true;
 
-				shortTerm.lastImageDate = getWeekStartRD();
-				await saveShortTerm(shortTerm);
+				buffer.lastImageDate = getWeekStartRD();
+				await saveSensory(buffer);
 			} catch (error) {
 				console.error("[image] Error generating image:", error);
 				// Fall through to normal text reply
@@ -318,14 +339,19 @@ async function processConversation(
 		}
 	}
 
-	// Save bot response to short-term (only if non-empty)
+	// Save bot response to sensory buffer (only if non-empty)
 	if (responseText.trim()) {
 		const botMessage: ConversationMessage = {
 			role: "model",
 			content: responseText,
 			timestamp: Date.now(),
 		};
-		await addMessageToShortTerm(shortTerm, botMessage);
+		const botOverflow = await addMessageToSensory(buffer, botMessage);
+
+		// Promote bot overflow too
+		if (botOverflow) {
+			promoteToMemory(chatId, botOverflow).catch(console.error);
+		}
 	}
 
 	// Send text reply if image wasn't sent (or had no caption)
@@ -369,55 +395,80 @@ async function processConversation(
 			}
 		}
 	}
-
-	// Trigger long-term memory evaluation every N messages (disabled in simple mode)
-	if (
-		!isSimpleAssistantMode &&
-		shortTerm.messageCountSinceEval >= EVAL_EVERY_N_MESSAGES
-	) {
-		shortTerm.messageCountSinceEval = 0;
-		// Run evaluation in background (don't await)
-		triggerMemoryEvaluation(shortTerm.messages).catch(console.error);
-	}
 }
 
-async function triggerMemoryEvaluation(
-	messages: ConversationMessage[],
+async function promoteToMemory(
+	chatId: number,
+	overflow: ConversationMessage[],
 ): Promise<void> {
-	const recentText = messages
-		.slice(-8)
+	// Heuristic pre-filter: skip trivial conversation
+	if (!hasSignificantContent(overflow)) {
+		if (isDev) console.log("[promote] Skipped: no significant content");
+		return;
+	}
+
+	const recentText = overflow
 		.map(
 			(m) => `${m.role === "user" ? (m.name ?? "User") : "Bot"}: ${m.content}`,
 		)
 		.join("\n");
 
-	// Load existing context to avoid duplicates
-	const [longTermEntries, memberMemory] = await Promise.all([
-		loadLongTerm(),
-		loadMemberMemory(),
-	]);
+	// Build existing fact summary for dedup
+	const store = await loadSemanticStore();
+	const existingFactSummary =
+		store.length > 0
+			? store
+					.slice(0, 20)
+					.map((f) => `- ${f.content}`)
+					.join("\n")
+			: undefined;
 
-	const existingContext = {
-		memories: longTermEntries.map((e) => ({
-			content: e.content,
-			importance: e.importance,
-		})),
-		memberFacts: Object.fromEntries(
-			Object.entries(memberMemory).map(([member, facts]) => [
-				member,
-				facts.map((f) => f.key),
-			]),
-		),
-	};
+	// LLM: evaluate and extract
+	const result = await evaluateConversationChunk(
+		recentText,
+		existingFactSummary,
+	);
 
-	const evaluation = await evaluateMemory(recentText, existingContext);
+	if (isDev)
+		console.log(
+			`[promote] Summary: "${result.summary}", importance: ${result.importance}, facts: ${result.facts.length}`,
+		);
 
-	if (evaluation.save && evaluation.memories.length > 0) {
-		await addLongTermMemories(evaluation.memories);
-	}
+	// Create episode with embedding
+	const episodeEmbedding = await generateEmbedding(result.summary);
+	const participants = [
+		...new Set(overflow.map((m) => m.name).filter((n): n is string => !!n)),
+	];
 
-	if (evaluation.memberFacts.length > 0) {
-		await addMemberFacts(evaluation.memberFacts);
+	const now = Date.now();
+	await addEpisode(chatId, {
+		id: `ep_${now}_${Math.random().toString(36).slice(2, 8)}`,
+		summary: result.summary,
+		participants,
+		timestamp: now,
+		importance: result.importance,
+		embedding: episodeEmbedding,
+	});
+
+	// Add semantic facts with embeddings
+	if (result.facts.length > 0) {
+		const semanticFacts: SemanticFact[] = [];
+		for (const fact of result.facts) {
+			const factEmbedding = await generateEmbedding(fact.content);
+			semanticFacts.push({
+				id: `fact_${now}_${Math.random().toString(36).slice(2, 8)}`,
+				content: fact.content,
+				category: fact.category,
+				subject: fact.subject,
+				context: fact.context,
+				embedding: factEmbedding,
+				importance: fact.importance,
+				confidence: 1.0,
+				createdAt: now,
+				lastConfirmed: now,
+			});
+		}
+		await addSemanticFacts(semanticFacts);
 	}
 }
 
@@ -577,6 +628,9 @@ function extractYouTubeUrl(
 export function registerHandlers(bot: Bot): void {
 	const botToken = bot.token;
 
+	// Run confidence decay on startup
+	decayConfidence().catch(console.error);
+
 	// Security: only allow the owner (DMs) and the permitted group
 	bot.use(async (ctx, next) => {
 		const chatId = ctx.chat?.id;
@@ -720,22 +774,15 @@ export function registerHandlers(bot: Bot): void {
 		await ctx.reply("✅ Bot encendido. Respondiendo normalmente.");
 	});
 
-	// /optimize command — consolidate member facts + long-term memories (DM only, owner only)
+	// /optimize command — decay confidence + report stats (DM only, owner only)
 	bot.command("optimize", async (ctx) => {
 		if (isGroupChat(ctx)) return;
 
 		await ctx.reply("Optimizando memorias...");
 		try {
-			const [memberResult, ltResult] = await Promise.all([
-				optimizeAllMemberFacts(),
-				optimizeLongTermMemories(),
-			]);
-			const consolidated =
-				memberResult.membersConsolidated.length > 0
-					? memberResult.membersConsolidated.join(", ")
-					: "ninguno";
+			const result = await decayConfidence();
 			await ctx.reply(
-				`Optimizado:\n\nMiembros:\n- Hechos antes: ${memberResult.totalBefore}\n- Hechos ahora: ${memberResult.totalAfter}\n- Consolidados: ${consolidated}\n\nLong-term:\n- Antes: ${ltResult.totalBefore}\n- Ahora: ${ltResult.totalAfter}`,
+				`Optimizado:\n\nSemantic facts: ${result.total}\nEliminados por baja confianza: ${result.removed}`,
 			);
 		} catch (error) {
 			await ctx.reply(`Error optimizando: ${error}`);
