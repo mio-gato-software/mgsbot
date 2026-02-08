@@ -419,6 +419,58 @@ export async function addMemberFacts(
 	await saveMemberMemory(data);
 }
 
+// --- Optimization ---
+
+const CONSOLIDATION_THRESHOLD = 10;
+
+export interface OptimizeResult {
+	totalBefore: number;
+	totalAfter: number;
+	membersConsolidated: string[];
+}
+
+export async function optimizeAllMemberFacts(): Promise<OptimizeResult> {
+	const data = await loadMemberMemory();
+	const targetSize = Math.ceil(CONSOLIDATION_THRESHOLD / 2);
+	let totalBefore = 0;
+	let totalAfter = 0;
+	const membersConsolidated: string[] = [];
+
+	for (const [memberKey, facts] of Object.entries(data)) {
+		if (!facts) continue;
+		totalBefore += facts.length;
+
+		if (facts.length > CONSOLIDATION_THRESHOLD) {
+			try {
+				if (isDev)
+					console.log(
+						`[optimize] Consolidating ${facts.length} facts for "${memberKey}" → target ${targetSize}`,
+					);
+				data[memberKey] = await consolidateMemberFacts(
+					memberKey,
+					facts,
+					targetSize,
+				);
+				membersConsolidated.push(memberKey);
+			} catch (error) {
+				console.error(
+					`[optimize] Consolidation failed for "${memberKey}":`,
+					error,
+				);
+				data[memberKey] = facts
+					.sort((a, b) => b.updatedAt - a.updatedAt)
+					.slice(0, CONSOLIDATION_THRESHOLD);
+				membersConsolidated.push(memberKey);
+			}
+		}
+
+		totalAfter += data[memberKey]?.length ?? 0;
+	}
+
+	await saveMemberMemory(data);
+	return { totalBefore, totalAfter, membersConsolidated };
+}
+
 // --- Initialization ---
 
 export async function initMemoryDirs(): Promise<void> {

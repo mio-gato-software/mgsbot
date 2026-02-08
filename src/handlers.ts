@@ -18,6 +18,7 @@ import {
 	loadLongTerm,
 	loadMemberMemory,
 	loadShortTerm,
+	optimizeAllMemberFacts,
 	saveLongTerm,
 	saveShortTerm,
 } from "./memory.ts";
@@ -674,6 +675,25 @@ export function registerHandlers(bot: Bot): void {
 			);
 		} catch (error) {
 			await ctx.reply(`Error cambiando proveedor: ${error}`);
+		}
+	});
+
+	// /optimize command — consolidate member facts (DM only, owner only)
+	bot.command("optimize", async (ctx) => {
+		if (isGroupChat(ctx)) return;
+
+		await ctx.reply("Optimizando memoria de miembros...");
+		try {
+			const result = await optimizeAllMemberFacts();
+			const consolidated =
+				result.membersConsolidated.length > 0
+					? result.membersConsolidated.join(", ")
+					: "ninguno";
+			await ctx.reply(
+				`Optimizado:\n- Hechos antes: ${result.totalBefore}\n- Hechos ahora: ${result.totalAfter}\n- Miembros consolidados: ${consolidated}`,
+			);
+		} catch (error) {
+			await ctx.reply(`Error optimizando: ${error}`);
 		}
 	});
 
