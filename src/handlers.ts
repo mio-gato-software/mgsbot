@@ -38,6 +38,16 @@ const isDev = process.env.NODE_ENV === "development";
 
 let botOff = false;
 
+function isSleepingHour(): boolean {
+	const now = new Date(
+		new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
+	);
+	const hour = now.getHours();
+	const minute = now.getMinutes();
+	// 11:30 PM (23:30) to 6:00 AM
+	return hour < 6 || (hour === 23 && minute >= 30);
+}
+
 function getUserDisplayName(ctx: Context): string {
 	const user = ctx.from;
 	if (!user) return "Unknown";
@@ -164,7 +174,7 @@ async function processConversation(
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
 
-	if (botOff) {
+	if (botOff || (isGroupChat(ctx) && isSleepingHour())) {
 		try {
 			await ctx.react("😴");
 		} catch (error) {
