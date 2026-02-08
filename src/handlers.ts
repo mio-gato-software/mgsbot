@@ -38,7 +38,10 @@ const isDev = process.env.NODE_ENV === "development";
 
 let botOff = false;
 
+const enableSleepSchedule = process.env.ENABLE_SLEEP_SCHEDULE !== "false";
+
 function isSleepingHour(): boolean {
+	if (!enableSleepSchedule) return false;
 	const now = new Date(
 		new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
 	);
