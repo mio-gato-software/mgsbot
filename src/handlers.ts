@@ -6,6 +6,7 @@ import {
 	evaluateMemory,
 	generateImage,
 	generateResponse,
+	isImageGenAvailable,
 	textToSpeech,
 	transcribeAudio,
 } from "./ai.ts";
@@ -123,6 +124,8 @@ function generateRandomWeeklyTargetTime(): string {
 }
 
 function shouldGenerateImageNow(shortTerm: ShortTermMemory): boolean {
+	if (!isImageGenAvailable()) return false;
+
 	const currentWeek = getWeekStartRD();
 
 	// Already generated this week

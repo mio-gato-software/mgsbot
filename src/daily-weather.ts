@@ -1,7 +1,10 @@
 interface DailyWeather {
 	date: string; // "2026-02-03" (Dominican timezone)
-	description: string; // "clear and sunny, warm"
+	period: string; // "morning" | "afternoon" | "night"
+	description: string; // Spanish: "Despejado"
 	temperature: number;
+	humidity: number;
+	windSpeed: number;
 	fetchedAt: number;
 }
 
@@ -20,16 +23,81 @@ function getTodayDateRD(): string {
 	});
 }
 
-function wmoCodeToDescription(code: number): string {
-	if (code === 0 || code === 1) return "clear and sunny";
-	if (code === 2 || code === 3) return "overcast with clouds";
-	if (code === 45 || code === 48) return "foggy and misty";
-	if (code >= 51 && code <= 57) return "drizzly";
-	if (code >= 61 && code <= 67) return "rainy";
-	if (code >= 80 && code <= 82) return "showery with rain";
-	if (code >= 95 && code <= 99) return "stormy with thunder";
-	return "clear";
+function getCurrentPeriod(): "morning" | "afternoon" | "night" {
+	const hour = Number.parseInt(
+		new Date().toLocaleString("en-US", {
+			timeZone: "America/Santo_Domingo",
+			hour: "numeric",
+			hour12: false,
+		}),
+		10,
+	);
+	if (hour >= 18) return "night";
+	if (hour >= 12) return "afternoon";
+	return "morning";
 }
+
+const WMO_DESCRIPTIONS_ES: Record<number, string> = {
+	0: "Despejado",
+	1: "Mayormente despejado",
+	2: "Parcialmente nublado",
+	3: "Nublado",
+	45: "Niebla",
+	48: "Niebla con escarcha",
+	51: "Llovizna ligera",
+	53: "Llovizna moderada",
+	55: "Llovizna intensa",
+	56: "Llovizna helada ligera",
+	57: "Llovizna helada intensa",
+	61: "Lluvia ligera",
+	63: "Lluvia moderada",
+	65: "Lluvia intensa",
+	66: "Lluvia helada ligera",
+	67: "Lluvia helada intensa",
+	71: "Nieve ligera",
+	73: "Nieve moderada",
+	75: "Nieve intensa",
+	77: "Granizo fino",
+	80: "Chubascos ligeros",
+	81: "Chubascos moderados",
+	82: "Chubascos intensos",
+	85: "Chubascos de nieve ligeros",
+	86: "Chubascos de nieve intensos",
+	95: "Tormenta eléctrica",
+	96: "Tormenta con granizo ligero",
+	99: "Tormenta con granizo intenso",
+};
+
+const WMO_DESCRIPTIONS_EN: Record<number, string> = {
+	0: "clear and sunny",
+	1: "mostly clear",
+	2: "partly cloudy",
+	3: "overcast",
+	45: "foggy",
+	48: "foggy with frost",
+	51: "light drizzle",
+	53: "moderate drizzle",
+	55: "heavy drizzle",
+	56: "light freezing drizzle",
+	57: "heavy freezing drizzle",
+	61: "light rain",
+	63: "moderate rain",
+	65: "heavy rain",
+	66: "light freezing rain",
+	67: "heavy freezing rain",
+	71: "light snow",
+	73: "moderate snow",
+	75: "heavy snow",
+	77: "fine hail",
+	80: "light showers",
+	81: "moderate showers",
+	82: "heavy showers",
+	85: "light snow showers",
+	86: "heavy snow showers",
+	95: "thunderstorm",
+	96: "thunderstorm with light hail",
+	99: "thunderstorm with heavy hail",
+};
 
 function temperatureContext(temp: number): string {
 	if (temp < 20) return "cool";
@@ -57,7 +125,12 @@ async function saveWeather(weather: DailyWeather): Promise<void> {
 	cachedWeather = weather;
 	try {
 		await Bun.write(WEATHER_FILE, JSON.stringify(weather, null, 2));
-		if (isDev) console.log("[daily-weather] Saved to cache:", weather.date);
+		if (isDev)
+			console.log(
+				"[daily-weather] Saved to cache:",
+				weather.date,
+				weather.period,
+			);
 	} catch (error) {
 		console.error("[daily-weather] Error saving cache:", error);
 	}
@@ -66,13 +139,15 @@ async function saveWeather(weather: DailyWeather): Promise<void> {
 interface OpenMeteoResponse {
 	current: {
 		temperature_2m: number;
+		relative_humidity_2m: number;
 		weather_code: number;
+		wind_speed_10m: number;
 	};
 }
 
 async function fetchWeather(): Promise<DailyWeather | null> {
 	try {
-		const url = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,weather_code&timezone=America/Santo_Domingo`;
+		const url = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=America/Santo_Domingo`;
 
 		if (isDev) console.log("[daily-weather] Fetching from Open-Meteo...");
 		const res = await fetch(url);
@@ -86,8 +161,11 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 
 		const weather: DailyWeather = {
 			date: getTodayDateRD(),
-			description: wmoCodeToDescription(current.weather_code),
+			period: getCurrentPeriod(),
+			description: WMO_DESCRIPTIONS_ES[current.weather_code] ?? "Desconocido",
 			temperature: current.temperature_2m,
+			humidity: current.relative_humidity_2m,
+			windSpeed: current.wind_speed_10m,
 			fetchedAt: Date.now(),
 		};
 
@@ -96,7 +174,8 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 			console.log(
 				"[daily-weather] Fetched:",
 				weather.description,
-				`${weather.temperature}C`,
+				`${weather.temperature}°C`,
+				`period=${weather.period}`,
 			);
 		return weather;
 	} catch (error) {
@@ -105,25 +184,48 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 	}
 }
 
+async function getWeather(): Promise<DailyWeather | null> {
+	const today = getTodayDateRD();
+	const period = getCurrentPeriod();
+	const cached = await loadCachedWeather();
+
+	if (cached && cached.date === today && cached.period === period) {
+		if (isDev)
+			console.log("[daily-weather] Using cached weather:", today, period);
+		return cached;
+	}
+
+	return fetchWeather();
+}
+
+/**
+ * Get current weather context in Spanish for system prompt injection.
+ * Returns a string like "Clima actual en Santo Domingo: Despejado, 28°C, humedad 65%, viento 12 km/h"
+ * or null on failure.
+ */
+export async function getCurrentWeatherContext(): Promise<string | null> {
+	const weather = await getWeather();
+	if (!weather) return null;
+
+	return `Clima actual en Santo Domingo: ${weather.description}, ${Math.round(weather.temperature)}°C, humedad ${Math.round(weather.humidity)}%, viento ${Math.round(weather.windSpeed)} km/h`;
+}
+
 /**
  * Get daily weather for image generation prompts.
  * Returns English description like "clear and sunny, warm (28C)" or null on failure.
  */
 export async function getDailyWeatherForImage(): Promise<string | null> {
-	const today = getTodayDateRD();
-	const cached = await loadCachedWeather();
-
-	// Use cache if it's from today
-	if (cached && cached.date === today) {
-		if (isDev) console.log("[daily-weather] Using cached weather from today");
-		const tempContext = temperatureContext(cached.temperature);
-		return `${cached.description}, ${tempContext} (${Math.round(cached.temperature)}C)`;
-	}
-
-	// Fetch fresh weather
-	const weather = await fetchWeather();
+	const weather = await getWeather();
 	if (!weather) return null;
 
+	// Find English description from the weather code
+	// We need to reverse-lookup the code from the Spanish description
+	const code = Number(
+		Object.entries(WMO_DESCRIPTIONS_ES).find(
+			([, desc]) => desc === weather.description,
+		)?.[0],
+	);
+	const englishDesc = WMO_DESCRIPTIONS_EN[code] ?? "clear";
 	const tempContext = temperatureContext(weather.temperature);
-	return `${weather.description}, ${tempContext} (${Math.round(weather.temperature)}C)`;
+	return `${englishDesc}, ${tempContext} (${Math.round(weather.temperature)}C)`;
 }

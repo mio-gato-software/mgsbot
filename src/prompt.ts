@@ -1,5 +1,7 @@
-import type { Content } from "@google/genai";
-import { getDailyWeatherForImage } from "./daily-weather.ts";
+import {
+	getCurrentWeatherContext,
+	getDailyWeatherForImage,
+} from "./daily-weather.ts";
 import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
@@ -163,9 +165,14 @@ export async function buildSystemPrompt(
 		systemPrompt += `\n\n## Estado de disponibilidad\n${busyGuidance}`;
 	}
 
+	const weatherContext = await getCurrentWeatherContext();
+	if (weatherContext) {
+		systemPrompt += `\n\n## Clima actual\n${weatherContext}\n(Usa esta información si el usuario pregunta por el clima o si es relevante para la conversación.)`;
+	}
+
 	if (shouldGenerateImage) {
-		const weatherContext = await getDailyWeatherForImage();
-		const weatherInstruction = weatherContext
+		const imageWeather = await getDailyWeatherForImage();
+		const weatherInstruction = imageWeather
 			? `\n\n**Clima actual:** ${weatherContext}. Si tu escena es al aire libre (playa, parque, calle, terraza, piscina, jardín, balcón, ventana con vista exterior), incorpora este clima visualmente en el prompt: cielo, iluminación, lluvia si aplica, etc. No lo menciones en texto, solo muéstralo. Para escenas completamente interiores sin vista al exterior, ignora el clima.`
 			: "";
 
@@ -192,25 +199,6 @@ El usuario mencionó tu nombre en el mensaje. Evalúa si te está hablando DIREC
 	}
 
 	return systemPrompt;
-}
-
-export function buildContents(memory: ShortTermMemory): Content[] {
-	const contents: Content[] = [];
-
-	for (const msg of memory.messages) {
-		const role = msg.role === "user" ? "user" : "model";
-		const text =
-			msg.role === "user" && msg.name
-				? `[${msg.name}]: ${msg.content}`
-				: msg.content;
-
-		contents.push({
-			role,
-			parts: [{ text }],
-		});
-	}
-
-	return contents;
 }
 
 export function buildMessages(memory: ShortTermMemory): ChatMessage[] {

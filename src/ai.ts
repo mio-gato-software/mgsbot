@@ -9,6 +9,7 @@ import {
 import { type ChatMessage, createChatProvider } from "./providers/index.ts";
 import type { MemberFact, MemoryEvaluation } from "./types.ts";
 
+const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
 const ai = new GoogleGenAI({});
 const MODEL = "gemini-3-flash-preview";
 
@@ -199,10 +200,19 @@ export async function textToSpeech(text: string): Promise<string> {
 	return filePath;
 }
 
+export function isImageGenAvailable(): boolean {
+	return hasGoogleApiKey;
+}
+
 export async function generateImage(
 	prompt: string,
 	referenceImagePath: string,
 ): Promise<Buffer> {
+	if (!hasGoogleApiKey) {
+		throw new Error(
+			"GOOGLE_API_KEY is required for image generation (Gemini-only feature)",
+		);
+	}
 	if (isDev) console.log("[generateImage] Prompt:", prompt.slice(0, 200));
 
 	const ext = referenceImagePath.split(".").pop() ?? "jpg";
@@ -248,15 +258,13 @@ export async function summarizeConversation(
 		? `Previous context: ${existingSummary}\n\n`
 		: "";
 
-	const prompt = `You are a summarizer. Create a concise summary of the conversation, preserving key facts, decisions, and context. Keep it under 150 words.\n\n${context}Conversation to summarize:\n${conversationText}`;
+	const systemPrompt =
+		"You are a summarizer. Create a concise summary of the conversation, preserving key facts, decisions, and context. Keep it under 150 words.";
+	const userMessage = `${context}Conversation to summarize:\n${conversationText}`;
 
-	const response = await ai.models.generateContent({
-		model: MODEL,
-		contents: createUserContent([prompt]),
-	});
-
-	logTokenUsage("summarize", response);
-	return response.text ?? "";
+	return generateResponse(systemPrompt, [
+		{ role: "user", content: userMessage },
+	]);
 }
 
 export async function evaluateMemory(
@@ -289,7 +297,10 @@ IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba. Si l
 		}
 	}
 
-	const prompt = `Extrae de esta conversación:
+	const systemPrompt =
+		"Eres un asistente que extrae información importante de conversaciones. Responde SOLO con JSON válido, sin texto adicional.";
+
+	const userMessage = `Extrae de esta conversación:
 1. **Memorias**: hechos, preferencias, eventos o decisiones importantes para recordar.
 2. **Hechos por miembro**: datos personales (trabajo, hobby, relación, etc.). Key corto en español (ej: "empleo", "hobby", "mascota"). Mismo key para actualizar info previa.
 ${contextSection}
@@ -300,14 +311,10 @@ Si no hay nada: {"save": false, "memories": [], "memberFacts": []}
 Conversación:
 ${recentMessages}`;
 
-	const response = await ai.models.generateContent({
-		model: MODEL,
-		contents: createUserContent([prompt]),
-	});
+	const text = await generateResponse(systemPrompt, [
+		{ role: "user", content: userMessage },
+	]);
 
-	logTokenUsage("evaluateMemory", response);
-	const text =
-		response.text ?? '{"save": false, "memories": [], "memberFacts": []}';
 	try {
 		// Extract JSON from possible markdown code block
 		const jsonMatch = text.match(/\{[\s\S]*\}/);
