@@ -12,6 +12,7 @@ import {
 } from "./ai.ts";
 import { getBrendyBasePath } from "./brendy-appearance.ts";
 import { generateEmbedding } from "./embeddings.ts";
+import { registerIdentity, resolveCanonicalName } from "./identities.ts";
 import {
 	addEpisode,
 	addMessageToSensory,
@@ -57,12 +58,22 @@ function isSleepingHour(): boolean {
 	return hour < 6 || (hour === 23 && minute >= 30);
 }
 
-function getUserDisplayName(ctx: Context): string {
+function getUserInfo(ctx: Context): {
+	name: string;
+	userId: number | undefined;
+	username: string | undefined;
+} {
 	const user = ctx.from;
-	if (!user) return "Unknown";
-	if (user.first_name && user.last_name)
-		return `${user.first_name} ${user.last_name}`;
-	return user.first_name ?? user.username ?? "Unknown";
+	if (!user) return { name: "Unknown", userId: undefined, username: undefined };
+	const name =
+		user.first_name && user.last_name
+			? `${user.first_name} ${user.last_name}`
+			: (user.first_name ?? user.username ?? "Unknown");
+	return { name, userId: user.id, username: user.username };
+}
+
+function getUserDisplayName(ctx: Context): string {
+	return getUserInfo(ctx).name;
 }
 
 function isGroupChat(ctx: Context): boolean {
@@ -192,6 +203,12 @@ async function processConversation(
 		return;
 	}
 
+	// Register identity for this user
+	const { userId, username } = getUserInfo(ctx);
+	if (userId) {
+		await registerIdentity(userId, userName, username);
+	}
+
 	// Load sensory buffer
 	const buffer = await loadSensory(chatId);
 
@@ -199,6 +216,7 @@ async function processConversation(
 	const userMessage: ConversationMessage = {
 		role: "user",
 		name: userName,
+		userId,
 		content: userContent,
 		timestamp: Date.now(),
 	};
@@ -225,12 +243,15 @@ async function processConversation(
 			getRelevantFacts(queryEmbedding),
 		]);
 
-		// Also get facts for active participants
-		const activeNames = [
+		// Also get facts for active participants (canonicalized)
+		const rawActiveNames = [
 			...new Set(
 				buffer.messages.map((m) => m.name).filter((n): n is string => !!n),
 			),
 		];
+		const activeNames = await Promise.all(
+			rawActiveNames.map((n) => resolveCanonicalName(n)),
+		).then((names) => [...new Set(names)]);
 		const participantFacts =
 			activeNames.length > 0 ? await getFactsForSubjects(activeNames) : [];
 
@@ -436,9 +457,12 @@ async function promoteToMemory(
 
 	// Create episode with embedding
 	const episodeEmbedding = await generateEmbedding(result.summary);
-	const participants = [
+	const rawParticipants = [
 		...new Set(overflow.map((m) => m.name).filter((n): n is string => !!n)),
 	];
+	const participants = await Promise.all(
+		rawParticipants.map((n) => resolveCanonicalName(n)),
+	).then((names) => [...new Set(names)]);
 
 	const now = Date.now();
 	await addEpisode(chatId, {
@@ -450,16 +474,19 @@ async function promoteToMemory(
 		embedding: episodeEmbedding,
 	});
 
-	// Add semantic facts with embeddings
+	// Add semantic facts with embeddings (canonicalize subjects)
 	if (result.facts.length > 0) {
 		const semanticFacts: SemanticFact[] = [];
 		for (const fact of result.facts) {
+			const canonicalSubject = fact.subject
+				? await resolveCanonicalName(fact.subject)
+				: undefined;
 			const factEmbedding = await generateEmbedding(fact.content);
 			semanticFacts.push({
 				id: `fact_${now}_${Math.random().toString(36).slice(2, 8)}`,
 				content: fact.content,
 				category: fact.category,
-				subject: fact.subject,
+				subject: canonicalSubject,
 				context: fact.context,
 				embedding: factEmbedding,
 				importance: fact.importance,

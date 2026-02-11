@@ -1,6 +1,7 @@
 export interface ConversationMessage {
 	role: "user" | "model";
 	name?: string;
+	userId?: number;
 	content: string;
 	timestamp: number;
 }

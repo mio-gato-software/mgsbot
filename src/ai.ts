@@ -285,7 +285,7 @@ IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba.
 1. **Resumen del episodio**: Una oración breve describiendo de qué se trató la conversación.
 2. **Importancia**: 1-5 (5 = muy importante).
 3. **Hechos atómicos**: Datos específicos extraídos. Cada hecho debe ser una oración independiente.
-   - category "person": dato sobre una persona específica (incluye "subject" con el nombre)
+   - category "person": dato sobre una persona específica (incluye "subject" con el NOMBRE COMPLETO tal como aparece en los mensajes, ej: "Eliaquín Encarnación", NO solo "Eliaquín")
    - category "group": dinámica grupal o regla de interacción
    - category "rule": regla o límite establecido en la relación
    - category "event": evento, fecha o plan

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { cosineSimilarity, generateEmbedding } from "./embeddings.ts";
+import { getAllAliasesForCanonical } from "./identities.ts";
 import type {
 	ConversationMessage,
 	Episode,
@@ -209,7 +210,15 @@ export async function addSemanticFacts(
 				newFact.embedding,
 				existing.embedding,
 			);
-			if (similarity >= SEMANTIC_DEDUP_THRESHOLD) {
+			// Use lower threshold for same-subject person facts (catch more duplicates)
+			const isSamePersonSubject =
+				newFact.category === "person" &&
+				existing.category === "person" &&
+				newFact.subject &&
+				existing.subject &&
+				normalizeName(newFact.subject) === normalizeName(existing.subject);
+			const threshold = isSamePersonSubject ? 0.8 : SEMANTIC_DEDUP_THRESHOLD;
+			if (similarity >= threshold) {
 				// Update existing: refresh confidence and timestamp
 				existing.lastConfirmed = now;
 				existing.confidence = Math.min(1, existing.confidence + 0.2);
@@ -298,12 +307,21 @@ export async function getFactsForSubjects(
 	names: string[],
 ): Promise<SemanticFact[]> {
 	const store = await loadSemanticStore();
-	const normalizedNames = new Set(names.map(normalizeName));
+
+	// Expand each name to include all known aliases from identity registry
+	const allAliases = new Set<string>();
+	for (const name of names) {
+		const aliases = await getAllAliasesForCanonical(name);
+		for (const alias of aliases) {
+			allAliases.add(alias);
+		}
+	}
+
 	return store.filter(
 		(f) =>
 			f.category === "person" &&
 			f.subject &&
-			normalizedNames.has(normalizeName(f.subject)),
+			allAliases.has(normalizeName(f.subject)),
 	);
 }
 

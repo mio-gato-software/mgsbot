@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { Bot } from "grammy";
 import { registerHandlers } from "./src/handlers.ts";
+import { initIdentities } from "./src/identities.ts";
 import { initMemoryDirs } from "./src/memory.ts";
 
 const token = process.env.BOT_TOKEN;
@@ -10,6 +11,7 @@ const bot = new Bot(token);
 // Initialize directories
 await mkdir("./audios").catch(() => {});
 await initMemoryDirs();
+await initIdentities();
 
 // Register all message handlers
 registerHandlers(bot);

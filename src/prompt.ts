@@ -134,7 +134,7 @@ export async function buildSystemPrompt(
 	const personFacts = relevantFacts.filter((f) => f.category === "person");
 	const generalFacts = relevantFacts.filter((f) => f.category !== "person");
 
-	// Person facts grouped by subject
+	// Person facts grouped by subject (normalized to merge variants)
 	if (personFacts.length > 0) {
 		// Filter to active participants if specified
 		const filteredPersonFacts = activeNames?.length
@@ -147,18 +147,26 @@ export async function buildSystemPrompt(
 			: personFacts;
 
 		if (filteredPersonFacts.length > 0) {
-			// Group by subject
+			// Group by normalized name to merge variants (e.g., "Eliaquín" + "Eliaquín Encarnación")
 			const grouped = new Map<string, SemanticFact[]>();
+			const displayNames = new Map<string, string>(); // normalized -> longest display name
 			for (const fact of filteredPersonFacts) {
-				const key = fact.subject ?? "Desconocido";
+				const subject = fact.subject ?? "Desconocido";
+				const key = normalizeName(subject);
 				const existing = grouped.get(key) ?? [];
 				existing.push(fact);
 				grouped.set(key, existing);
+				// Use the longest variant as the display name
+				const currentDisplay = displayNames.get(key) ?? "";
+				if (subject.length > currentDisplay.length) {
+					displayNames.set(key, subject);
+				}
 			}
 
 			let memberSection = "\n\n## Lo que sabes de los miembros";
-			for (const [name, facts] of grouped) {
-				memberSection += `\n### ${name}`;
+			for (const [key, facts] of grouped) {
+				const displayName = displayNames.get(key) ?? key;
+				memberSection += `\n### ${displayName}`;
 				for (const fact of facts) {
 					memberSection += `\n  - ${fact.content}`;
 				}
