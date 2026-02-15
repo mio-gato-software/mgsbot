@@ -307,9 +307,44 @@ ${recentMessages}`;
 		if (!jsonMatch)
 			return { summary: "conversación casual", importance: 1, facts: [] };
 		const parsed = JSON.parse(jsonMatch[0]) as PromotionResult;
-		parsed.facts = parsed.facts ?? [];
-		return parsed;
+		return validatePromotionResult(parsed);
 	} catch {
 		return { summary: "conversación casual", importance: 1, facts: [] };
 	}
+}
+
+const VALID_CATEGORIES = new Set(["person", "group", "rule", "event"]);
+
+function validatePromotionResult(raw: PromotionResult): PromotionResult {
+	const summary =
+		typeof raw.summary === "string" && raw.summary.trim()
+			? raw.summary.trim()
+			: "conversación casual";
+
+	const importance =
+		typeof raw.importance === "number"
+			? Math.max(1, Math.min(5, Math.round(raw.importance)))
+			: 1;
+
+	const facts = (raw.facts ?? [])
+		.filter((f) => {
+			if (!f.content || typeof f.content !== "string" || !f.content.trim())
+				return false;
+			if (!VALID_CATEGORIES.has(f.category)) return false;
+			if (f.category === "person" && (!f.subject || !f.subject.trim()))
+				return false;
+			return true;
+		})
+		.map((f) => ({
+			...f,
+			content: f.content.trim(),
+			subject: f.subject?.trim(),
+			context: f.context?.trim(),
+			importance:
+				typeof f.importance === "number"
+					? Math.max(1, Math.min(5, Math.round(f.importance)))
+					: importance,
+		}));
+
+	return { summary, importance, facts };
 }

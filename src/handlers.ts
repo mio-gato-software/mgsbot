@@ -235,12 +235,13 @@ async function processConversation(
 		systemPrompt = await buildSystemPrompt([], [], false);
 	} else {
 		// Generate query embedding for retrieval
-		const queryEmbedding = await getQueryEmbedding(buffer.messages);
+		const { embedding: queryEmbedding, text: queryText } =
+			await getQueryEmbedding(buffer.messages);
 
 		// Retrieve relevant episodes and facts
 		const [episodes, facts] = await Promise.all([
-			getRelevantEpisodes(chatId, queryEmbedding),
-			getRelevantFacts(queryEmbedding),
+			getRelevantEpisodes(chatId, queryEmbedding, queryText),
+			getRelevantFacts(queryEmbedding, { queryText }),
 		]);
 
 		// Also get facts for active participants (canonicalized)
@@ -281,6 +282,12 @@ async function processConversation(
 
 	// Generate response
 	let responseText = await generateResponse(systemPrompt, messages);
+
+	// Guard against empty responses (model returned 0 tokens)
+	if (!responseText.trim()) {
+		if (isDev) console.log("[response] Empty response from model, skipping");
+		return;
+	}
 
 	// Check for [SILENCE] marker - bot chose not to respond
 	if (responseText.trim() === SILENCE_MARKER) {
@@ -434,13 +441,12 @@ async function promoteToMemory(
 		)
 		.join("\n");
 
-	// Build existing fact summary for dedup
+	// Build existing fact summary for dedup (include all facts, grouped by subject/category)
 	const store = await loadSemanticStore();
 	const existingFactSummary =
 		store.length > 0
 			? store
-					.slice(0, 20)
-					.map((f) => `- ${f.content}`)
+					.map((f) => `- [${f.subject || f.category}] ${f.content}`)
 					.join("\n")
 			: undefined;
 

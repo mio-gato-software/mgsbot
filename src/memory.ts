@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { cosineSimilarity, generateEmbedding } from "./embeddings.ts";
 import { getAllAliasesForCanonical } from "./identities.ts";
@@ -150,9 +150,38 @@ export async function addEpisode(
 	await saveWorkingMemory(wm);
 }
 
+// --- Keyword Scoring ---
+
+function tokenize(text: string): Set<string> {
+	return new Set(
+		text
+			.toLowerCase()
+			.normalize("NFD")
+			.replace(/[\u0300-\u036f]/g, "")
+			.split(/\s+/)
+			.filter((t) => t.length > 1),
+	);
+}
+
+/**
+ * Compute keyword overlap score between query and candidate text.
+ * Returns 0–1: fraction of query tokens found in candidate.
+ */
+export function computeTextScore(query: string, candidate: string): number {
+	const queryTokens = tokenize(query);
+	if (queryTokens.size === 0) return 0;
+	const candidateTokens = tokenize(candidate);
+	let matches = 0;
+	for (const token of queryTokens) {
+		if (candidateTokens.has(token)) matches++;
+	}
+	return matches / queryTokens.size;
+}
+
 export async function getRelevantEpisodes(
 	chatId: number,
 	queryEmbedding: number[],
+	queryText?: string,
 	maxCount = 5,
 ): Promise<Episode[]> {
 	const wm = await loadWorkingMemory(chatId);
@@ -162,12 +191,19 @@ export async function getRelevantEpisodes(
 
 	const scored = wm.episodes.map((episode) => {
 		const similarity = cosineSimilarity(queryEmbedding, episode.embedding);
+		const keywordScore = queryText
+			? computeTextScore(queryText, episode.summary)
+			: 0;
 		const importanceScore = (episode.importance - 1) / 4;
 		const daysSince = (now - episode.timestamp) / 86_400_000;
 		const recencyScore = Math.exp(-daysSince / 7);
 
-		// 50% semantic similarity, 30% importance, 20% recency
-		const score = 0.5 * similarity + 0.3 * importanceScore + 0.2 * recencyScore;
+		// 40% semantic similarity, 15% keyword, 25% importance, 20% recency
+		const score =
+			0.4 * similarity +
+			0.15 * keywordScore +
+			0.25 * importanceScore +
+			0.2 * recencyScore;
 		return { episode, score };
 	});
 
@@ -178,12 +214,17 @@ export async function getRelevantEpisodes(
 // --- Semantic Memory ---
 
 let semanticCache: SemanticFact[] | null = null;
+let semanticLastMtimeMs = 0;
 
 export async function loadSemanticStore(): Promise<SemanticFact[]> {
-	if (semanticCache) return semanticCache;
 	try {
+		const stat = statSync(SEMANTIC_PATH);
+		if (semanticCache && stat.mtimeMs === semanticLastMtimeMs) {
+			return semanticCache;
+		}
 		const data = await readFile(SEMANTIC_PATH, "utf-8");
 		semanticCache = JSON.parse(data) as SemanticFact[];
+		semanticLastMtimeMs = stat.mtimeMs;
 		return semanticCache;
 	} catch {
 		semanticCache = [];
@@ -194,6 +235,12 @@ export async function loadSemanticStore(): Promise<SemanticFact[]> {
 export async function saveSemanticStore(facts: SemanticFact[]): Promise<void> {
 	semanticCache = facts;
 	await writeFile(SEMANTIC_PATH, JSON.stringify(facts, null, 2));
+	// Update mtime to match what we just wrote
+	try {
+		semanticLastMtimeMs = statSync(SEMANTIC_PATH).mtimeMs;
+	} catch {
+		// ignore
+	}
 }
 
 export async function addSemanticFacts(
@@ -256,6 +303,7 @@ export async function getRelevantFacts(
 		category?: SemanticFact["category"];
 		subject?: string;
 		maxCount?: number;
+		queryText?: string;
 	},
 ): Promise<SemanticFact[]> {
 	const store = await loadSemanticStore();
@@ -281,14 +329,18 @@ export async function getRelevantFacts(
 
 	const scored = candidates.map((fact) => {
 		const similarity = cosineSimilarity(queryEmbedding, fact.embedding);
+		const keywordScore = options?.queryText
+			? computeTextScore(options.queryText, fact.content)
+			: 0;
 		const importanceScore = (fact.importance - 1) / 4;
 		const daysSinceConfirmed = (now - fact.lastConfirmed) / 86_400_000;
 		const recencyScore = Math.exp(-daysSinceConfirmed / 14); // Half-life ~10 days
 
-		// 50% semantic similarity, 25% importance, 15% confidence, 10% recency
+		// 40% semantic similarity, 15% keyword, 20% importance, 15% confidence, 10% recency
 		const score =
-			0.5 * similarity +
-			0.25 * importanceScore +
+			0.4 * similarity +
+			0.15 * keywordScore +
+			0.2 * importanceScore +
 			0.15 * fact.confidence +
 			0.1 * recencyScore;
 
@@ -399,16 +451,17 @@ export function hasSignificantContent(
 
 /**
  * Generate a query embedding from recent messages for retrieval.
+ * Returns the embedding and the raw text used (for hybrid keyword scoring).
  */
 export async function getQueryEmbedding(
 	messages: ConversationMessage[],
-): Promise<number[]> {
-	// Use the last few messages as context for the query
+): Promise<{ embedding: number[]; text: string }> {
 	const recentText = messages
 		.slice(-3)
 		.map((m) => m.content)
 		.join(" ");
-	return generateEmbedding(recentText);
+	const embedding = await generateEmbedding(recentText);
+	return { embedding, text: recentText };
 }
 
 // --- Initialization ---
