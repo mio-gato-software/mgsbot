@@ -39,6 +39,7 @@ memory/semantic.json
 memory/sensory/
 memory/episodes/
 memory/daily-weather.json
+memory/embedding-cache.json
 
 # Old memory files (pre-migration)
 memory/short-term/
