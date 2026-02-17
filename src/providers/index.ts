@@ -1,3 +1,4 @@
+import { AlibabaChatProvider } from "./alibaba.ts";
 import { AnthropicChatProvider } from "./anthropic.ts";
 import { AzureChatProvider } from "./azure.ts";
 import { GeminiChatProvider } from "./gemini.ts";
@@ -24,6 +25,9 @@ export function createChatProvider(): ChatProvider {
 			break;
 		case "azure":
 			cachedProvider = new AzureChatProvider();
+			break;
+		case "alibaba":
+			cachedProvider = new AlibabaChatProvider();
 			break;
 		default:
 			cachedProvider = new GeminiChatProvider();
@@ -58,6 +62,11 @@ export function switchChatProvider(
 			cachedProvider = model
 				? new AzureChatProvider(model)
 				: new AzureChatProvider();
+			break;
+		case "alibaba":
+			cachedProvider = model
+				? new AlibabaChatProvider(model)
+				: new AlibabaChatProvider();
 			break;
 		default:
 			throw new Error(`Unknown provider: ${providerName}`);

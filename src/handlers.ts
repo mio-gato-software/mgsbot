@@ -761,6 +761,7 @@ export function registerHandlers(bot: Bot): void {
 		"openrouter",
 		"anthropic",
 		"azure",
+		"alibaba",
 	] as const;
 
 	bot.command("provider", async (ctx) => {
