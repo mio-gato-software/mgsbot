@@ -921,6 +921,18 @@ export function registerHandlers(bot: Bot): void {
 		// In groups, only respond when mentioned
 		if (isGroupChat(ctx) && mentionType === "none") return;
 
+		// Reply-to-text: include quoted message content for context
+		const replyText = ctx.message.reply_to_message?.text;
+		if (replyText) {
+			const replySenderUser = ctx.message.reply_to_message?.from;
+			const replySenderName = replySenderUser
+				? (replySenderUser.first_name ?? replySenderUser.username ?? "Unknown")
+				: "Unknown";
+			const content = `[Respondiendo al mensaje de ${replySenderName}: "${replyText}"]\n\n${text}`;
+			await processConversation(ctx, content, userName, mentionType);
+			return;
+		}
+
 		await processConversation(ctx, text, userName, mentionType);
 	});
 }
