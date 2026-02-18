@@ -794,6 +794,24 @@ export function registerHandlers(bot: Bot): void {
 		}
 	});
 
+	// /help command — show available commands (DM only, owner only)
+	bot.command("help", async (ctx) => {
+		if (isGroupChat(ctx)) return;
+
+		await ctx.reply(
+			[
+				"*Comandos disponibles:*",
+				"",
+				"/help — Mostrar esta lista de comandos",
+				"/provider — Ver o cambiar el proveedor de chat",
+				"/on — Encender el bot",
+				"/off — Apagar el bot",
+				"/optimize — Optimizar memorias (decay de confianza)",
+			].join("\n"),
+			{ parse_mode: "Markdown" },
+		);
+	});
+
 	// /off command — disable bot responses (DM only, owner only)
 	bot.command("off", async (ctx) => {
 		if (isGroupChat(ctx)) return;
