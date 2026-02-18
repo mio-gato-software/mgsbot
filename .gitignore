@@ -49,3 +49,5 @@ memory/*.backup.json
 
 # Bun lockfile
 bun.lock
+
+update.sh
