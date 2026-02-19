@@ -868,6 +868,7 @@ export function registerHandlers(bot: Bot): void {
 			const replyMsg = ctx.message.reply_to_message;
 			const replyVoice = replyMsg?.voice;
 			const replyAudio = replyMsg?.audio;
+			const replyPhoto = replyMsg?.photo;
 
 			if (replyVoice || replyAudio) {
 				if (isGroupChat(ctx) && mentionType === "none") return;
@@ -912,6 +913,66 @@ export function registerHandlers(bot: Bot): void {
 					if (isDev)
 						await ctx
 							.reply(`[Dev] Reply-to-audio error: ${error}`)
+							.catch(() => {});
+				}
+				return;
+			}
+
+			// Reply-to-photo: describe image from replied message
+			if (replyPhoto && replyPhoto.length > 0) {
+				if (isGroupChat(ctx) && mentionType === "none") return;
+
+				try {
+					const photo = replyPhoto[replyPhoto.length - 1];
+					if (!photo) throw new Error("No photo found in replied message");
+					const file = await ctx.api.getFile(photo.file_id);
+					const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+					if (isDev) console.log("[reply-to-photo] Downloading from:", url);
+
+					const response = await fetch(url);
+					if (!response.ok) {
+						throw new Error(
+							`Download failed: ${response.status} ${response.statusText}`,
+						);
+					}
+
+					const ext = file.file_path?.split(".").pop() ?? "jpg";
+					const mimeType = ext === "png" ? "image/png" : "image/jpeg";
+					const replyMessageId = replyMsg?.message_id as number;
+					const filePath = `./audios/photo_reply_${replyMessageId}.${ext}`;
+					const imageBuffer = Buffer.from(await response.arrayBuffer());
+					await Bun.write(filePath, imageBuffer);
+					if (isDev)
+						console.log(
+							"[reply-to-photo] Saved to:",
+							filePath,
+							`(${imageBuffer.length} bytes)`,
+						);
+
+					const replyCaption = replyMsg?.caption;
+					const description = await describeImage(
+						filePath,
+						mimeType,
+						replyCaption ?? undefined,
+					);
+
+					const photoSenderUser = replyMsg?.from;
+					const photoSender = photoSenderUser
+						? (photoSenderUser.first_name ??
+							photoSenderUser.username ??
+							"Unknown")
+						: "Unknown";
+
+					const content = text
+						? `[Image from ${photoSender}]: ${description}\n\n${userName}'s message: "${text}"`
+						: `[Image from ${photoSender}]: ${description}`;
+
+					await processConversation(ctx, content, userName, mentionType);
+				} catch (error) {
+					console.error("[reply-to-photo handler] Error:", error);
+					if (isDev)
+						await ctx
+							.reply(`[Dev] Reply-to-photo error: ${error}`)
 							.catch(() => {});
 				}
 				return;
