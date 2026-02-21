@@ -211,6 +211,7 @@ async function processConversation(
 
 	// Load sensory buffer
 	const buffer = await loadSensory(chatId);
+	const allowPhotoRequest = buffer.allowPhotoRequest === true;
 
 	// Add user message to sensory buffer
 	const userMessage: ConversationMessage = {
@@ -273,6 +274,7 @@ async function processConversation(
 			shouldGenImage,
 			isGroupChat(ctx) ? mentionType : undefined,
 			activeNames,
+			allowPhotoRequest,
 		);
 	}
 	const messages = buildMessages(buffer);
@@ -329,11 +331,12 @@ async function processConversation(
 		reply_to_message_id: isGroupChat(ctx) ? ctx.message?.message_id : undefined,
 	};
 
-	// Check for image marker and generate image (only if allowed today)
-	const imageMatch = shouldGenImage
+	// Check for image marker and generate image (weekly schedule or one-time allowed request)
+	const canGenerateImage = shouldGenImage || allowPhotoRequest;
+	const imageMatch = canGenerateImage
 		? responseText.match(IMAGE_MARKER_REGEX)
 		: null;
-	if (!shouldGenImage) {
+	if (!canGenerateImage) {
 		responseText = responseText.replace(IMAGE_MARKER_REGEX, "").trim();
 	}
 	let imageSent = false;
@@ -356,8 +359,18 @@ async function processConversation(
 				});
 				imageSent = true;
 
-				buffer.lastImageDate = getWeekStartRD();
-				await saveSensory(buffer);
+				let shouldSaveBuffer = false;
+				if (shouldGenImage) {
+					buffer.lastImageDate = getWeekStartRD();
+					shouldSaveBuffer = true;
+				}
+				if (allowPhotoRequest) {
+					buffer.allowPhotoRequest = false;
+					shouldSaveBuffer = true;
+				}
+				if (shouldSaveBuffer) {
+					await saveSensory(buffer);
+				}
 			} catch (error) {
 				console.error("[image] Error generating image:", error);
 				// Fall through to normal text reply
@@ -794,6 +807,28 @@ export function registerHandlers(bot: Bot): void {
 		}
 	});
 
+	// /allowphotorequest command — allow one photo request in group (DM only, owner only)
+	bot.command("allowphotorequest", async (ctx) => {
+		if (isGroupChat(ctx)) return;
+		if (!Number.isFinite(ALLOWED_GROUP_ID)) {
+			await ctx.reply(
+				"Error: ALLOWED_GROUP_ID no está configurado correctamente.",
+			);
+			return;
+		}
+
+		try {
+			const groupBuffer = await loadSensory(ALLOWED_GROUP_ID);
+			groupBuffer.allowPhotoRequest = true;
+			await saveSensory(groupBuffer);
+			await ctx.reply(
+				"✅ allowPhotoRequest activado. La próxima solicitud directa de foto en el grupo enviará una imagen contextual y luego se desactivará automáticamente.",
+			);
+		} catch (error) {
+			await ctx.reply(`Error activando allowPhotoRequest: ${error}`);
+		}
+	});
+
 	// /help command — show available commands (DM only, owner only)
 	bot.command("help", async (ctx) => {
 		if (isGroupChat(ctx)) return;
@@ -804,6 +839,7 @@ export function registerHandlers(bot: Bot): void {
 				"",
 				"/help — Mostrar esta lista de comandos",
 				"/provider — Ver o cambiar el proveedor de chat",
+				"/allowphotorequest — Permitir 1 foto bajo petición en el grupo",
 				"/on — Encender el bot",
 				"/off — Apagar el bot",
 				"/optimize — Optimizar memorias (decay de confianza)",

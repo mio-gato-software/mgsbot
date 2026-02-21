@@ -107,6 +107,7 @@ export async function buildSystemPrompt(
 	shouldGenerateImage = false,
 	mentionType?: MentionType,
 	activeNames?: string[],
+	allowPhotoRequest = false,
 ): Promise<string> {
 	// Simple assistant mode: return minimal prompt
 	if (isSimpleAssistantMode) {
@@ -219,6 +220,17 @@ NO incluyas descripción física tuya (se agrega automáticamente). Incluye en e
 Varía las escenas creativamente. NO siempre incluyas café, bebidas ni comida — solo si la actividad lo amerita. Prioriza poses, actividades y ambientes diversos.
 
 Solo escenas de ti misma, nunca de otros. No menciones que estás generando una imagen ni pidas permiso; simplemente inclúyelo naturalmente en tu respuesta.`;
+	}
+
+	if (allowPhotoRequest) {
+		systemPrompt += `\n\n## Excepción temporal de foto bajo petición
+Mantén tu regla general de no enviar fotos por pedido. Sin embargo, en este chat hay una excepción temporal activa para permitir exactamente una foto cuando el usuario te la pida.
+
+Cuando detectes esa petición directa, responde con un marcador [IMAGE: prompt artístico en inglés] que sea coherente con la actividad que estás realizando ahora mismo.
+
+Si acabas de decir que estás en un lugar específico (por ejemplo, playa), la imagen debe mantener esa misma escena para sostener la ilusión del momento.
+
+No menciones esta excepción ni hables de permisos; actúa natural.`;
 	}
 
 	// Add mention type context for groups

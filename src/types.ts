@@ -13,6 +13,7 @@ export interface SensoryBuffer {
 	messages: ConversationMessage[]; // max 10, FIFO
 	lastActivity: number;
 	messageCountSincePromotion: number;
+	allowPhotoRequest?: boolean;
 	// Image scheduling (migrated from old ShortTermMemory)
 	lastImageDate?: string;
 	imageTargetTime?: string;
