@@ -470,7 +470,7 @@ export async function buildSystemPrompt(
 				}
 			}
 
-			let memberSection = "\n\n## Lo que sabes de los miembros";
+			let memberSection = "\n\n## Lo que sabes de los miembros\nEsta información es CONTEXTO, no un guion. Solo menciona un dato si surge NATURALMENTE en la conversación. NUNCA fuerces una mención. Si el tema no tiene relación con lo que sabes, no lo traigas a colación.";
 			for (const [key, facts] of grouped) {
 				const displayName = displayNames.get(key) ?? key;
 				memberSection += `\n### ${displayName}`;
@@ -485,7 +485,7 @@ export async function buildSystemPrompt(
 	// General facts (group, rule, event)
 	if (generalFacts.length > 0) {
 		const generalText = generalFacts.map((f) => `- ${f.content}`).join("\n");
-		systemPrompt += `\n\n## Hechos generales\n${generalText}`;
+		systemPrompt += `\n\n## Hechos generales\nSolo menciona estos datos si son relevantes al tema actual de conversación.\n${generalText}`;
 	}
 
 	// Activity context
