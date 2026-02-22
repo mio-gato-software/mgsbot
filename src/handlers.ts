@@ -249,7 +249,9 @@ async function processConversation(
 			.filter((m) => m.role === "user")
 			.map((m) => m.content)
 			.join("\n");
-		detectAndStoreFollowUps(chatId, recentText).catch(console.error);
+		detectAndStoreFollowUps(chatId, recentText, userContent).catch(
+			console.error,
+		);
 	}
 
 	// Build prompt and messages

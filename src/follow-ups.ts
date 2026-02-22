@@ -6,7 +6,6 @@ import {
 	computeTextScore,
 	loadSensory,
 } from "./memory.ts";
-import { buildMessages, buildSystemPrompt } from "./prompt.ts";
 import type { ConversationMessage, FollowUp } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -170,21 +169,13 @@ export async function checkAndCancelResolvedFollowUps(
 
 // --- Follow-up message generation ---
 
-async function generateFollowUpMessage(
-	chatId: number,
-	followUp: FollowUp,
-): Promise<string> {
-	const buffer = await loadSensory(chatId);
-
-	const systemPrompt = await buildSystemPrompt([], [], false);
-	const followUpInstruction = `\n\n## Instrucción especial
-Estás haciendo seguimiento de algo que la usuaria mencionó antes. Ella dijo que iba a: "${followUp.event}".
-Pregúntale casualmente cómo le fue, como lo haría una amiga. Sé natural, breve y no invasiva.
-Sugerencia de pregunta (puedes adaptarla): "${followUp.followUpQuestion}"
-NO menciones que estás "haciendo seguimiento" ni uses lenguaje robótico. Solo pregunta con curiosidad natural.`;
-
-	const messages = buildMessages(buffer);
-	return generateResponse(systemPrompt + followUpInstruction, messages);
+async function generateFollowUpMessage(followUp: FollowUp): Promise<string> {
+	const systemPrompt =
+		"Eres una amiga casual. Genera una variación natural y breve de la pregunta dada. No expliques nada, solo responde con la pregunta variada.";
+	const messages: ConversationMessage[] = [
+		{ role: "user", content: followUp.followUpQuestion },
+	];
+	return generateResponse(systemPrompt, messages);
 }
 
 // --- Main checker (called from setInterval) ---
@@ -244,7 +235,7 @@ export async function checkAndSendFollowUps(
 	followUp.attempts++;
 
 	try {
-		const message = await generateFollowUpMessage(followUp.chatId, followUp);
+		const message = await generateFollowUpMessage(followUp);
 
 		if (!message.trim()) {
 			if (isDev) console.log("[follow-ups] Empty message generated, skipping");
@@ -294,6 +285,7 @@ export async function checkAndSendFollowUps(
 export async function detectAndStoreFollowUps(
 	chatId: number,
 	recentMessages: string,
+	latestMessage: string,
 ): Promise<void> {
 	if (process.env.ENABLE_FOLLOW_UPS !== "true") return;
 
@@ -304,7 +296,11 @@ export async function detectAndStoreFollowUps(
 		timeStyle: "short",
 	});
 
-	const extracted = await extractFollowUps(recentMessages, currentDateDR);
+	const extracted = await extractFollowUps(
+		recentMessages,
+		currentDateDR,
+		latestMessage,
+	);
 
 	for (const fu of extracted) {
 		const eventTime = new Date(fu.when).getTime();

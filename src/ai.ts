@@ -341,9 +341,10 @@ interface ExtractedFollowUp {
 export async function extractFollowUps(
 	recentMessages: string,
 	currentDateDR: string,
+	latestMessage: string,
 ): Promise<ExtractedFollowUp[]> {
-	// Pre-filter: only call AI if messages show follow-up intent
-	if (!hasFollowUpIntent(recentMessages)) return [];
+	// Pre-filter: only check the latest message for follow-up intent
+	if (!hasFollowUpIntent(latestMessage)) return [];
 
 	const systemPrompt =
 		"Eres un asistente que detecta planes o eventos futuros en conversaciones. Responde SOLO con JSON válido, sin texto adicional.";
