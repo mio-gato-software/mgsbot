@@ -15,7 +15,7 @@ const SETUP_SYSTEM_PROMPT = `Eres un asistente de configuración inicial para un
 Tu objetivo es recopilar 4 datos fundamentales del dueño del bot para generar la personalidad del bot:
 1. Nombre del bot
 2. Año de nacimiento del bot (ej. 1995). La edad se calculará automáticamente, así el personaje crece con el tiempo.
-3. Sexo (ej. Mujer, Hombre, No binario)
+3. Sexo
 4. Personalidad (breve descripción de cómo debe actuar, hablar y comportarse)
 
 Instrucciones:
