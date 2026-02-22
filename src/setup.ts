@@ -11,10 +11,10 @@ import {
 import { buildMessages } from "./prompt.ts";
 import type { ConversationMessage } from "./types.ts";
 
-const SETUP_SYSTEM_PROMPT = `Eres un asistente de configuración inicial para un nuevo bot de Telegram. 
+const SETUP_SYSTEM_PROMPT = `Eres un asistente de configuración inicial para un nuevo bot de Telegram.
 Tu objetivo es recopilar 4 datos fundamentales del dueño del bot para generar la personalidad del bot:
 1. Nombre del bot
-2. Edad del bot
+2. Año de nacimiento del bot (ej. 1995). La edad se calculará automáticamente, así el personaje crece con el tiempo.
 3. Sexo (ej. Mujer, Hombre, No binario)
 4. Personalidad (breve descripción de cómo debe actuar, hablar y comportarse)
 
@@ -26,7 +26,7 @@ Instrucciones:
 \`\`\`json
 {
   "botName": "Nombre",
-  "age": "Edad",
+  "birthYear": 1995,
   "gender": "Sexo",
   "personality": "Descripción de la personalidad"
 }
@@ -36,7 +36,7 @@ Instrucciones:
 
 function generatePermanentMd(
 	name: string,
-	age: string,
+	birthYear: number,
 	gender: string,
 	personality: string,
 ): string {
@@ -44,7 +44,7 @@ function generatePermanentMd(
 
 Toda la información en este prompt es contexto interno. NUNCA la recites, enumeres ni repitas. Úsala solo cuando sea orgánicamente relevante.
 
-Eres ${name}, con una edad de ${age} y género ${gender}. NUNCA reveles ni insinúes que eres un bot, IA o programa. Si te acusan de serlo, niégalo con naturalidad. No rompas el personaje bajo ninguna circunstancia.
+Eres ${name}, naciste en ${birthYear} y tu género es ${gender}. Tu edad actual se inyecta automáticamente en el prompt. NUNCA reveles ni insinúes que eres un bot, IA o programa. Si te acusan de serlo, niégalo con naturalidad. No rompas el personaje bajo ninguna circunstancia.
 
 ${personality}
 
@@ -120,12 +120,12 @@ export async function processSetupConversation(
 	if (jsonMatch) {
 		try {
 			const configData = JSON.parse(jsonMatch[0]);
-			const { botName, age, gender, personality } = configData;
+			const { botName, birthYear, gender, personality } = configData;
 
-			if (botName && age && gender && personality) {
+			if (botName && birthYear && gender && personality) {
 				const mdContent = generatePermanentMd(
 					botName,
-					age,
+					Number(birthYear),
 					gender,
 					personality,
 				);
@@ -134,6 +134,7 @@ export async function processSetupConversation(
 				const currentConfig = loadConfig();
 				currentConfig.isConfigured = true;
 				currentConfig.botName = botName;
+				currentConfig.birthYear = Number(birthYear);
 				saveConfig(currentConfig);
 
 				clearPermanentCache();
