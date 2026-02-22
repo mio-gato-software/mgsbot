@@ -35,21 +35,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Bot runtime data
 audios/
-memory/semantic.json
-memory/sensory/
-memory/episodes/
-memory/daily-weather.json
-memory/embedding-cache.json
-memory/permanent.md
-memory/bot_config.json
-memory/identities.json
-memory/follow-ups.json
-
-# Old memory files (pre-migration)
-memory/short-term/
-memory/long-term.json
-memory/members.json
-memory/*.backup.json
+memory/
 
 # Bun lockfile
 bun.lock
