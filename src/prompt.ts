@@ -1,4 +1,4 @@
-import { getBotAge, getBotName } from "./config.ts";
+import { getBotName } from "./config.ts";
 import {
 	getCurrentWeatherContext,
 	getDailyWeatherForImage,
@@ -83,11 +83,6 @@ export async function buildSystemPrompt(
 		timeStyle: "short",
 	});
 	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (hora de República Dominicana)`;
-
-	const age = getBotAge();
-	if (age !== null) {
-		systemPrompt += `\n\nTu edad actual: ${age} años.`;
-	}
 
 	// Episodes (recent conversation memories)
 	if (relevantEpisodes.length > 0) {

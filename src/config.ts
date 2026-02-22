@@ -85,12 +85,3 @@ export function isBotConfigured(): boolean {
 export function getBotName(): string {
 	return loadConfig().botName;
 }
-
-export function getBotAge(): number | null {
-	const { birthYear } = loadConfig();
-	if (!birthYear) return null;
-	const now = new Date(
-		new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
-	);
-	return now.getFullYear() - birthYear;
-}
