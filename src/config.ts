@@ -13,43 +13,66 @@ const DEFAULT_CONFIG: BotConfig = {
 	botName: "Brendy", // Default fallback
 };
 
+// Cache config in memory (1-minute TTL, same pattern as loadPermanent)
+let configCache: BotConfig | null = null;
+let configLastRead = 0;
+const CONFIG_CACHE_MS = 60_000;
+
+function migrateFromPermanent(): BotConfig {
+	if (!existsSync(PERMANENT_PATH)) return { ...DEFAULT_CONFIG };
+
+	const permData = readFileSync(PERMANENT_PATH, "utf-8");
+	const match = permData.match(/^# Personalidad de (.+)/im);
+	let botName = "Brendy";
+	if (match?.[1]) {
+		botName = match[1].trim();
+	}
+
+	const migratedConfig: BotConfig = {
+		isConfigured: true,
+		botName: botName,
+	};
+
+	saveConfig(migratedConfig);
+	return migratedConfig;
+}
+
 export function loadConfig(): BotConfig {
+	const now = Date.now();
+	if (configCache && now - configLastRead < CONFIG_CACHE_MS) {
+		return configCache;
+	}
+
 	try {
 		if (!existsSync(CONFIG_PATH)) {
-			// Migration for existing bots: if permanent.md exists, assume it is already configured
-			if (existsSync(PERMANENT_PATH)) {
-				const permData = readFileSync(PERMANENT_PATH, "utf-8");
-				const match = permData.match(/^# Personalidad de (.+)/im);
-				let botName = "Brendy";
-				if (match?.[1]) {
-					botName = match[1].trim();
-				}
-
-				const migratedConfig: BotConfig = {
-					isConfigured: true,
-					botName: botName,
-				};
-
-				saveConfig(migratedConfig);
-				return migratedConfig;
-			}
-			return { ...DEFAULT_CONFIG };
+			configCache = migrateFromPermanent();
+			configLastRead = now;
+			return configCache;
 		}
 		const data = readFileSync(CONFIG_PATH, "utf-8");
 		const parsed = JSON.parse(data);
-		return {
+		configCache = {
 			isConfigured: parsed.isConfigured ?? false,
 			botName: parsed.botName ?? "Brendy",
 		};
+		configLastRead = now;
+		return configCache;
 	} catch (error) {
 		console.error("[config] Error loading config:", error);
-		return { ...DEFAULT_CONFIG };
+		// Fallback: if bot_config.json is corrupted but permanent.md exists,
+		// the bot is still configured — don't block all messages
+		configCache = migrateFromPermanent();
+		configLastRead = now;
+		return configCache;
 	}
 }
 
 export function saveConfig(config: BotConfig): void {
 	try {
 		writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+		// Update cache immediately after save
+		configCache = config;
+		configLastRead = Date.now();
 	} catch (error) {
 		console.error("[config] Error saving config:", error);
 	}
