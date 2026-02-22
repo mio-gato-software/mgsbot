@@ -47,6 +47,17 @@ export interface SemanticFact {
 	lastConfirmed: number;
 }
 
+export interface FollowUp {
+	id: string; // "fu_<timestamp>_<random>"
+	chatId: number;
+	event: string; // "ir al cine a las 8pm"
+	followUpQuestion: string; // Pre-generated fallback question
+	detectedAt: number;
+	scheduledFor: number; // When to ask
+	status: "pending" | "sent" | "cancelled" | "expired";
+	attempts: number;
+}
+
 export interface PromotionResult {
 	summary: string; // episode summary
 	importance: number; // 1-5

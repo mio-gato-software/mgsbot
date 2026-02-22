@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { Bot } from "grammy";
-import { registerHandlers } from "./src/handlers.ts";
+import { checkAndSendFollowUps, initFollowUps } from "./src/follow-ups.ts";
+import { isBotOff, isSleepingHour, registerHandlers } from "./src/handlers.ts";
 import { initIdentities } from "./src/identities.ts";
 import { initMemoryDirs } from "./src/memory.ts";
 
@@ -12,6 +13,7 @@ const bot = new Bot(token);
 await mkdir("./audios").catch(() => {});
 await initMemoryDirs();
 await initIdentities();
+await initFollowUps();
 
 // Register all message handlers
 registerHandlers(bot);
@@ -21,6 +23,15 @@ bot.catch((err) => {
 });
 
 bot.start();
+
+// Follow-up checker (only if enabled)
+if (process.env.ENABLE_FOLLOW_UPS === "true") {
+	setInterval(() => {
+		checkAndSendFollowUps(bot.api, isBotOff, isSleepingHour).catch(
+			console.error,
+		);
+	}, 60_000);
+}
 
 if (process.env.NODE_ENV === "development") {
 	console.log(`[startup] Bot started (NODE_ENV=development)`);

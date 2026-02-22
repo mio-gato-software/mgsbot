@@ -13,6 +13,10 @@ import {
 import { getBaseImagePath } from "./appearance.ts";
 import { getBotName, isBotConfigured } from "./config.ts";
 import { generateEmbedding } from "./embeddings.ts";
+import {
+	checkAndCancelResolvedFollowUps,
+	detectAndStoreFollowUps,
+} from "./follow-ups.ts";
 import { registerIdentity, resolveCanonicalName } from "./identities.ts";
 import {
 	addEpisode,
@@ -47,9 +51,13 @@ const isDev = process.env.NODE_ENV === "development";
 
 let botOff = false;
 
+export function isBotOff(): boolean {
+	return botOff;
+}
+
 const enableSleepSchedule = process.env.ENABLE_SLEEP_SCHEDULE !== "false";
 
-function isSleepingHour(): boolean {
+export function isSleepingHour(): boolean {
 	if (!enableSleepSchedule) return false;
 	const now = new Date(
 		new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
@@ -232,6 +240,16 @@ async function processConversation(
 	// Promote overflow to memory in background
 	if (overflow) {
 		promoteToMemory(chatId, overflow).catch(console.error);
+	}
+
+	// Follow-up detection and cancellation (DMs only, background)
+	if (!isGroupChat(ctx)) {
+		checkAndCancelResolvedFollowUps(chatId, userContent).catch(console.error);
+		const recentText = buffer.messages
+			.filter((m) => m.role === "user")
+			.map((m) => m.content)
+			.join("\n");
+		detectAndStoreFollowUps(chatId, recentText).catch(console.error);
 	}
 
 	// Build prompt and messages

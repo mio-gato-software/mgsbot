@@ -313,6 +313,91 @@ ${recentMessages}`;
 	}
 }
 
+// --- Follow-up extraction ---
+
+const FOLLOW_UP_INTENT_PATTERNS = [
+	/\b(voy a|iré a|vamos a|tengo que|me toca|tengo una?)\b/i,
+	/\b(esta noche|mañana|esta tarde|hoy|el lunes|el martes|el miércoles|el jueves|el viernes|el sábado|el domingo|este fin de semana)\b/i,
+	/\b(cita|reunión|entrevista|examen|viaje|cine|película|doctor|fiesta|concierto|clase|gym|gimnasio|salón|peluquería)\b/i,
+	/\b(a las \d{1,2}|pm|am)\b/i,
+];
+
+export function hasFollowUpIntent(text: string): boolean {
+	let matchCount = 0;
+	for (const pattern of FOLLOW_UP_INTENT_PATTERNS) {
+		if (pattern.test(text)) matchCount++;
+	}
+	// Require at least 2 pattern matches to reduce false positives
+	return matchCount >= 2;
+}
+
+interface ExtractedFollowUp {
+	event: string;
+	when: string; // ISO timestamp
+	followUpDelayHours: number;
+	question: string;
+}
+
+export async function extractFollowUps(
+	recentMessages: string,
+	currentDateDR: string,
+): Promise<ExtractedFollowUp[]> {
+	// Pre-filter: only call AI if messages show follow-up intent
+	if (!hasFollowUpIntent(recentMessages)) return [];
+
+	const systemPrompt =
+		"Eres un asistente que detecta planes o eventos futuros en conversaciones. Responde SOLO con JSON válido, sin texto adicional.";
+
+	const userMessage = `Analiza estos mensajes y extrae planes o eventos futuros mencionados por el usuario.
+
+Fecha y hora actual en República Dominicana: ${currentDateDR}
+
+Para cada plan detectado, extrae:
+- "event": descripción corta del evento (ej: "ir al cine", "cita con el doctor")
+- "when": fecha y hora estimada del evento en formato ISO 8601 (usa la fecha actual para resolver tiempos relativos como "esta noche", "mañana")
+- "followUpDelayHours": horas después del evento para hacer seguimiento (normalmente 1-3 horas después)
+- "question": pregunta casual y natural para hacer seguimiento (como haría una amiga, ej: "no me dijiste cómo te fue en el cine!")
+
+Responde SOLO JSON:
+{"followUps": [{"event": "...", "when": "...", "followUpDelayHours": 2, "question": "..."}]}
+
+Si no hay planes futuros: {"followUps": []}
+
+Mensajes:
+${recentMessages}`;
+
+	try {
+		const text = await generateResponse(systemPrompt, [
+			{ role: "user", content: userMessage },
+		]);
+
+		const jsonMatch = text.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) return [];
+
+		const parsed = JSON.parse(jsonMatch[0]) as {
+			followUps: ExtractedFollowUp[];
+		};
+		if (!Array.isArray(parsed.followUps)) return [];
+
+		// Validate each follow-up
+		return parsed.followUps.filter(
+			(fu) =>
+				fu.event &&
+				typeof fu.event === "string" &&
+				fu.when &&
+				typeof fu.when === "string" &&
+				!Number.isNaN(Date.parse(fu.when)) &&
+				typeof fu.followUpDelayHours === "number" &&
+				fu.followUpDelayHours > 0 &&
+				fu.question &&
+				typeof fu.question === "string",
+		);
+	} catch (error) {
+		if (isDev) console.error("[extractFollowUps] Error:", error);
+		return [];
+	}
+}
+
 const VALID_CATEGORIES = new Set(["person", "group", "rule", "event"]);
 
 function validatePromotionResult(raw: PromotionResult): PromotionResult {
