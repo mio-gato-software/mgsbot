@@ -45,6 +45,11 @@ export async function loadPermanent(): Promise<string> {
 	return permanentCache;
 }
 
+export function clearPermanentCache(): void {
+	permanentCache = "";
+	permanentLastRead = 0;
+}
+
 // --- Name Utilities ---
 
 export function normalizeName(name: string): string {

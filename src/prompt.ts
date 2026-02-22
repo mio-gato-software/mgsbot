@@ -470,7 +470,8 @@ export async function buildSystemPrompt(
 				}
 			}
 
-			let memberSection = "\n\n## Lo que sabes de los miembros\nEsta información es CONTEXTO, no un guion. Solo menciona un dato si surge NATURALMENTE en la conversación. NUNCA fuerces una mención. Si el tema no tiene relación con lo que sabes, no lo traigas a colación.";
+			let memberSection =
+				"\n\n## Lo que sabes de los miembros\nEsta información es CONTEXTO, no un guion. Solo menciona un dato si surge NATURALMENTE en la conversación. NUNCA fuerces una mención. Si el tema no tiene relación con lo que sabes, no lo traigas a colación.";
 			for (const [key, facts] of grouped) {
 				const displayName = displayNames.get(key) ?? key;
 				memberSection += `\n### ${displayName}`;

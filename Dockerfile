@@ -12,7 +12,6 @@ FROM base AS runner
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json index.ts ./
 COPY src/ ./src/
-COPY memory/permanent.md ./memory/permanent.md
 
 # Create writable directories and empty runtime data files
 RUN mkdir -p memory/sensory memory/episodes audios \

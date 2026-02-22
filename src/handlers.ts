@@ -11,6 +11,7 @@ import {
 	transcribeAudio,
 } from "./ai.ts";
 import { getBrendyBasePath } from "./brendy-appearance.ts";
+import { getBotName, isBotConfigured } from "./config.ts";
 import { generateEmbedding } from "./embeddings.ts";
 import { registerIdentity, resolveCanonicalName } from "./identities.ts";
 import {
@@ -33,6 +34,7 @@ import {
 	isSimpleAssistantMode,
 } from "./prompt.ts";
 import { getChatProviderInfo, switchChatProvider } from "./providers/index.ts";
+import { processSetupConversation } from "./setup.ts";
 import type {
 	ConversationMessage,
 	SemanticFact,
@@ -106,7 +108,10 @@ function detectMentionType(ctx: Context, botId: number): MentionType {
 	}
 
 	// Check if called by name - AI decides if addressed or just mentioned
-	if (/\bbrendy\b/i.test(text)) return "name";
+	const botName = getBotName().toLowerCase();
+	const escaped = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const nameRegex = new RegExp(`\\b${escaped}\\b`, "i");
+	if (nameRegex.test(text)) return "name";
 
 	return "none";
 }
@@ -696,6 +701,20 @@ export function registerHandlers(bot: Bot): void {
 			);
 			return;
 		}
+
+		if (!isBotConfigured()) {
+			if (ctx.from?.id === OWNER_USER_ID && !isGroupChat(ctx)) {
+				const text = ctx.message?.text;
+				if (text) {
+					const userName = getUserDisplayName(ctx);
+					await processSetupConversation(ctx, text, userName);
+				} else {
+					await ctx.reply("Por favor, usa texto para configurar el bot.");
+				}
+			}
+			return;
+		}
+
 		await next();
 	});
 
