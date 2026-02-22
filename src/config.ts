@@ -22,15 +22,13 @@ function migrateFromPermanent(): BotConfig {
 	if (!existsSync(PERMANENT_PATH)) return { ...DEFAULT_CONFIG };
 
 	const permData = readFileSync(PERMANENT_PATH, "utf-8");
+	// Only treat as configured if permanent.md has a real personality header
 	const match = permData.match(/^# Personalidad de (.+)/im);
-	let botName = "Brendy";
-	if (match?.[1]) {
-		botName = match[1].trim();
-	}
+	if (!match?.[1]) return { ...DEFAULT_CONFIG };
 
 	const migratedConfig: BotConfig = {
 		isConfigured: true,
-		botName: botName,
+		botName: match[1].trim(),
 	};
 
 	saveConfig(migratedConfig);

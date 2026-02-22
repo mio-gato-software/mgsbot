@@ -40,7 +40,6 @@ memory/sensory/
 memory/episodes/
 memory/daily-weather.json
 memory/embedding-cache.json
-memory/permanent.md
 memory/bot_config.json
 memory/identities.json
 
