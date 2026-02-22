@@ -848,25 +848,44 @@ export function registerHandlers(bot: Bot): void {
 		}
 	});
 
-	// /allowphotorequest command — allow one photo request in group (DM only, owner only)
+	// /allowphotorequest command — allow one photo request (DM only, owner only)
+	// Usage: /allowphotorequest → activates for this DM; /allowphotorequest group → activates for the group
 	bot.command("allowphotorequest", async (ctx) => {
 		if (isGroupChat(ctx)) return;
-		if (!Number.isFinite(ALLOWED_GROUP_ID)) {
-			await ctx.reply(
-				"Error: ALLOWED_GROUP_ID no está configurado correctamente.",
-			);
-			return;
-		}
 
-		try {
-			const groupBuffer = await loadSensory(ALLOWED_GROUP_ID);
-			groupBuffer.allowPhotoRequest = true;
-			await saveSensory(groupBuffer);
-			await ctx.reply(
-				"✅ allowPhotoRequest activado. La próxima solicitud directa de foto en el grupo enviará una imagen contextual y luego se desactivará automáticamente.",
-			);
-		} catch (error) {
-			await ctx.reply(`Error activando allowPhotoRequest: ${error}`);
+		const arg = ctx.match?.toString().trim().toLowerCase();
+		const targetGroup = arg === "group" || arg === "grupo";
+
+		if (targetGroup) {
+			if (!Number.isFinite(ALLOWED_GROUP_ID)) {
+				await ctx.reply(
+					"Error: ALLOWED_GROUP_ID no está configurado correctamente.",
+				);
+				return;
+			}
+			try {
+				const groupBuffer = await loadSensory(ALLOWED_GROUP_ID);
+				groupBuffer.allowPhotoRequest = true;
+				await saveSensory(groupBuffer);
+				await ctx.reply(
+					"✅ allowPhotoRequest activado para el grupo. La próxima solicitud directa de foto en el grupo enviará una imagen contextual y luego se desactivará automáticamente.",
+				);
+			} catch (error) {
+				await ctx.reply(`Error activando allowPhotoRequest: ${error}`);
+			}
+		} else {
+			const chatId = ctx.chat?.id;
+			if (!chatId) return;
+			try {
+				const dmBuffer = await loadSensory(chatId);
+				dmBuffer.allowPhotoRequest = true;
+				await saveSensory(dmBuffer);
+				await ctx.reply(
+					"✅ allowPhotoRequest activado para este DM. La próxima solicitud directa de foto aquí enviará una imagen contextual y luego se desactivará automáticamente.",
+				);
+			} catch (error) {
+				await ctx.reply(`Error activando allowPhotoRequest: ${error}`);
+			}
 		}
 	});
 
@@ -880,7 +899,7 @@ export function registerHandlers(bot: Bot): void {
 				"",
 				"/help — Mostrar esta lista de comandos",
 				"/provider — Ver o cambiar el proveedor de chat",
-				"/allowphotorequest — Permitir 1 foto bajo petición en el grupo",
+				"/allowphotorequest — Permitir 1 foto bajo petición en este DM (o `/allowphotorequest group` para el grupo)",
 				"/on — Encender el bot",
 				"/off — Apagar el bot",
 				"/optimize — Optimizar memorias (decay de confianza)",
