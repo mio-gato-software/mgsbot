@@ -152,6 +152,10 @@ export async function buildSystemPrompt(
 
 	systemPrompt += `\n\n## Tu actividad actual\n${activityGuidance}`;
 
+	// Time awareness instruction
+	systemPrompt += `\n\n## Consciencia del tiempo
+Presta atención a los marcadores de tiempo entre mensajes del historial (ej: "[Pasaron ~17 horas sin actividad en el chat]"). Cuando haya pasado un tiempo significativo, reconócelo naturalmente: saluda según la hora del día, no retomes la conversación anterior como si acabara de ocurrir, y sé consciente de que ha pasado tiempo. No necesitas mencionar las horas exactas, solo fluye naturalmente con el contexto temporal.`;
+
 	const weatherContext = await getCurrentWeatherContext();
 	if (weatherContext) {
 		systemPrompt += `\n\n## Clima actual\n${weatherContext}\n(Usa esta información si el usuario pregunta por el clima o si es relevante para la conversación.)`;
@@ -202,10 +206,36 @@ El usuario mencionó tu nombre en el mensaje. Evalúa si te está hablando DIREC
 	return systemPrompt;
 }
 
+function formatTimeGap(diffMs: number): string {
+	const diffHours = diffMs / (1000 * 60 * 60);
+	const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+	if (diffHours < 2) return `Pasó ~${Math.round(diffHours)} hora`;
+	if (diffHours < 24) return `Pasaron ~${Math.round(diffHours)} horas`;
+	if (diffDays < 2) return "Pasó ~1 día";
+	return `Pasaron ~${Math.round(diffDays)} días`;
+}
+
+const TIME_GAP_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+
 export function buildMessages(buffer: SensoryBuffer): ChatMessage[] {
 	const messages: ChatMessage[] = [];
 
-	for (const msg of buffer.messages) {
+	for (let i = 0; i < buffer.messages.length; i++) {
+		const msg = buffer.messages[i];
+
+		// Insert time gap marker when significant time has passed between messages
+		if (i > 0) {
+			const prevMsg = buffer.messages[i - 1];
+			const gap = msg.timestamp - prevMsg.timestamp;
+			if (gap >= TIME_GAP_THRESHOLD_MS) {
+				messages.push({
+					role: "user",
+					content: `[${formatTimeGap(gap)} sin actividad en el chat]`,
+				});
+			}
+		}
+
 		const role = msg.role === "user" ? "user" : "assistant";
 		const content =
 			msg.role === "user" && msg.name
