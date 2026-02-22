@@ -48,7 +48,7 @@ src/
     openrouter.ts            ← OpenRouter provider implementation
     anthropic.ts             ← Anthropic API provider implementation
     azure.ts                 ← Azure OpenAI provider implementation
-  brendy-appearance.ts       ← Locates base character image for image generation
+  appearance.ts              ← Locates base character image for image generation
   holidays.ts                ← Dominican Republic holidays (hardcoded for current year, needs annual update)
   daily-weather.ts           ← Fetches weather from Open-Meteo API, cached daily in memory/daily-weather.json
 memory/
@@ -57,7 +57,7 @@ memory/
   members.json               ← Per-member facts, auto-managed
   short-term/
     <chat_id>.json            ← One file per chat (group or DM)
-  brendy-base.{png,jpg,jpeg} ← Reference image for character image generation
+  base.{png,jpg,jpeg}        ← Optional reference image for character image generation
 audios/                      ← Downloaded audio files and generated TTS
 ```
 

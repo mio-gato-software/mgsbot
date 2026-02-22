@@ -10,7 +10,7 @@ import {
 	textToSpeech,
 	transcribeAudio,
 } from "./ai.ts";
-import { getBrendyBasePath } from "./brendy-appearance.ts";
+import { getBaseImagePath } from "./appearance.ts";
 import { getBotName, isBotConfigured } from "./config.ts";
 import { generateEmbedding } from "./embeddings.ts";
 import { registerIdentity, resolveCanonicalName } from "./identities.ts";
@@ -162,6 +162,7 @@ function generateRandomWeeklyTargetTime(): string {
 
 function shouldGenerateImageNow(buffer: SensoryBuffer): boolean {
 	if (!isImageGenAvailable()) return false;
+	if (!getBaseImagePath()) return false;
 
 	const currentWeek = getWeekStartRD();
 
@@ -349,7 +350,7 @@ async function processConversation(
 	if (imageMatch) {
 		const extractedPrompt = imageMatch[1].trim();
 		responseText = responseText.replace(IMAGE_MARKER_REGEX, "").trim();
-		const basePath = getBrendyBasePath();
+		const basePath = getBaseImagePath();
 
 		if (basePath) {
 			try {
@@ -358,7 +359,8 @@ async function processConversation(
 					console.log("[image] Prompt:", extractedPrompt.slice(0, 300));
 				const imageBuffer = await generateImage(extractedPrompt, basePath);
 
-				await ctx.replyWithPhoto(new InputFile(imageBuffer, "brendy.png"), {
+				const filename = `${getBotName().toLowerCase()}.png`;
+				await ctx.replyWithPhoto(new InputFile(imageBuffer, filename), {
 					caption: responseText || undefined,
 					...replyOptions,
 				});
