@@ -58,6 +58,37 @@ export interface FollowUp {
 	attempts: number;
 }
 
+// --- Evolving Personality ---
+
+export interface PersonalityTrait {
+	value: number; // 0.0–1.0 (0.5 = neutral)
+	momentum: number; // -1.0–1.0 (direction of recent change)
+	lastReinforced: number; // timestamp
+}
+
+export interface PersonalityGrowthEvent {
+	change: string; // description of the change (Spanish)
+	trigger: string; // what caused it (conversation excerpt)
+	timestamp: number;
+	traitsAffected: string[];
+}
+
+export interface PersonalityState {
+	description: string; // ~100-150 words, injected into prompt
+	traits: Record<string, PersonalityTrait>;
+	recentGrowth: PersonalityGrowthEvent[]; // max 10
+	lastDescriptionUpdate: number;
+	evaluationsSinceUpdate: number;
+}
+
+export interface PersonalitySignals {
+	traitChanges: Array<{
+		trait: string; // trait name in Spanish, emergent
+		delta: number; // -0.15 to +0.15
+		reason: string; // why it changed
+	}>;
+}
+
 export interface PromotionResult {
 	summary: string; // episode summary
 	importance: number; // 1-5
@@ -68,4 +99,5 @@ export interface PromotionResult {
 		context?: string;
 		importance: number;
 	}>;
+	personalitySignals?: PersonalitySignals;
 }

@@ -289,11 +289,12 @@ IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba.
    - category "group": dinámica grupal o regla de interacción
    - category "rule": regla o límite establecido en la relación
    - category "event": evento, fecha o plan
+4. **Señales de personalidad**: ¿La conversación revela algo sobre cómo el bot está evolucionando emocionalmente? Solo si hay señales claras. Ejemplo: si mostró más paciencia, si se volvió más juguetona, si mostró vulnerabilidad, etc. Cada cambio es un rasgo con un delta entre -0.15 y +0.15.
 ${contextSection}
 Responde SOLO JSON:
-{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5}]}
+{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5}], "personalitySignals": {"traitChanges": [{"trait": "nombre del rasgo", "delta": 0.1, "reason": "razón del cambio"}]}}
 
-Si no hay nada relevante: {"summary": "conversación casual", "importance": 1, "facts": []}
+Si no hay nada relevante: {"summary": "conversación casual", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
 
 Conversación:
 ${recentMessages}`;
@@ -432,5 +433,29 @@ function validatePromotionResult(raw: PromotionResult): PromotionResult {
 					: importance,
 		}));
 
-	return { summary, importance, facts };
+	// Validate personality signals
+	let personalitySignals = raw.personalitySignals;
+	if (personalitySignals?.traitChanges) {
+		const validChanges = personalitySignals.traitChanges
+			.filter(
+				(c) =>
+					c.trait &&
+					typeof c.trait === "string" &&
+					typeof c.delta === "number" &&
+					Math.abs(c.delta) >= 0.01 &&
+					c.reason &&
+					typeof c.reason === "string",
+			)
+			.map((c) => ({
+				trait: c.trait.toLowerCase().trim(),
+				delta: Math.max(-0.15, Math.min(0.15, c.delta)),
+				reason: c.reason.trim(),
+			}));
+		personalitySignals =
+			validChanges.length > 0 ? { traitChanges: validChanges } : undefined;
+	} else {
+		personalitySignals = undefined;
+	}
+
+	return { summary, importance, facts, personalitySignals };
 }

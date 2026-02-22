@@ -4,6 +4,7 @@ import { checkAndSendFollowUps, initFollowUps } from "./src/follow-ups.ts";
 import { isBotOff, isSleepingHour, registerHandlers } from "./src/handlers.ts";
 import { initIdentities } from "./src/identities.ts";
 import { initMemoryDirs } from "./src/memory.ts";
+import { initPersonality } from "./src/personality.ts";
 
 const token = process.env.BOT_TOKEN;
 if (!token) throw new Error("BOT_TOKEN environment variable is required");
@@ -14,6 +15,7 @@ await mkdir("./audios").catch(() => {});
 await initMemoryDirs();
 await initIdentities();
 await initFollowUps();
+await initPersonality();
 
 // Register all message handlers
 registerHandlers(bot);

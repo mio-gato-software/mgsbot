@@ -33,6 +33,11 @@ import {
 	saveSensory,
 } from "./memory.ts";
 import {
+	applyPersonalitySignals,
+	decayPersonalityTraits,
+	regenerateDescription,
+} from "./personality.ts";
+import {
 	buildMessages,
 	buildSystemPrompt,
 	isSimpleAssistantMode,
@@ -543,6 +548,17 @@ async function promoteToMemory(
 		}
 		await addSemanticFacts(semanticFacts);
 	}
+
+	// Process personality signals
+	if (result.personalitySignals?.traitChanges?.length) {
+		const shouldRegenerate = await applyPersonalitySignals(
+			result.personalitySignals,
+			recentText,
+		);
+		if (shouldRegenerate) {
+			regenerateDescription().catch(console.error);
+		}
+	}
 }
 
 async function downloadAndTranscribe(
@@ -701,8 +717,9 @@ function extractYouTubeUrl(
 export function registerHandlers(bot: Bot): void {
 	const botToken = bot.token;
 
-	// Run confidence decay on startup
+	// Run confidence decay and personality trait decay on startup
 	decayConfidence().catch(console.error);
+	decayPersonalityTraits().catch(console.error);
 
 	// Security: only allow the owner (DMs) and the permitted group
 	bot.use(async (ctx, next) => {

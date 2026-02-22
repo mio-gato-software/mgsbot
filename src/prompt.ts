@@ -6,6 +6,7 @@ import {
 import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
+import { getPersonalityDescription } from "./personality.ts";
 import type { ChatMessage } from "./providers/types.ts";
 import type { Episode, SemanticFact, SensoryBuffer } from "./types.ts";
 
@@ -83,6 +84,12 @@ export async function buildSystemPrompt(
 		timeStyle: "short",
 	});
 	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (hora de República Dominicana)`;
+
+	// Evolving personality description
+	const personalityDesc = await getPersonalityDescription();
+	if (personalityDesc) {
+		systemPrompt += `\n\n## Tu evolución personal\n${personalityDesc}`;
+	}
 
 	// Episodes (recent conversation memories)
 	if (relevantEpisodes.length > 0) {
