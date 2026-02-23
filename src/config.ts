@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { atomicWriteFileSync } from "./utils.ts";
 
 export interface BotConfig {
 	isConfigured: boolean;
@@ -69,7 +70,7 @@ export function loadConfig(): BotConfig {
 
 export function saveConfig(config: BotConfig): void {
 	try {
-		writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+		atomicWriteFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
 		// Update cache immediately after save
 		configCache = config;
 		configLastRead = Date.now();

@@ -4,6 +4,7 @@ import {
 	GoogleGenAI,
 } from "@google/genai";
 
+import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
 const DEFAULT_MODEL = "gemini-3-flash-preview";
@@ -62,13 +63,15 @@ export class GeminiChatProvider implements ChatProvider {
 			);
 		}
 
-		const response = await this.ai.models.generateContent({
-			model: this.model,
-			config: {
-				systemInstruction: systemPrompt,
-			},
-			contents,
-		});
+		const response = await withRetry(() =>
+			this.ai.models.generateContent({
+				model: this.model,
+				config: {
+					systemInstruction: systemPrompt,
+				},
+				contents,
+			}),
+		);
 		logTokenUsage("generateResponse", response);
 
 		const text = response.text ?? "";

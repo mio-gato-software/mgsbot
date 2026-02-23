@@ -5,6 +5,7 @@ import type {
 	PersonalitySignals,
 	PersonalityState,
 } from "./types.ts";
+import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
 const isDev = process.env.NODE_ENV === "development";
 const PERSONALITY_PATH = "./memory/personality.json";
@@ -35,7 +36,10 @@ async function loadPersonality(): Promise<PersonalityState> {
 		const data = await readFile(PERSONALITY_PATH, "utf-8");
 		cachedState = JSON.parse(data) as PersonalityState;
 		return cachedState;
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error("[personality] Error loading personality.json:", err);
+		}
 		cachedState = createEmptyState();
 		return cachedState;
 	}
@@ -43,13 +47,16 @@ async function loadPersonality(): Promise<PersonalityState> {
 
 async function savePersonality(state: PersonalityState): Promise<void> {
 	cachedState = state;
-	await writeFile(PERSONALITY_PATH, JSON.stringify(state, null, 2));
+	await atomicWriteFile(PERSONALITY_PATH, JSON.stringify(state, null, 2));
 }
 
 export async function initPersonality(): Promise<void> {
 	try {
 		await readFile(PERSONALITY_PATH, "utf-8");
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error("[personality] Error reading personality.json:", err);
+		}
 		await writeFile(
 			PERSONALITY_PATH,
 			JSON.stringify(createEmptyState(), null, 2),

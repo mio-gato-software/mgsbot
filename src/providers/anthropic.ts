@@ -1,3 +1,4 @@
+import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -55,29 +56,30 @@ export class AnthropicChatProvider implements ChatProvider {
 			);
 		}
 
-		const response = await fetch("https://api.anthropic.com/v1/messages", {
-			method: "POST",
-			headers: {
-				"x-api-key": this.apiKey,
-				"anthropic-version": "2023-06-01",
-				"content-type": "application/json",
-			},
-			body: JSON.stringify({
-				model: this.model,
-				max_tokens: 4096,
-				system: systemPrompt,
-				messages: anthropicMessages,
-			}),
+		const data = await withRetry(async () => {
+			const response = await fetch("https://api.anthropic.com/v1/messages", {
+				method: "POST",
+				headers: {
+					"x-api-key": this.apiKey,
+					"anthropic-version": "2023-06-01",
+					"content-type": "application/json",
+				},
+				body: JSON.stringify({
+					model: this.model,
+					max_tokens: 4096,
+					system: systemPrompt,
+					messages: anthropicMessages,
+				}),
+				signal: AbortSignal.timeout(30_000),
+			});
+			if (!response.ok) {
+				const errorBody = await response.text().catch(() => "");
+				throw new Error(
+					`Anthropic API error: ${response.status} ${response.statusText} ${errorBody}`,
+				);
+			}
+			return (await response.json()) as AnthropicResponse;
 		});
-
-		if (!response.ok) {
-			const errorBody = await response.text().catch(() => "");
-			throw new Error(
-				`Anthropic API error: ${response.status} ${response.statusText} ${errorBody}`,
-			);
-		}
-
-		const data = (await response.json()) as AnthropicResponse;
 
 		if (isDev && data.usage) {
 			console.log(

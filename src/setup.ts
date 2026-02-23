@@ -1,4 +1,3 @@
-import { writeFileSync } from "node:fs";
 import type { Context } from "grammy";
 import { generateResponse } from "./ai.ts";
 import { loadConfig, saveConfig } from "./config.ts";
@@ -10,6 +9,7 @@ import {
 } from "./memory.ts";
 import { buildMessages } from "./prompt.ts";
 import type { ConversationMessage } from "./types.ts";
+import { atomicWriteFileSync } from "./utils.ts";
 
 const SETUP_SYSTEM_PROMPT = `Eres un asistente de configuración inicial para un nuevo bot de Telegram.
 Tu objetivo es recopilar 4 datos fundamentales del dueño del bot para generar la personalidad del bot:
@@ -129,7 +129,7 @@ export async function processSetupConversation(
 					gender,
 					personality,
 				);
-				writeFileSync("./memory/permanent.md", mdContent);
+				atomicWriteFileSync("./memory/permanent.md", mdContent);
 
 				const currentConfig = loadConfig();
 				currentConfig.isConfigured = true;

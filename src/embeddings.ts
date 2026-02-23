@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { rename, writeFile } from "node:fs/promises";
 import { GoogleGenAI } from "@google/genai";
+import { isFileNotFound } from "./utils.ts";
 
 const ai = new GoogleGenAI({});
 const EMBEDDING_MODEL = "gemini-embedding-001";
@@ -25,12 +27,15 @@ function loadDiskCache(): void {
 					`[embeddings] Loaded ${diskCache.size} cached embeddings from disk`,
 				);
 		}
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error("[embeddings] Error loading cache:", err);
+		}
 		diskCache = new Map();
 	}
 }
 
-function persistDiskCache(): void {
+async function persistDiskCache(): Promise<void> {
 	if (!diskCacheDirty) return;
 	try {
 		// LRU eviction: keep the most recent entries (Map preserves insertion order)
@@ -38,7 +43,9 @@ function persistDiskCache(): void {
 			const entries = [...diskCache.entries()];
 			diskCache = new Map(entries.slice(entries.length - MAX_CACHE_ENTRIES));
 		}
-		writeFileSync(CACHE_PATH, JSON.stringify([...diskCache.entries()]));
+		const tmpPath = `${CACHE_PATH}.tmp`;
+		await writeFile(tmpPath, JSON.stringify([...diskCache.entries()]));
+		await rename(tmpPath, CACHE_PATH);
 		diskCacheDirty = false;
 	} catch (error) {
 		console.error("[embeddings] Failed to persist cache:", error);
@@ -48,8 +55,12 @@ function persistDiskCache(): void {
 // Load cache on module init
 loadDiskCache();
 
-// Persist every 60 seconds if dirty
-setInterval(persistDiskCache, 60_000);
+// Persist every 60 seconds if dirty (non-blocking)
+setInterval(() => {
+	persistDiskCache().catch((err) =>
+		console.error("[embeddings] Persist interval error:", err),
+	);
+}, 60_000);
 
 function hashText(text: string): string {
 	return createHash("sha256").update(text).digest("hex");
@@ -80,8 +91,8 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 /** Flush the embedding cache to disk immediately (e.g. on shutdown). */
-export function flushEmbeddingCache(): void {
-	persistDiskCache();
+export async function flushEmbeddingCache(): Promise<void> {
+	await persistDiskCache();
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {

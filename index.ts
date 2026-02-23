@@ -1,17 +1,43 @@
-import { mkdir } from "node:fs/promises";
+import { existsSync, mkdirSync } from "node:fs";
 import { Bot } from "grammy";
+import { flushEmbeddingCache } from "./src/embeddings.ts";
 import { checkAndSendFollowUps, initFollowUps } from "./src/follow-ups.ts";
 import { isBotOff, isSleepingHour, registerHandlers } from "./src/handlers.ts";
 import { initIdentities } from "./src/identities.ts";
 import { initMemoryDirs } from "./src/memory.ts";
 import { initPersonality } from "./src/personality.ts";
 
+// --- Startup env validation ---
+
 const token = process.env.BOT_TOKEN;
 if (!token) throw new Error("BOT_TOKEN environment variable is required");
+
+if (!process.env.GOOGLE_API_KEY) {
+	throw new Error("GOOGLE_API_KEY environment variable is required");
+}
+
+const allowedGroupId = Number(process.env.ALLOWED_GROUP_ID);
+const ownerUserId = Number(process.env.OWNER_USER_ID);
+
+if (!Number.isFinite(allowedGroupId) || allowedGroupId === 0) {
+	throw new Error(
+		`ALLOWED_GROUP_ID must be a valid non-zero integer, got: "${process.env.ALLOWED_GROUP_ID}"`,
+	);
+}
+if (!Number.isFinite(ownerUserId) || ownerUserId === 0) {
+	throw new Error(
+		`OWNER_USER_ID must be a valid non-zero integer, got: "${process.env.OWNER_USER_ID}"`,
+	);
+}
+
+if (!process.env.LEMON_FOX_API_KEY) {
+	console.warn("[startup] LEMON_FOX_API_KEY not set — TTS will be unavailable");
+}
+
 const bot = new Bot(token);
 
 // Initialize directories
-await mkdir("./audios").catch(() => {});
+if (!existsSync("./audios")) mkdirSync("./audios", { recursive: true });
 await initMemoryDirs();
 await initIdentities();
 await initFollowUps();
@@ -21,7 +47,7 @@ await initPersonality();
 registerHandlers(bot);
 
 bot.catch((err) => {
-	console.error("[bot.catch] Error in middleware:", err.message);
+	console.error("[bot.catch] Error in middleware:", err.error);
 });
 
 bot.start();
@@ -35,6 +61,19 @@ if (process.env.ENABLE_FOLLOW_UPS === "true") {
 	}, 60_000);
 }
 
+// --- Graceful shutdown ---
+
+async function shutdown(signal: string): Promise<void> {
+	console.log(`[shutdown] Received ${signal}, shutting down gracefully...`);
+	bot.stop();
+	await flushEmbeddingCache();
+	console.log("[shutdown] Embedding cache flushed. Goodbye.");
+	process.exit(0);
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
+
 if (process.env.NODE_ENV === "development") {
-	console.log(`[startup] Bot started (NODE_ENV=development)`);
+	console.log("[startup] Bot started (NODE_ENV=development)");
 }
