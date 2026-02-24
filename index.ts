@@ -16,18 +16,13 @@ if (!process.env.GOOGLE_API_KEY) {
 	throw new Error("GOOGLE_API_KEY environment variable is required");
 }
 
-const allowedGroupId = Number(process.env.ALLOWED_GROUP_ID);
-const ownerUserId = Number(process.env.OWNER_USER_ID);
-
-if (!Number.isFinite(allowedGroupId) || allowedGroupId === 0) {
-	throw new Error(
-		`ALLOWED_GROUP_ID must be a valid non-zero integer, got: "${process.env.ALLOWED_GROUP_ID}"`,
+if (!process.env.ALLOWED_GROUP_ID) {
+	console.warn(
+		"[startup] ALLOWED_GROUP_ID not set — bot will ignore all group chats",
 	);
 }
-if (!Number.isFinite(ownerUserId) || ownerUserId === 0) {
-	throw new Error(
-		`OWNER_USER_ID must be a valid non-zero integer, got: "${process.env.OWNER_USER_ID}"`,
-	);
+if (!process.env.OWNER_USER_ID) {
+	console.warn("[startup] OWNER_USER_ID not set — bot will ignore all DMs");
 }
 
 if (!process.env.LEMON_FOX_API_KEY) {
