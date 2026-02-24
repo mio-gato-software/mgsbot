@@ -1,5 +1,5 @@
-import { existsSync, statSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync, mkdirSync, statSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { cosineSimilarity, generateEmbedding } from "./embeddings.ts";
 import { getAllAliasesForCanonical } from "./identities.ts";
 import type {
@@ -9,6 +9,7 @@ import type {
 	SensoryBuffer,
 	WorkingMemory,
 } from "./types.ts";
+import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -39,7 +40,10 @@ export async function loadPermanent(): Promise<string> {
 	try {
 		permanentCache = await readFile(PERMANENT_PATH, "utf-8");
 		permanentLastRead = now;
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error("[memory] Error loading permanent.md:", err);
+		}
 		permanentCache = "You are a helpful conversational bot.";
 	}
 	return permanentCache;
@@ -76,7 +80,10 @@ export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 		}
 
 		return buffer;
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error(`[memory] Error loading sensory buffer ${chatId}:`, err);
+		}
 		return {
 			chatId,
 			messages: [],
@@ -88,7 +95,10 @@ export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 
 export async function saveSensory(buffer: SensoryBuffer): Promise<void> {
 	buffer.lastActivity = Date.now();
-	await writeFile(sensoryPath(buffer.chatId), JSON.stringify(buffer, null, 2));
+	await atomicWriteFile(
+		sensoryPath(buffer.chatId),
+		JSON.stringify(buffer, null, 2),
+	);
 }
 
 /**
@@ -125,13 +135,16 @@ export async function loadWorkingMemory(
 	try {
 		const data = await readFile(episodesPath(chatId), "utf-8");
 		return JSON.parse(data) as WorkingMemory;
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error(`[memory] Error loading episodes ${chatId}:`, err);
+		}
 		return { chatId, episodes: [] };
 	}
 }
 
 export async function saveWorkingMemory(wm: WorkingMemory): Promise<void> {
-	await writeFile(episodesPath(wm.chatId), JSON.stringify(wm, null, 2));
+	await atomicWriteFile(episodesPath(wm.chatId), JSON.stringify(wm, null, 2));
 }
 
 export async function addEpisode(
@@ -231,7 +244,10 @@ export async function loadSemanticStore(): Promise<SemanticFact[]> {
 		semanticCache = JSON.parse(data) as SemanticFact[];
 		semanticLastMtimeMs = stat.mtimeMs;
 		return semanticCache;
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error("[memory] Error loading semantic store:", err);
+		}
 		semanticCache = [];
 		return [];
 	}
@@ -239,12 +255,12 @@ export async function loadSemanticStore(): Promise<SemanticFact[]> {
 
 export async function saveSemanticStore(facts: SemanticFact[]): Promise<void> {
 	semanticCache = facts;
-	await writeFile(SEMANTIC_PATH, JSON.stringify(facts, null, 2));
+	await atomicWriteFile(SEMANTIC_PATH, JSON.stringify(facts, null, 2));
 	// Update mtime to match what we just wrote
 	try {
 		semanticLastMtimeMs = statSync(SEMANTIC_PATH).mtimeMs;
 	} catch {
-		// ignore
+		// ignore — stat after write is non-critical
 	}
 }
 
@@ -472,8 +488,8 @@ export async function getQueryEmbedding(
 // --- Initialization ---
 
 export async function initMemoryDirs(): Promise<void> {
-	await mkdir(SENSORY_DIR, { recursive: true }).catch(() => {});
-	await mkdir(EPISODES_DIR, { recursive: true }).catch(() => {});
+	if (!existsSync(SENSORY_DIR)) mkdirSync(SENSORY_DIR, { recursive: true });
+	if (!existsSync(EPISODES_DIR)) mkdirSync(EPISODES_DIR, { recursive: true });
 	// Create semantic.json if it doesn't exist
 	if (!existsSync(SEMANTIC_PATH)) {
 		await writeFile(SEMANTIC_PATH, "[]");

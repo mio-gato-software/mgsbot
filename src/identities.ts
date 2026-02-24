@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { normalizeName } from "./memory.ts";
+import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
 const IDENTITIES_PATH = "./memory/identities.json";
 const isDev = process.env.NODE_ENV === "development";
@@ -23,7 +24,10 @@ async function loadIdentities(): Promise<IdentityStore> {
 		const data = await readFile(IDENTITIES_PATH, "utf-8");
 		identityCache = JSON.parse(data) as IdentityStore;
 		return identityCache;
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error("[identities] Error loading identities.json:", err);
+		}
 		identityCache = {};
 		return {};
 	}
@@ -31,7 +35,7 @@ async function loadIdentities(): Promise<IdentityStore> {
 
 async function saveIdentities(store: IdentityStore): Promise<void> {
 	identityCache = store;
-	await writeFile(IDENTITIES_PATH, JSON.stringify(store, null, 2));
+	await atomicWriteFile(IDENTITIES_PATH, JSON.stringify(store, null, 2));
 }
 
 export async function initIdentities(): Promise<void> {

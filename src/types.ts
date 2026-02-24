@@ -1,3 +1,12 @@
+/**
+ * Type of mention detected in a group message.
+ * - "none": Bot not mentioned at all
+ * - "reply": User replied to bot's message (always respond)
+ * - "tag": User @mentioned the bot (always respond)
+ * - "name": User mentioned bot's name (AI decides if addressed or just mentioned)
+ */
+export type MentionType = "none" | "reply" | "tag" | "name";
+
 export interface ConversationMessage {
 	role: "user" | "model";
 	name?: string;

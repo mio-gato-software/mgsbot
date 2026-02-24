@@ -1,3 +1,4 @@
+import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -59,30 +60,31 @@ export class AlibabaChatProvider implements ChatProvider {
 			);
 		}
 
-		const response = await fetch(
-			"https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
-			{
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${this.apiKey}`,
-					"Content-Type": "application/json",
+		const data = await withRetry(async () => {
+			const response = await fetch(
+				"https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${this.apiKey}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						model: this.model,
+						messages: dashScopeMessages,
+						enable_thinking: true,
+					}),
+					signal: AbortSignal.timeout(30_000),
 				},
-				body: JSON.stringify({
-					model: this.model,
-					messages: dashScopeMessages,
-					enable_thinking: true,
-				}),
-			},
-		);
-
-		if (!response.ok) {
-			const errorBody = await response.text().catch(() => "");
-			throw new Error(
-				`DashScope API error: ${response.status} ${response.statusText} ${errorBody}`,
 			);
-		}
-
-		const data = (await response.json()) as DashScopeResponse;
+			if (!response.ok) {
+				const errorBody = await response.text().catch(() => "");
+				throw new Error(
+					`DashScope API error: ${response.status} ${response.statusText} ${errorBody}`,
+				);
+			}
+			return (await response.json()) as DashScopeResponse;
+		});
 
 		if (isDev && data.usage) {
 			console.log(

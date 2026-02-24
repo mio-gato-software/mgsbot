@@ -7,6 +7,7 @@ import {
 	loadSensory,
 } from "./memory.ts";
 import type { ConversationMessage, FollowUp } from "./types.ts";
+import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
 const isDev = process.env.NODE_ENV === "development";
 const FOLLOW_UPS_PATH = "./memory/follow-ups.json";
@@ -25,13 +26,16 @@ async function loadFollowUps(): Promise<FollowUp[]> {
 	try {
 		const data = await readFile(FOLLOW_UPS_PATH, "utf-8");
 		return JSON.parse(data) as FollowUp[];
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error("[follow-ups] Error loading follow-ups.json:", err);
+		}
 		return [];
 	}
 }
 
 async function saveFollowUps(followUps: FollowUp[]): Promise<void> {
-	await writeFile(FOLLOW_UPS_PATH, JSON.stringify(followUps, null, 2));
+	await atomicWriteFile(FOLLOW_UPS_PATH, JSON.stringify(followUps, null, 2));
 }
 
 export async function addFollowUp(
@@ -330,7 +334,10 @@ export async function detectAndStoreFollowUps(
 export async function initFollowUps(): Promise<void> {
 	try {
 		await readFile(FOLLOW_UPS_PATH, "utf-8");
-	} catch {
+	} catch (err) {
+		if (!isFileNotFound(err)) {
+			console.error("[follow-ups] Error reading follow-ups.json:", err);
+		}
 		await writeFile(FOLLOW_UPS_PATH, "[]");
 		if (isDev) console.log("[follow-ups] Created follow-ups.json");
 	}

@@ -1,3 +1,4 @@
+import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -60,31 +61,32 @@ export class OpenRouterChatProvider implements ChatProvider {
 			);
 		}
 
-		const response = await fetch(
-			"https://openrouter.ai/api/v1/chat/completions",
-			{
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${this.apiKey}`,
-					"Content-Type": "application/json",
-					"HTTP-Referer": "https://github.com/andrordbot",
-					"X-Title": "andrordbot",
+		const data = await withRetry(async () => {
+			const response = await fetch(
+				"https://openrouter.ai/api/v1/chat/completions",
+				{
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${this.apiKey}`,
+						"Content-Type": "application/json",
+						"HTTP-Referer": "https://github.com/andrordbot",
+						"X-Title": "andrordbot",
+					},
+					body: JSON.stringify({
+						model: this.model,
+						messages: openRouterMessages,
+					}),
+					signal: AbortSignal.timeout(30_000),
 				},
-				body: JSON.stringify({
-					model: this.model,
-					messages: openRouterMessages,
-				}),
-			},
-		);
-
-		if (!response.ok) {
-			const errorBody = await response.text().catch(() => "");
-			throw new Error(
-				`OpenRouter API error: ${response.status} ${response.statusText} ${errorBody}`,
 			);
-		}
-
-		const data = (await response.json()) as OpenRouterResponse;
+			if (!response.ok) {
+				const errorBody = await response.text().catch(() => "");
+				throw new Error(
+					`OpenRouter API error: ${response.status} ${response.statusText} ${errorBody}`,
+				);
+			}
+			return (await response.json()) as OpenRouterResponse;
+		});
 
 		if (isDev && data.usage) {
 			console.log(

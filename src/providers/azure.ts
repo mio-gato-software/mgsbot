@@ -1,3 +1,4 @@
+import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -63,29 +64,30 @@ export class AzureChatProvider implements ChatProvider {
 			);
 		}
 
-		const response = await fetch(this.endpoint, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${this.apiKey}`,
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				model: this.model,
-				messages: azureMessages,
-				max_tokens: 4096,
-				temperature: 0.8,
-				top_p: 0.1,
-			}),
+		const data = await withRetry(async () => {
+			const response = await fetch(this.endpoint, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${this.apiKey}`,
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					model: this.model,
+					messages: azureMessages,
+					max_tokens: 4096,
+					temperature: 0.8,
+					top_p: 0.1,
+				}),
+				signal: AbortSignal.timeout(30_000),
+			});
+			if (!response.ok) {
+				const errorBody = await response.text().catch(() => "");
+				throw new Error(
+					`Azure API error: ${response.status} ${response.statusText} ${errorBody}`,
+				);
+			}
+			return (await response.json()) as AzureResponse;
 		});
-
-		if (!response.ok) {
-			const errorBody = await response.text().catch(() => "");
-			throw new Error(
-				`Azure API error: ${response.status} ${response.statusText} ${errorBody}`,
-			);
-		}
-
-		const data = (await response.json()) as AzureResponse;
 
 		if (isDev && data.usage) {
 			console.log(
