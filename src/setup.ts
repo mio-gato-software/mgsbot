@@ -15,7 +15,8 @@ const SETUP_SYSTEM_PROMPT = `Eres un asistente de configuración inicial para un
 Tu objetivo es recopilar 4 datos fundamentales del dueño del bot para generar la personalidad del bot:
 1. Nombre del bot
 2. Año de nacimiento del bot (ej. 1995). La edad se calculará automáticamente, así el personaje crece con el tiempo.
-3. Sexo
+.
+33. Sexo: OBLIGATORIAMENTE "hombre" o "mujer". No aceptes ningún otro valor. Si el usuario dice otra cosa, explícale amablemente que solo puede ser "hombre" o "mujer".
 4. Personalidad (breve descripción de cómo debe actuar, hablar y comportarse)
 
 Instrucciones:
@@ -27,12 +28,13 @@ Instrucciones:
 {
   "botName": "Nombre",
   "birthYear": 1995,
-  "gender": "Sexo",
+  "gender": "hombre o mujer",
   "personality": "Descripción de la personalidad"
 }
 \`\`\`
 
-- IMPORTANTE: Solo genera el JSON cuando ya tengas los 4 datos. Mientras tanto, conversa normalmente para obtenerlos.`;
+- IMPORTANTE: Solo genera el JSON cuando ya tengas los 4 datos. Mientras tanto, conversa normalmente para obtenerlos.
+- IMPORTANTE: El campo "gender" en el JSON SOLO puede ser "hombre" o "mujer". Ningún otro valor es válido.`;
 
 function generatePermanentMd(
 	name: string,
@@ -122,7 +124,18 @@ export async function processSetupConversation(
 			const configData = JSON.parse(jsonMatch[0]);
 			const { botName, birthYear, gender, personality } = configData;
 
-			if (botName && birthYear && gender && personality) {
+			const validGenders = ["hombre", "mujer"];
+			const normalizedGender = gender?.toLowerCase().trim();
+
+			if (gender && !validGenders.includes(normalizedGender)) {
+				await ctx.reply(
+					"⚠️ El sexo del bot solo puede ser *hombre* o *mujer*. Por favor, elige una de esas dos opciones.",
+					{ parse_mode: "Markdown" },
+				);
+				return;
+			}
+
+			if (botName && birthYear && normalizedGender && personality) {
 				const mdContent = generatePermanentMd(
 					botName,
 					Number(birthYear),
