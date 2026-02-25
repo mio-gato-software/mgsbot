@@ -209,6 +209,7 @@ export function registerHandlers(bot: Bot): void {
 		"anthropic",
 		"azure",
 		"alibaba",
+		"fireworks",
 	] as const;
 
 	bot.command("provider", async (ctx) => {

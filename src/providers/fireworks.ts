@@ -35,8 +35,7 @@ export class FireworksChatProvider implements ChatProvider {
 			);
 		}
 		this.apiKey = apiKey;
-		this.model =
-			model ?? process.env.FIREWORKS_MODEL ?? "glm-5";
+		this.model = model ?? process.env.FIREWORKS_MODEL ?? "glm-5";
 	}
 
 	async generateResponse(
