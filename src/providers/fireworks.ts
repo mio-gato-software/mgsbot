@@ -35,7 +35,8 @@ export class FireworksChatProvider implements ChatProvider {
 			);
 		}
 		this.apiKey = apiKey;
-		this.model = model ?? process.env.FIREWORKS_MODEL ?? "glm-5";
+		this.model =
+			model ?? process.env.FIREWORKS_MODEL ?? "accounts/fireworks/models/glm-5";
 	}
 
 	async generateResponse(
@@ -71,7 +72,7 @@ export class FireworksChatProvider implements ChatProvider {
 						Authorization: `Bearer ${this.apiKey}`,
 					},
 					body: JSON.stringify({
-						model: `accounts/fireworks/models/${this.model}`,
+						model: this.model,
 						messages: fireworksMessages,
 						max_tokens: 25344,
 						temperature: 0.6,

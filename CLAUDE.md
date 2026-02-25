@@ -152,7 +152,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `claude-sonnet-4-5-20250929`)
 - `AZURE_API_KEY` / `AZURE_ENDPOINT` / `AZURE_MODEL`: Required if using Azure (default model: `Kimi-K2.5`)
 - `DASHSCOPE_API_KEY` / `DASHSCOPE_MODEL`: Required if using Alibaba (default model: `qwen3.5-plus`)
-- `FIREWORKS_API_KEY` / `FIREWORKS_MODEL`: Required if using Fireworks (default model: `glm-5`)
+- `FIREWORKS_API_KEY` / `FIREWORKS_MODEL`: Required if using Fireworks (default model: `accounts/fireworks/models/glm-5`)
 - `ALLOWED_GROUP_ID` / `OWNER_USER_ID`: Access control
 - `LEMON_FOX_API_KEY`: For TTS voice responses
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
