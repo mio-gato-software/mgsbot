@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 interface WizardData {
 	botToken: string;
 	googleApiKey: string;
+	geminiModel: string;
 	ownerUserId: string;
 	allowedGroupId?: string;
 }
@@ -69,9 +70,11 @@ function writeEnvFile(data: WizardData): void {
 		existing.ALLOWED_GROUP_ID = data.allowedGroupId.trim();
 	}
 
+	// Wizard-managed model selection
+	existing.GEMINI_MODEL = data.geminiModel.trim() || "gemini-3-flash-preview";
+
 	// Set sensible defaults only if not already present
 	if (!existing.CHAT_PROVIDER) existing.CHAT_PROVIDER = "gemini";
-	if (!existing.GEMINI_MODEL) existing.GEMINI_MODEL = "gemini-3-flash-preview";
 	if (!existing.SIMPLE_ASSISTANT_MODE) existing.SIMPLE_ASSISTANT_MODE = "false";
 	if (!existing.ENABLE_FOLLOW_UPS) existing.ENABLE_FOLLOW_UPS = "false";
 	if (!existing.NODE_ENV) existing.NODE_ENV = "production";
@@ -231,6 +234,29 @@ function buildWizardHtml(
     color: #dc2626;
     font-size: 14px;
   }
+  .model-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+    margin-bottom: 4px;
+  }
+  .model-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .model-option:hover { border-color: #93c5fd; background: #f8fafc; }
+  .model-option.selected { border-color: #2563eb; background: #eff6ff; }
+  .model-option input[type="radio"] { margin-top: 3px; accent-color: #2563eb; }
+  .model-option .model-info { flex: 1; }
+  .model-option .model-name { font-weight: 600; font-size: 14px; }
+  .model-option .model-desc { font-size: 13px; color: #666; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -286,6 +312,25 @@ function buildWizardHtml(
       <label for="googleApiKey">API Key</label>
       <input type="text" id="googleApiKey" name="googleApiKey" placeholder="AIza..." value="${v("googleApiKey")}" class="${errors?.googleApiKey ? "has-error" : ""}" autocomplete="off" spellcheck="false">
       ${e("googleApiKey")}
+
+      <label style="margin-top: 20px;">AI Model</label>
+      <div class="model-options">
+        <label class="model-option${(prefilled?.geminiModel ?? "gemini-3-flash-preview") === "gemini-3-flash-preview" ? " selected" : ""}" id="opt-flash">
+          <input type="radio" name="geminiModel" value="gemini-3-flash-preview" ${(prefilled?.geminiModel ?? "gemini-3-flash-preview") === "gemini-3-flash-preview" ? "checked" : ""}>
+          <div class="model-info">
+            <div class="model-name">Gemini 3 Flash (Recommended)</div>
+            <div class="model-desc">Fast, capable, and free tier available. Great for most use cases.</div>
+          </div>
+        </label>
+        <label class="model-option${prefilled?.geminiModel === "gemini-3.1-pro-preview" ? " selected" : ""}" id="opt-pro">
+          <input type="radio" name="geminiModel" value="gemini-3.1-pro-preview" ${prefilled?.geminiModel === "gemini-3.1-pro-preview" ? "checked" : ""}>
+          <div class="model-info">
+            <div class="model-name">Gemini 3.1 Pro</div>
+            <div class="model-desc">Smarter and more nuanced, but costs more. Best for deeper conversations.</div>
+          </div>
+        </label>
+      </div>
+
       <div class="btn-row">
         <button type="button" class="btn-secondary" onclick="goStep(1)">Back</button>
         <button type="button" class="btn-primary" onclick="goStep(3)">Next</button>
@@ -336,6 +381,13 @@ function buildWizardHtml(
   }
   // If there are errors, jump to the right step
   if (currentStep > 0) goStep(currentStep);
+  // Toggle selected class on model radio buttons
+  document.querySelectorAll('input[name="geminiModel"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      document.querySelectorAll('.model-option').forEach(function(el) { el.classList.remove('selected'); });
+      this.closest('.model-option').classList.add('selected');
+    });
+  });
 </script>
 </body>
 </html>`;
@@ -452,6 +504,7 @@ export async function runSetupWizard(): Promise<void> {
 	const prefilled: Record<string, string> = {
 		botToken: existing.BOT_TOKEN ?? "",
 		googleApiKey: existing.GOOGLE_API_KEY ?? "",
+		geminiModel: existing.GEMINI_MODEL ?? "gemini-3-flash-preview",
 		ownerUserId: existing.OWNER_USER_ID ?? "",
 		allowedGroupId: existing.ALLOWED_GROUP_ID ?? "",
 	};
@@ -479,6 +532,7 @@ export async function runSetupWizard(): Promise<void> {
 					const data: WizardData = {
 						botToken: fields.botToken ?? "",
 						googleApiKey: fields.googleApiKey ?? "",
+						geminiModel: fields.geminiModel ?? "gemini-3-flash-preview",
 						ownerUserId: fields.ownerUserId ?? "",
 						allowedGroupId: fields.allowedGroupId ?? "",
 					};
@@ -490,6 +544,7 @@ export async function runSetupWizard(): Promise<void> {
 						const filled: Record<string, string> = {
 							botToken: data.botToken,
 							googleApiKey: data.googleApiKey,
+							geminiModel: data.geminiModel,
 							ownerUserId: data.ownerUserId,
 							allowedGroupId: data.allowedGroupId ?? "",
 						};
