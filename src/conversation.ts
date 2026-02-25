@@ -121,27 +121,29 @@ export async function processConversation(
 	if (isSimpleAssistantMode) {
 		systemPrompt = await buildSystemPrompt([], [], false);
 	} else {
-		// Generate query embedding for retrieval
-		const { embedding: queryEmbedding, text: queryText } =
-			await getQueryEmbedding(buffer.messages);
-
-		// Retrieve relevant episodes and facts
-		const [episodes, facts] = await Promise.all([
-			getRelevantEpisodes(chatId, queryEmbedding, queryText),
-			getRelevantFacts(queryEmbedding, { queryText }),
-		]);
-
-		// Also get facts for active participants (canonicalized)
+		// Start query embedding and name resolution in parallel
+		const queryEmbeddingPromise = getQueryEmbedding(buffer.messages);
 		const rawActiveNames = [
 			...new Set(
 				buffer.messages.map((m) => m.name).filter((n): n is string => !!n),
 			),
 		];
-		const activeNames = await Promise.all(
+		const activeNamesPromise = Promise.all(
 			rawActiveNames.map((n) => resolveCanonicalName(n)),
 		).then((names) => [...new Set(names)]);
-		const participantFacts =
-			activeNames.length > 0 ? await getFactsForSubjects(activeNames) : [];
+
+		// Wait for both to complete
+		const [{ embedding: queryEmbedding, text: queryText }, activeNames] =
+			await Promise.all([queryEmbeddingPromise, activeNamesPromise]);
+
+		// Retrieve episodes, semantic facts, and participant facts in parallel
+		const [episodes, facts, participantFacts] = await Promise.all([
+			getRelevantEpisodes(chatId, queryEmbedding, queryText),
+			getRelevantFacts(queryEmbedding, { queryText }),
+			activeNames.length > 0
+				? getFactsForSubjects(activeNames)
+				: ([] as SemanticFact[]),
+		]);
 
 		// Merge and deduplicate facts
 		const allFactIds = new Set(facts.map((f) => f.id));
@@ -233,14 +235,16 @@ export async function promoteToMemory(
 			`[promote] Summary: "${result.summary}", importance: ${result.importance}, facts: ${result.facts.length}`,
 		);
 
-	// Create episode with embedding
-	const episodeEmbedding = await generateEmbedding(result.summary);
+	// Generate episode embedding, resolve participants, and fact embeddings in parallel
 	const rawParticipants = [
 		...new Set(overflow.map((m) => m.name).filter((n): n is string => !!n)),
 	];
-	const participants = await Promise.all(
-		rawParticipants.map((n) => resolveCanonicalName(n)),
-	).then((names) => [...new Set(names)]);
+	const [episodeEmbedding, participants] = await Promise.all([
+		generateEmbedding(result.summary),
+		Promise.all(rawParticipants.map((n) => resolveCanonicalName(n))).then(
+			(names) => [...new Set(names)],
+		),
+	]);
 
 	const now = Date.now();
 	await addEpisode(chatId, {
@@ -252,27 +256,31 @@ export async function promoteToMemory(
 		embedding: episodeEmbedding,
 	});
 
-	// Add semantic facts with embeddings (canonicalize subjects)
+	// Add semantic facts with embeddings in parallel (canonicalize subjects)
 	if (result.facts.length > 0) {
-		const semanticFacts: SemanticFact[] = [];
-		for (const fact of result.facts) {
-			const canonicalSubject = fact.subject
-				? await resolveCanonicalName(fact.subject)
-				: undefined;
-			const factEmbedding = await generateEmbedding(fact.content);
-			semanticFacts.push({
-				id: `fact_${now}_${Math.random().toString(36).slice(2, 8)}`,
-				content: fact.content,
-				category: fact.category,
-				subject: canonicalSubject,
-				context: fact.context,
-				embedding: factEmbedding,
-				importance: fact.importance,
-				confidence: 1.0,
-				createdAt: now,
-				lastConfirmed: now,
-			});
-		}
+		const factsWithEmbeddings = await Promise.all(
+			result.facts.map(async (fact) => {
+				const [canonicalSubject, factEmbedding] = await Promise.all([
+					fact.subject
+						? resolveCanonicalName(fact.subject)
+						: Promise.resolve(undefined),
+					generateEmbedding(fact.content),
+				]);
+				return { ...fact, canonicalSubject, factEmbedding };
+			}),
+		);
+		const semanticFacts: SemanticFact[] = factsWithEmbeddings.map((fact) => ({
+			id: `fact_${now}_${Math.random().toString(36).slice(2, 8)}`,
+			content: fact.content,
+			category: fact.category,
+			subject: fact.canonicalSubject,
+			context: fact.context,
+			embedding: fact.factEmbedding,
+			importance: fact.importance,
+			confidence: 1.0,
+			createdAt: now,
+			lastConfirmed: now,
+		}));
 		await addSemanticFacts(semanticFacts);
 	}
 
