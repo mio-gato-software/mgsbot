@@ -1,11 +1,40 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { Bot } from "grammy";
-import { flushEmbeddingCache } from "./src/embeddings.ts";
-import { checkAndSendFollowUps, initFollowUps } from "./src/follow-ups.ts";
-import { isBotOff, isSleepingHour, registerHandlers } from "./src/handlers.ts";
-import { initIdentities } from "./src/identities.ts";
-import { initMemoryDirs } from "./src/memory.ts";
-import { initPersonality } from "./src/personality.ts";
+
+// --- Setup wizard check (before any bot imports that need env vars) ---
+
+const forceSetup = process.argv.includes("--setup");
+const needsSetup =
+	forceSetup ||
+	!existsSync("./.env") ||
+	!process.env.BOT_TOKEN ||
+	!process.env.GOOGLE_API_KEY ||
+	!process.env.OWNER_USER_ID;
+
+if (needsSetup) {
+	const { runSetupWizard } = await import("./src/wizard.ts");
+	await runSetupWizard();
+	// Re-exec so Bun reloads .env from disk
+	const args = process.argv.filter((a) => a !== "--setup");
+	const proc = Bun.spawn(args, {
+		stdio: ["inherit", "inherit", "inherit"],
+	});
+	await proc.exited;
+	process.exit(proc.exitCode ?? 0);
+}
+
+// --- Bot imports (after env vars are confirmed present) ---
+
+const { Bot } = await import("grammy");
+const { flushEmbeddingCache } = await import("./src/embeddings.ts");
+const { checkAndSendFollowUps, initFollowUps } = await import(
+	"./src/follow-ups.ts"
+);
+const { isBotOff, isSleepingHour, registerHandlers } = await import(
+	"./src/handlers.ts"
+);
+const { initIdentities } = await import("./src/identities.ts");
+const { initMemoryDirs } = await import("./src/memory.ts");
+const { initPersonality } = await import("./src/personality.ts");
 
 // --- Startup env validation ---
 
