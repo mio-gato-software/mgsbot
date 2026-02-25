@@ -37,6 +37,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 audios/
 memory/
 
+# Compiled executable
+mgsbot.exe
+
 # Bun lockfile
 bun.lock
 
