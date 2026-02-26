@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 
 // --- Setup wizard check (before any bot imports that need env vars) ---
 
@@ -13,13 +13,17 @@ const needsSetup =
 if (needsSetup) {
 	const { runSetupWizard } = await import("./src/wizard.ts");
 	await runSetupWizard();
-	// Re-exec so Bun reloads .env from disk
-	const args = process.argv.filter((a) => a !== "--setup");
-	const proc = Bun.spawn(args, {
-		stdio: ["inherit", "inherit", "inherit"],
-	});
-	await proc.exited;
-	process.exit(proc.exitCode ?? 0);
+	// Load .env into process.env so the bot can start without re-exec
+	const envContent = readFileSync("./.env", "utf-8");
+	for (const line of envContent.split("\n")) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith("#")) continue;
+		const eqIdx = trimmed.indexOf("=");
+		if (eqIdx === -1) continue;
+		const key = trimmed.slice(0, eqIdx).trim();
+		const value = trimmed.slice(eqIdx + 1).trim();
+		process.env[key] = value;
+	}
 }
 
 // --- Bot imports (after env vars are confirmed present) ---
