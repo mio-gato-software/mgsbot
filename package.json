@@ -2,8 +2,8 @@
 	"name": "andrordbot",
 	"module": "index.ts",
 	"dependencies": {
-		"@google/genai": "^1",
-		"grammy": "^1.40.0"
+		"@google/genai": "^1.43.0",
+		"grammy": "^1.40.1"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.4",
