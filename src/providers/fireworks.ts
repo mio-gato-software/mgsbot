@@ -74,7 +74,6 @@ export class FireworksChatProvider implements ChatProvider {
 					body: JSON.stringify({
 						model: this.model,
 						messages: fireworksMessages,
-						max_tokens: 25344,
 						temperature: 0.6,
 						top_p: 1,
 						top_k: 40,

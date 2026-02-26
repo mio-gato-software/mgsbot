@@ -221,6 +221,7 @@ export function registerHandlers(bot: Bot): void {
 		if (isGroupChat(ctx)) return;
 
 		const args = ctx.match?.toString().trim().toLowerCase() ?? "";
+		console.log(`[provider] Command received: "${args}" from ${ctx.from?.id}`);
 
 		if (!args) {
 			const info = getChatProviderInfo();
@@ -340,6 +341,7 @@ export function registerHandlers(bot: Bot): void {
 	bot.on("message", async (ctx) => {
 		const text = ctx.message.text;
 		if (!text) return;
+		if (text.startsWith("/")) return;
 		const userName = getUserDisplayName(ctx);
 		const mentionType = detectMentionType(ctx, ctx.me.id);
 
