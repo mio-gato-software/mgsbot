@@ -23,64 +23,114 @@ function logTokenUsage(label: string, response: GenerateContentResponse): void {
 	);
 }
 
+const useLemonFoxSTT =
+	!!process.env.LEMON_FOX_API_KEY &&
+	process.env.STT_PROVIDER?.toLowerCase() !== "gemini";
+
+async function transcribeWithLemonFox(filePath: string): Promise<string> {
+	if (isDev) console.log("[transcribeAudio] Using LemonFox STT");
+
+	const fileBuffer = await Bun.file(filePath).arrayBuffer();
+	const fileName = filePath.split("/").pop() ?? "audio.ogg";
+
+	const body = new FormData();
+	body.append("file", new Blob([fileBuffer]), fileName);
+	body.append("response_format", "json");
+
+	const response = await fetch(
+		"https://api.lemonfox.ai/v1/audio/transcriptions",
+		{
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${process.env.LEMON_FOX_API_KEY}`,
+			},
+			body,
+			signal: AbortSignal.timeout(30_000),
+		},
+	);
+
+	if (!response.ok) {
+		const errorBody = await response.text().catch(() => "");
+		throw new Error(`LemonFox STT failed: ${response.status} ${errorBody}`);
+	}
+
+	const data = (await response.json()) as { text?: string };
+	const text = data.text?.trim();
+	if (!text) throw new Error("LemonFox STT returned empty text");
+	if (isDev) console.log("[transcribeAudio] Result:", text.slice(0, 200));
+	return text;
+}
+
+async function transcribeWithGemini(
+	filePath: string,
+	mimeType: string,
+): Promise<string> {
+	if (isDev) console.log("[transcribeAudio] Using Gemini STT");
+
+	const uploaded = await ai.files.upload({
+		file: filePath,
+		config: { mimeType },
+	});
+
+	if (isDev) {
+		console.log("[transcribeAudio] Upload result:", {
+			name: uploaded.name,
+			uri: uploaded.uri,
+			state: uploaded.state,
+			mimeType: uploaded.mimeType,
+		});
+	}
+
+	// Poll until the file is ACTIVE (processing can take a few seconds)
+	const MAX_POLL_ATTEMPTS = 20;
+	const POLL_INTERVAL_MS = 1000;
+	let fileState = uploaded.state;
+
+	for (let i = 0; i < MAX_POLL_ATTEMPTS && fileState === "PROCESSING"; i++) {
+		if (isDev)
+			console.log(
+				`[transcribeAudio] Polling file state (${i + 1}/${MAX_POLL_ATTEMPTS})...`,
+			);
+		await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+		const fileInfo = await ai.files.get({ name: uploaded.name ?? "" });
+		fileState = fileInfo.state;
+	}
+
+	if (fileState !== "ACTIVE") {
+		console.error(
+			`[transcribeAudio] File never became ACTIVE (state: ${fileState})`,
+		);
+		return "[transcription failed]";
+	}
+
+	if (isDev)
+		console.log(
+			"[transcribeAudio] File is ACTIVE, generating transcription...",
+		);
+
+	const response = await ai.models.generateContent({
+		model: MODEL,
+		contents: createUserContent([
+			createPartFromUri(uploaded.uri ?? "", uploaded.mimeType ?? ""),
+			"Transcribe this audio exactly as spoken, in the original language. Return ONLY the transcription, nothing else.",
+		]),
+	});
+
+	logTokenUsage("transcribeAudio", response);
+	const text = response.text ?? "[transcription failed]";
+	if (isDev) console.log("[transcribeAudio] Result:", text.slice(0, 200));
+	return text;
+}
+
 export async function transcribeAudio(
 	filePath: string,
 	mimeType: string,
 ): Promise<string> {
 	try {
-		const uploaded = await ai.files.upload({
-			file: filePath,
-			config: { mimeType },
-		});
-
-		if (isDev) {
-			console.log("[transcribeAudio] Upload result:", {
-				name: uploaded.name,
-				uri: uploaded.uri,
-				state: uploaded.state,
-				mimeType: uploaded.mimeType,
-			});
+		if (useLemonFoxSTT) {
+			return await transcribeWithLemonFox(filePath);
 		}
-
-		// Poll until the file is ACTIVE (processing can take a few seconds)
-		const MAX_POLL_ATTEMPTS = 20;
-		const POLL_INTERVAL_MS = 1000;
-		let fileState = uploaded.state;
-
-		for (let i = 0; i < MAX_POLL_ATTEMPTS && fileState === "PROCESSING"; i++) {
-			if (isDev)
-				console.log(
-					`[transcribeAudio] Polling file state (${i + 1}/${MAX_POLL_ATTEMPTS})...`,
-				);
-			await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-			const fileInfo = await ai.files.get({ name: uploaded.name ?? "" });
-			fileState = fileInfo.state;
-		}
-
-		if (fileState !== "ACTIVE") {
-			console.error(
-				`[transcribeAudio] File never became ACTIVE (state: ${fileState})`,
-			);
-			return "[transcription failed]";
-		}
-
-		if (isDev)
-			console.log(
-				"[transcribeAudio] File is ACTIVE, generating transcription...",
-			);
-
-		const response = await ai.models.generateContent({
-			model: MODEL,
-			contents: createUserContent([
-				createPartFromUri(uploaded.uri ?? "", uploaded.mimeType ?? ""),
-				"Transcribe this audio exactly as spoken, in the original language. Return ONLY the transcription, nothing else.",
-			]),
-		});
-
-		logTokenUsage("transcribeAudio", response);
-		const text = response.text ?? "[transcription failed]";
-		if (isDev) console.log("[transcribeAudio] Result:", text.slice(0, 200));
-		return text;
+		return await transcribeWithGemini(filePath, mimeType);
 	} catch (error) {
 		console.error("[transcribeAudio] Error:", error);
 		return "[transcription failed]";

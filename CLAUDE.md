@@ -146,7 +146,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 
 - `BOT_TOKEN` (required): Telegram bot token
 - `CHAT_PROVIDER`: `gemini` (default), `openrouter`, `anthropic`, `azure`, `alibaba`, or `fireworks`
-- `GOOGLE_API_KEY`: Always required — used for embeddings, audio transcription, image analysis, YouTube analysis, and image generation regardless of chat provider
+- `GOOGLE_API_KEY`: Always required — used for embeddings, image analysis, YouTube analysis, and image generation regardless of chat provider (also used for audio transcription when `STT_PROVIDER=gemini`)
 - `GEMINI_MODEL`: Gemini chat model (default: `gemini-3-flash-preview`)
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/claude-3.5-sonnet`)
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `claude-sonnet-4-5-20250929`)
@@ -154,7 +154,8 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `DASHSCOPE_API_KEY` / `DASHSCOPE_MODEL`: Required if using Alibaba (default model: `qwen3.5-plus`)
 - `FIREWORKS_API_KEY` / `FIREWORKS_MODEL`: Required if using Fireworks (default model: `accounts/fireworks/models/glm-5`)
 - `ALLOWED_GROUP_ID` / `OWNER_USER_ID`: Access control
-- `LEMON_FOX_API_KEY`: For TTS voice responses
+- `LEMON_FOX_API_KEY`: For TTS voice responses and audio transcription (STT)
+- `STT_PROVIDER`: Set `gemini` to force Gemini for audio transcription instead of LemonFox (default: uses LemonFox when `LEMON_FOX_API_KEY` is set)
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
 - `ENABLE_FOLLOW_UPS`: Set `true` to enable proactive follow-ups in DMs
 - `ENABLE_SLEEP_SCHEDULE`: Set `false` to disable sleep schedule (default: `true`)
