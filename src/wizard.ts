@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { type BotLanguage, loadConfig, saveConfig } from "./config.ts";
 
 interface WizardData {
 	botToken: string;
@@ -6,6 +7,7 @@ interface WizardData {
 	geminiModel: string;
 	ownerUserId: string;
 	allowedGroupId?: string;
+	language: BotLanguage;
 }
 
 interface ValidationResult {
@@ -15,19 +17,24 @@ interface ValidationResult {
 
 function validateInputs(data: WizardData): ValidationResult {
 	const errors: Record<string, string> = {};
+	const isEs = data.language === "es";
 
 	if (!data.botToken || !/^\d+:.+$/.test(data.botToken.trim())) {
-		errors.botToken =
-			"Invalid bot token format. It should look like: 123456789:ABCdefGHI...";
+		errors.botToken = isEs
+			? "Formato de token inv\u00e1lido. Debe verse as\u00ed: 123456789:ABCdefGHI..."
+			: "Invalid bot token format. It should look like: 123456789:ABCdefGHI...";
 	}
 
 	if (!data.googleApiKey || data.googleApiKey.trim().length === 0) {
-		errors.googleApiKey = "Google API key is required.";
+		errors.googleApiKey = isEs
+			? "La clave API de Google es requerida."
+			: "Google API key is required.";
 	}
 
 	if (!data.ownerUserId || !/^\d+$/.test(data.ownerUserId.trim())) {
-		errors.ownerUserId =
-			"Invalid user ID. It should be a number like: 123456789";
+		errors.ownerUserId = isEs
+			? "ID de usuario inv\u00e1lido. Debe ser un n\u00famero como: 123456789"
+			: "Invalid user ID. It should be a number like: 123456789";
 	}
 
 	if (
@@ -35,8 +42,9 @@ function validateInputs(data: WizardData): ValidationResult {
 		data.allowedGroupId.trim() !== "" &&
 		!/^-?\d+$/.test(data.allowedGroupId.trim())
 	) {
-		errors.allowedGroupId =
-			"Invalid group ID. It should be a number (usually negative, like -1001234567890).";
+		errors.allowedGroupId = isEs
+			? "ID de grupo inv\u00e1lido. Debe ser un n\u00famero (generalmente negativo, como -1001234567890)."
+			: "Invalid group ID. It should be a number (usually negative, like -1001234567890).";
 	}
 
 	return { valid: Object.keys(errors).length === 0, errors };
@@ -85,6 +93,11 @@ function writeEnvFile(data: WizardData): void {
 	}
 
 	writeFileSync("./.env", `${lines.join("\n")}\n`, "utf-8");
+
+	// Save language to bot config
+	const currentConfig = loadConfig();
+	currentConfig.language = data.language;
+	saveConfig(currentConfig);
 }
 
 function parseFormBody(body: string): Record<string, string> {
@@ -104,13 +117,14 @@ function buildWizardHtml(
 	const v = (key: string) => escapeHtml(prefilled?.[key] ?? "");
 	const e = (key: string) =>
 		errors?.[key] ? `<div class="error">${escapeHtml(errors[key])}</div>` : "";
+	const initLang = prefilled?.language ?? "es";
 
 	return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${initLang}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bot Setup Wizard</title>
+<title data-i18n="title">Bot Setup Wizard</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -268,98 +282,116 @@ function buildWizardHtml(
     <div class="dot" data-step="3"></div>
   </div>
 
-  ${errors && Object.keys(errors).length > 0 ? '<div class="global-error">Please fix the errors below and try again.</div>' : ""}
+  ${errors && Object.keys(errors).length > 0 ? '<div class="global-error" data-i18n="globalError">Please fix the errors below and try again.</div>' : ""}
 
   <form method="POST" action="http://127.0.0.1:${port}/" id="wizardForm">
 
-    <!-- Step 0: Welcome -->
+    <!-- Step 0: Welcome + Language -->
     <div class="step active" data-step="0">
-      <h1>Welcome to Bot Setup</h1>
-      <p class="subtitle">Let's get your Telegram bot configured in a few easy steps.</p>
-      <p class="hint">You'll need the following:</p>
+      <h1 data-i18n="welcomeTitle">Welcome to Bot Setup</h1>
+      <p class="subtitle" data-i18n="welcomeSubtitle">Let's get your Telegram bot configured in a few easy steps.</p>
+      <label data-i18n="langLabel">Bot Language</label>
+      <p class="hint" data-i18n="langHint">Choose the language for your bot's personality and responses.</p>
+      <div class="model-options">
+        <label class="model-option${initLang === "es" ? " selected" : ""}" id="opt-lang-es">
+          <input type="radio" name="language" value="es" ${initLang === "es" ? "checked" : ""}>
+          <div class="model-info">
+            <div class="model-name">Espa\u00f1ol</div>
+            <div class="model-desc">El bot conversar\u00e1 en espa\u00f1ol por defecto.</div>
+          </div>
+        </label>
+        <label class="model-option${initLang === "en" ? " selected" : ""}" id="opt-lang-en">
+          <input type="radio" name="language" value="en" ${initLang === "en" ? "checked" : ""}>
+          <div class="model-info">
+            <div class="model-name">English</div>
+            <div class="model-desc">The bot will converse in English by default.</div>
+          </div>
+        </label>
+      </div>
+      <p class="hint" style="margin-top: 16px;" data-i18n="needList">You'll need the following:</p>
       <ul class="welcome-list">
-        <li>A Telegram Bot Token (from @BotFather)</li>
-        <li>A Google AI API Key (from Google AI Studio)</li>
-        <li>Your Telegram User ID (from @userinfobot)</li>
+        <li data-i18n="needToken">A Telegram Bot Token (from @BotFather)</li>
+        <li data-i18n="needApiKey">A Google AI API Key (from Google AI Studio)</li>
+        <li data-i18n="needUserId">Your Telegram User ID (from @userinfobot)</li>
       </ul>
       <div class="btn-row" style="justify-content:flex-end;">
-        <button type="button" class="btn-primary" onclick="goStep(1)">Get Started</button>
+        <button type="button" class="btn-primary" onclick="goStep(1)" data-i18n="getStarted">Get Started</button>
       </div>
     </div>
 
     <!-- Step 1: Bot Token -->
     <div class="step" data-step="1">
-      <h1>Telegram Bot Token</h1>
-      <p class="hint">
+      <h1 data-i18n="tokenTitle">Telegram Bot Token</h1>
+      <p class="hint" data-i18n-html="tokenHint">
         Open <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> in Telegram, send <strong>/newbot</strong>, follow the prompts, then copy the token it gives you.
       </p>
-      <label for="botToken">Bot Token</label>
+      <label for="botToken" data-i18n="tokenLabel">Bot Token</label>
       <input type="text" id="botToken" name="botToken" placeholder="123456789:ABCdef..." value="${v("botToken")}" class="${errors?.botToken ? "has-error" : ""}" autocomplete="off" spellcheck="false">
-      <div class="format-hint">Format: 123456789:ABCdefGHIjklMNO...</div>
+      <div class="format-hint" data-i18n="tokenFormat">Format: 123456789:ABCdefGHIjklMNO...</div>
       ${e("botToken")}
       <div class="btn-row">
-        <button type="button" class="btn-secondary" onclick="goStep(0)">Back</button>
-        <button type="button" class="btn-primary" onclick="goStep(2)">Next</button>
+        <button type="button" class="btn-secondary" onclick="goStep(0)" data-i18n="back">Back</button>
+        <button type="button" class="btn-primary" onclick="goStep(2)" data-i18n="next">Next</button>
       </div>
     </div>
 
     <!-- Step 2: Google API Key -->
     <div class="step" data-step="2">
-      <h1>Google AI API Key</h1>
-      <p class="hint">
+      <h1 data-i18n="apiKeyTitle">Google AI API Key</h1>
+      <p class="hint" data-i18n-html="apiKeyHint">
         Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, sign in, and create an API key. This is used for the AI model, embeddings, audio, images, and more.
       </p>
-      <label for="googleApiKey">API Key</label>
+      <label for="googleApiKey" data-i18n="apiKeyLabel">API Key</label>
       <input type="text" id="googleApiKey" name="googleApiKey" placeholder="AIza..." value="${v("googleApiKey")}" class="${errors?.googleApiKey ? "has-error" : ""}" autocomplete="off" spellcheck="false">
       ${e("googleApiKey")}
 
-      <label style="margin-top: 20px;">AI Model</label>
+      <label style="margin-top: 20px;" data-i18n="modelLabel">AI Model</label>
       <div class="model-options">
         <label class="model-option${(prefilled?.geminiModel ?? "gemini-3-flash-preview") === "gemini-3-flash-preview" ? " selected" : ""}" id="opt-flash">
           <input type="radio" name="geminiModel" value="gemini-3-flash-preview" ${(prefilled?.geminiModel ?? "gemini-3-flash-preview") === "gemini-3-flash-preview" ? "checked" : ""}>
           <div class="model-info">
-            <div class="model-name">Gemini 3 Flash (Recommended)</div>
-            <div class="model-desc">Fast, capable, and free tier available. Great for most use cases.</div>
+            <div class="model-name" data-i18n="flashName">Gemini 3 Flash (Recommended)</div>
+            <div class="model-desc" data-i18n="flashDesc">Fast, capable, and free tier available. Great for most use cases.</div>
           </div>
         </label>
         <label class="model-option${prefilled?.geminiModel === "gemini-3.1-pro-preview" ? " selected" : ""}" id="opt-pro">
           <input type="radio" name="geminiModel" value="gemini-3.1-pro-preview" ${prefilled?.geminiModel === "gemini-3.1-pro-preview" ? "checked" : ""}>
           <div class="model-info">
-            <div class="model-name">Gemini 3.1 Pro</div>
-            <div class="model-desc">Smarter and more nuanced, but costs more. Best for deeper conversations.</div>
+            <div class="model-name" data-i18n="proName">Gemini 3.1 Pro</div>
+            <div class="model-desc" data-i18n="proDesc">Smarter and more nuanced, but costs more. Best for deeper conversations.</div>
           </div>
         </label>
       </div>
 
       <div class="btn-row">
-        <button type="button" class="btn-secondary" onclick="goStep(1)">Back</button>
-        <button type="button" class="btn-primary" onclick="goStep(3)">Next</button>
+        <button type="button" class="btn-secondary" onclick="goStep(1)" data-i18n="back">Back</button>
+        <button type="button" class="btn-primary" onclick="goStep(3)" data-i18n="next">Next</button>
       </div>
     </div>
 
     <!-- Step 3: User ID + Submit -->
     <div class="step" data-step="3">
-      <h1>Telegram User ID</h1>
-      <p class="hint">
+      <h1 data-i18n="userIdTitle">Telegram User ID</h1>
+      <p class="hint" data-i18n-html="userIdHint">
         Open <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a> in Telegram, send <strong>/start</strong>, and copy the numeric ID it replies with.
       </p>
-      <label for="ownerUserId">Your User ID</label>
+      <label for="ownerUserId" data-i18n="userIdLabel">Your User ID</label>
       <input type="text" id="ownerUserId" name="ownerUserId" placeholder="123456789" value="${v("ownerUserId")}" class="${errors?.ownerUserId ? "has-error" : ""}" autocomplete="off" spellcheck="false">
-      <div class="format-hint">A numeric ID like 123456789</div>
+      <div class="format-hint" data-i18n="userIdFormat">A numeric ID like 123456789</div>
       ${e("ownerUserId")}
 
       <details>
-        <summary>Advanced: Group Chat ID (optional)</summary>
-        <label for="allowedGroupId">Allowed Group ID</label>
-        <p class="hint">If you want the bot to work in a group chat, enter the group's ID here. You can get it by adding <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a> to the group.</p>
+        <summary data-i18n="groupAdvanced">Advanced: Group Chat ID (optional)</summary>
+        <label for="allowedGroupId" data-i18n="groupLabel">Allowed Group ID</label>
+        <p class="hint" data-i18n-html="groupHint">If you want the bot to work in a group chat, enter the group's ID here. You can get it by adding <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a> to the group.</p>
         <input type="text" id="allowedGroupId" name="allowedGroupId" placeholder="-1001234567890" value="${v("allowedGroupId")}" class="${errors?.allowedGroupId ? "has-error" : ""}" autocomplete="off" spellcheck="false">
-        <div class="format-hint">Usually a negative number like -1001234567890</div>
+        <div class="format-hint" data-i18n="groupFormat">Usually a negative number like -1001234567890</div>
         ${e("allowedGroupId")}
       </details>
 
       <div class="btn-row">
-        <button type="button" class="btn-secondary" onclick="goStep(2)">Back</button>
-        <button type="submit" class="btn-primary" id="submitBtn">Save &amp; Start Bot</button>
+        <button type="button" class="btn-secondary" onclick="goStep(2)" data-i18n="back">Back</button>
+        <button type="submit" class="btn-primary" id="submitBtn" data-i18n="submit">Save &amp; Start Bot</button>
       </div>
     </div>
 
@@ -367,6 +399,98 @@ function buildWizardHtml(
 </div>
 
 <script>
+  var i18n = {
+    en: {
+      title: "Bot Setup Wizard",
+      globalError: "Please fix the errors below and try again.",
+      welcomeTitle: "Welcome to Bot Setup",
+      welcomeSubtitle: "Let's get your Telegram bot configured in a few easy steps.",
+      langLabel: "Bot Language",
+      langHint: "Choose the language for your bot's personality and responses.",
+      needList: "You'll need the following:",
+      needToken: "A Telegram Bot Token (from @BotFather)",
+      needApiKey: "A Google AI API Key (from Google AI Studio)",
+      needUserId: "Your Telegram User ID (from @userinfobot)",
+      getStarted: "Get Started",
+      tokenTitle: "Telegram Bot Token",
+      tokenHint: 'Open <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> in Telegram, send <strong>/newbot</strong>, follow the prompts, then copy the token it gives you.',
+      tokenLabel: "Bot Token",
+      tokenFormat: "Format: 123456789:ABCdefGHIjklMNO...",
+      back: "Back",
+      next: "Next",
+      apiKeyTitle: "Google AI API Key",
+      apiKeyHint: 'Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, sign in, and create an API key. This is used for the AI model, embeddings, audio, images, and more.',
+      apiKeyLabel: "API Key",
+      modelLabel: "AI Model",
+      flashName: "Gemini 3 Flash (Recommended)",
+      flashDesc: "Fast, capable, and free tier available. Great for most use cases.",
+      proName: "Gemini 3.1 Pro",
+      proDesc: "Smarter and more nuanced, but costs more. Best for deeper conversations.",
+      userIdTitle: "Telegram User ID",
+      userIdHint: 'Open <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a> in Telegram, send <strong>/start</strong>, and copy the numeric ID it replies with.',
+      userIdLabel: "Your User ID",
+      userIdFormat: "A numeric ID like 123456789",
+      groupAdvanced: "Advanced: Group Chat ID (optional)",
+      groupLabel: "Allowed Group ID",
+      groupHint: 'If you want the bot to work in a group chat, enter the group\\'s ID here. You can get it by adding <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a> to the group.',
+      groupFormat: "Usually a negative number like -1001234567890",
+      submit: "Save & Start Bot"
+    },
+    es: {
+      title: "Asistente de Configuraci\\u00f3n",
+      globalError: "Por favor corrige los errores e int\\u00e9ntalo de nuevo.",
+      welcomeTitle: "Configuraci\\u00f3n del Bot",
+      welcomeSubtitle: "Configuremos tu bot de Telegram en unos sencillos pasos.",
+      langLabel: "Idioma del Bot",
+      langHint: "Elige el idioma para la personalidad y respuestas de tu bot.",
+      needList: "Necesitar\\u00e1s lo siguiente:",
+      needToken: "Un Token de Bot de Telegram (de @BotFather)",
+      needApiKey: "Una Clave API de Google AI (de Google AI Studio)",
+      needUserId: "Tu ID de Usuario de Telegram (de @userinfobot)",
+      getStarted: "Comenzar",
+      tokenTitle: "Token del Bot de Telegram",
+      tokenHint: 'Abre <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> en Telegram, env\\u00eda <strong>/newbot</strong>, sigue las instrucciones y copia el token que te da.',
+      tokenLabel: "Token del Bot",
+      tokenFormat: "Formato: 123456789:ABCdefGHIjklMNO...",
+      back: "Volver",
+      next: "Siguiente",
+      apiKeyTitle: "Clave API de Google AI",
+      apiKeyHint: 'Ve a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, inicia sesi\\u00f3n y crea una clave API. Se usa para el modelo de IA, embeddings, audio, im\\u00e1genes y m\\u00e1s.',
+      apiKeyLabel: "Clave API",
+      modelLabel: "Modelo de IA",
+      flashName: "Gemini 3 Flash (Recomendado)",
+      flashDesc: "R\\u00e1pido, capaz y con nivel gratuito disponible. Ideal para la mayor\\u00eda de usos.",
+      proName: "Gemini 3.1 Pro",
+      proDesc: "M\\u00e1s inteligente y matizado, pero cuesta m\\u00e1s. Mejor para conversaciones profundas.",
+      userIdTitle: "ID de Usuario de Telegram",
+      userIdHint: 'Abre <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a> en Telegram, env\\u00eda <strong>/start</strong> y copia el ID num\\u00e9rico que te responde.',
+      userIdLabel: "Tu ID de Usuario",
+      userIdFormat: "Un ID num\\u00e9rico como 123456789",
+      groupAdvanced: "Avanzado: ID del grupo (opcional)",
+      groupLabel: "ID del Grupo Permitido",
+      groupHint: 'Si quieres que el bot funcione en un grupo, ingresa el ID del grupo aqu\\u00ed. Puedes obtenerlo agregando <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a> al grupo.',
+      groupFormat: "Generalmente un n\\u00famero negativo como -1001234567890",
+      submit: "Guardar e Iniciar Bot"
+    }
+  };
+
+  var currentLang = "${initLang}";
+
+  function applyLang(lang) {
+    currentLang = lang;
+    var strings = i18n[lang];
+    if (!strings) return;
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n');
+      if (strings[key] != null) el.textContent = strings[key];
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n-html');
+      if (strings[key] != null) el.innerHTML = strings[key];
+    });
+  }
+
   var currentStep = ${errors && Object.keys(errors).length > 0 ? findFirstErrorStep(errors) : 0};
   function goStep(n) {
     document.querySelectorAll('.step').forEach(function(el) { el.classList.remove('active'); });
@@ -381,13 +505,21 @@ function buildWizardHtml(
   }
   // If there are errors, jump to the right step
   if (currentStep > 0) goStep(currentStep);
-  // Toggle selected class on model radio buttons
-  document.querySelectorAll('input[name="geminiModel"]').forEach(function(radio) {
-    radio.addEventListener('change', function() {
-      document.querySelectorAll('.model-option').forEach(function(el) { el.classList.remove('selected'); });
-      this.closest('.model-option').classList.add('selected');
+  // Toggle selected class on radio button groups
+  ['geminiModel', 'language'].forEach(function(name) {
+    document.querySelectorAll('input[name="' + name + '"]').forEach(function(radio) {
+      radio.addEventListener('change', function() {
+        this.closest('.model-options').querySelectorAll('.model-option').forEach(function(el) { el.classList.remove('selected'); });
+        this.closest('.model-option').classList.add('selected');
+      });
     });
   });
+  // Switch wizard language when language radio changes
+  document.querySelectorAll('input[name="language"]').forEach(function(radio) {
+    radio.addEventListener('change', function() { applyLang(this.value); });
+  });
+  // Apply initial language
+  applyLang(currentLang);
 </script>
 </body>
 </html>`;
@@ -400,13 +532,19 @@ function findFirstErrorStep(errors: Record<string, string>): number {
 	return 0;
 }
 
-function buildSuccessHtml(): string {
+function buildSuccessHtml(lang: BotLanguage): string {
+	const isEs = lang === "es";
+	const title = isEs ? "Configuraci\u00f3n Guardada" : "Configuration Saved!";
+	const subtitle = isEs
+		? "Tu bot se est\u00e1 iniciando. Puedes cerrar esta pesta\u00f1a.<br>Ve a Telegram para completar la configuraci\u00f3n de personalidad."
+		: "Your bot is now starting. You can close this tab.<br>Head over to Telegram to complete the personality setup.";
+
 	return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${lang}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Setup Complete</title>
+<title>${title}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -446,9 +584,8 @@ function buildSuccessHtml(): string {
 <body>
 <div class="card">
   <div class="checkmark">&#10003;</div>
-  <h1>Configuration Saved!</h1>
-  <p>Your bot is now starting. You can close this tab.<br>
-  Head over to Telegram to complete the personality setup.</p>
+  <h1>${title}</h1>
+  <p>${subtitle}</p>
 </div>
 </body>
 </html>`;
@@ -501,12 +638,14 @@ export async function runSetupWizard(): Promise<void> {
 
 	// Load existing values for pre-filling (--setup re-run)
 	const existing = loadExistingEnv();
+	const existingConfig = loadConfig();
 	const prefilled: Record<string, string> = {
 		botToken: existing.BOT_TOKEN ?? "",
 		googleApiKey: existing.GOOGLE_API_KEY ?? "",
 		geminiModel: existing.GEMINI_MODEL ?? "gemini-3-flash-preview",
 		ownerUserId: existing.OWNER_USER_ID ?? "",
 		allowedGroupId: existing.ALLOWED_GROUP_ID ?? "",
+		language: existingConfig.language ?? "es",
 	};
 
 	return new Promise<void>((resolve) => {
@@ -535,6 +674,7 @@ export async function runSetupWizard(): Promise<void> {
 						geminiModel: fields.geminiModel ?? "gemini-3-flash-preview",
 						ownerUserId: fields.ownerUserId ?? "",
 						allowedGroupId: fields.allowedGroupId ?? "",
+						language: (fields.language === "en" ? "en" : "es") as BotLanguage,
 					};
 
 					const result = validateInputs(data);
@@ -547,6 +687,7 @@ export async function runSetupWizard(): Promise<void> {
 							geminiModel: data.geminiModel,
 							ownerUserId: data.ownerUserId,
 							allowedGroupId: data.allowedGroupId ?? "",
+							language: data.language,
 						};
 						return new Response(buildWizardHtml(port, result.errors, filled), {
 							headers: {
@@ -564,7 +705,7 @@ export async function runSetupWizard(): Promise<void> {
 						resolve();
 					}, 500);
 
-					return new Response(buildSuccessHtml(), {
+					return new Response(buildSuccessHtml(data.language), {
 						headers: { "Content-Type": "text/html; charset=utf-8" },
 					});
 				}

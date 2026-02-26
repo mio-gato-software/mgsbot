@@ -1,5 +1,6 @@
-import { renameSync, writeFileSync } from "node:fs";
-import { rename, writeFile } from "node:fs/promises";
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 /**
  * Write a file atomically: write to a .tmp file first, then rename.
@@ -9,6 +10,7 @@ export async function atomicWriteFile(
 	filePath: string,
 	data: string,
 ): Promise<void> {
+	await mkdir(dirname(filePath), { recursive: true });
 	const tmpPath = `${filePath}.tmp`;
 	await writeFile(tmpPath, data);
 	await rename(tmpPath, filePath);
@@ -18,6 +20,7 @@ export async function atomicWriteFile(
  * Synchronous version of atomicWriteFile.
  */
 export function atomicWriteFileSync(filePath: string, data: string): void {
+	mkdirSync(dirname(filePath), { recursive: true });
 	const tmpPath = `${filePath}.tmp`;
 	writeFileSync(tmpPath, data);
 	renameSync(tmpPath, filePath);

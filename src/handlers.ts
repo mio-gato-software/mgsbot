@@ -1,6 +1,6 @@
 import type { Bot, Context } from "grammy";
 import { analyzeYouTube, describeImage } from "./ai.ts";
-import { getBotName, isBotConfigured } from "./config.ts";
+import { getBotName, isBotConfigured, loadConfig } from "./config.ts";
 import {
 	getUserDisplayName,
 	isGroupChat,
@@ -102,7 +102,12 @@ export function registerHandlers(bot: Bot): void {
 					const userName = getUserDisplayName(ctx);
 					await processSetupConversation(ctx, text, userName);
 				} else {
-					await ctx.reply("Por favor, usa texto para configurar el bot.");
+					const lang = loadConfig().language ?? "es";
+					await ctx.reply(
+						lang === "en"
+							? "Please use text to configure the bot."
+							: "Por favor, usa texto para configurar el bot.",
+					);
 				}
 			}
 			return;

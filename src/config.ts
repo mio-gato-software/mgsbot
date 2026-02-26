@@ -1,10 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { atomicWriteFileSync } from "./utils.ts";
 
+export type BotLanguage = "es" | "en";
+
 export interface BotConfig {
 	isConfigured: boolean;
 	botName: string;
 	birthYear?: number;
+	language?: BotLanguage;
 }
 
 const CONFIG_PATH = "./memory/bot_config.json";
@@ -24,8 +27,10 @@ function migrateFromPermanent(): BotConfig {
 	if (!existsSync(PERMANENT_PATH)) return { ...DEFAULT_CONFIG };
 
 	const permData = readFileSync(PERMANENT_PATH, "utf-8");
-	// Only treat as configured if permanent.md has a real personality header
-	const match = permData.match(/^# Personalidad de (.+)/im);
+	// Only treat as configured if permanent.md has a real personality header (Spanish or English)
+	const match =
+		permData.match(/^# Personalidad de (.+)/im) ||
+		permData.match(/^# (.+)'s Personality/im);
 	if (!match?.[1]) return { ...DEFAULT_CONFIG };
 
 	const migratedConfig: BotConfig = {
@@ -55,6 +60,7 @@ export function loadConfig(): BotConfig {
 			isConfigured: parsed.isConfigured ?? false,
 			botName: parsed.botName ?? "Brendy",
 			birthYear: parsed.birthYear,
+			language: parsed.language,
 		};
 		configLastRead = now;
 		return configCache;
