@@ -221,8 +221,8 @@ export async function generateImage(
 		encoding: "base64",
 	});
 
-	const response = await ai.models.generateContent({
-		model: "gemini-3-pro-image-preview",
+	const response = await ai.models.generateContentStream({
+		model: "gemini-3.1-flash-image-preview",
 		contents: createUserContent([
 			{ inlineData: { mimeType, data: base64Data } },
 			{
@@ -230,15 +230,24 @@ export async function generateImage(
 			},
 		]),
 		config: {
+			thinkingConfig: {
+				thinkingLevel: "MINIMAL",
+			},
+			imageConfig: {
+				imageSize: "0.5K",
+			},
 			responseModalities: ["IMAGE", "TEXT"],
 		},
 	});
 
-	const parts = response.candidates?.[0]?.content?.parts ?? [];
-	for (const part of parts) {
-		if (part.inlineData?.data) {
-			if (isDev) console.log("[generateImage] Image generated successfully");
-			return Buffer.from(part.inlineData.data, "base64");
+	for await (const chunk of response) {
+		const parts = chunk.candidates?.[0]?.content?.parts;
+		if (!parts) continue;
+		for (const part of parts) {
+			if (part.inlineData?.data) {
+				if (isDev) console.log("[generateImage] Image generated successfully");
+				return Buffer.from(part.inlineData.data, "base64");
+			}
 		}
 	}
 
