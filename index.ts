@@ -1,11 +1,28 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 
+// --- Load .env manually (compiled binaries may not auto-load it) ---
+
+function loadEnvFile(): void {
+	if (!existsSync("./.env")) return;
+	const content = readFileSync("./.env", "utf-8");
+	for (const line of content.split("\n")) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith("#")) continue;
+		const eqIdx = trimmed.indexOf("=");
+		if (eqIdx === -1) continue;
+		const key = trimmed.slice(0, eqIdx).trim();
+		const value = trimmed.slice(eqIdx + 1).trim();
+		if (!process.env[key]) process.env[key] = value;
+	}
+}
+
+loadEnvFile();
+
 // --- Setup wizard check (before any bot imports that need env vars) ---
 
 const forceSetup = process.argv.includes("--setup");
 const needsSetup =
 	forceSetup ||
-	!existsSync("./.env") ||
 	!process.env.BOT_TOKEN ||
 	!process.env.GOOGLE_API_KEY ||
 	!process.env.OWNER_USER_ID;
@@ -13,17 +30,7 @@ const needsSetup =
 if (needsSetup) {
 	const { runSetupWizard } = await import("./src/wizard.ts");
 	await runSetupWizard();
-	// Load .env into process.env so the bot can start without re-exec
-	const envContent = readFileSync("./.env", "utf-8");
-	for (const line of envContent.split("\n")) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith("#")) continue;
-		const eqIdx = trimmed.indexOf("=");
-		if (eqIdx === -1) continue;
-		const key = trimmed.slice(0, eqIdx).trim();
-		const value = trimmed.slice(eqIdx + 1).trim();
-		process.env[key] = value;
-	}
+	loadEnvFile();
 }
 
 // --- Bot imports (after env vars are confirmed present) ---
