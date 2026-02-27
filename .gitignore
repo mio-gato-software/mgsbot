@@ -38,6 +38,7 @@ audios/
 memory/
 
 # Compiled executable
+mgsbot
 mgsbot.exe
 
 # Bun lockfile
