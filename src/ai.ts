@@ -7,6 +7,7 @@ import {
 	type Part,
 } from "@google/genai";
 import { type ChatMessage, createChatProvider } from "./providers/index.ts";
+import { supportsVision } from "./providers/types.ts";
 import type { PromotionResult } from "./types.ts";
 
 const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
@@ -145,20 +146,32 @@ export async function describeImage(
 	try {
 		const base64Data = fs.readFileSync(filePath, { encoding: "base64" });
 
+		const provider = createChatProvider();
+		if (supportsVision(provider)) {
+			if (isDev)
+				console.log(
+					`[describeImage] Using provider: ${provider.name} (${provider.model})`,
+				);
+			try {
+				return await provider.describeImage(base64Data, mimeType, caption);
+			} catch (error) {
+				console.error(
+					`[describeImage] Provider ${provider.name} failed, falling back to Gemini:`,
+					error,
+				);
+			}
+		}
+
+		if (isDev) console.log("[describeImage] Using Gemini, mimeType:", mimeType);
+
 		const parts: Part[] = [
 			{ inlineData: { mimeType, data: base64Data } },
 			{
 				text: caption
-					? `The user sent this image with the caption: "${caption}". Describe what you see briefly in Spanish, so you can reference it in conversation.`
-					: "The user sent this image. Describe what you see briefly in Spanish, so you can reference it in conversation.",
+					? `The user sent this image with the caption: "${caption}". Describe what you see briefly so you can reference it in conversation.`
+					: "The user sent this image. Describe what you see briefly so you can reference it in conversation.",
 			},
 		];
-
-		if (isDev)
-			console.log(
-				"[describeImage] Sending image to model, mimeType:",
-				mimeType,
-			);
 
 		const response = await ai.models.generateContent({
 			model: MODEL,

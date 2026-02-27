@@ -10,4 +10,15 @@ export interface ChatProvider {
 		systemPrompt: string,
 		messages: ChatMessage[],
 	): Promise<string>;
+	describeImage?(
+		imageBase64: string,
+		mimeType: string,
+		caption?: string,
+	): Promise<string>;
+}
+
+export function supportsVision(
+	provider: ChatProvider,
+): provider is ChatProvider & Required<Pick<ChatProvider, "describeImage">> {
+	return typeof provider.describeImage === "function";
 }
