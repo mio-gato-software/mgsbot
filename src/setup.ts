@@ -231,7 +231,11 @@ export async function processSetupConversation(
 					.replace(/```/g, "")
 					.trim();
 				if (cleanText) {
-					await ctx.reply(cleanText);
+					try {
+						await ctx.reply(cleanText, { parse_mode: "Markdown" });
+					} catch {
+						await ctx.reply(cleanText);
+					}
 				}
 				const confirmMsg =
 					lang === "en"
@@ -250,5 +254,9 @@ export async function processSetupConversation(
 		}
 	}
 
-	await ctx.reply(responseText);
+	try {
+		await ctx.reply(responseText, { parse_mode: "Markdown" });
+	} catch {
+		await ctx.reply(responseText);
+	}
 }
