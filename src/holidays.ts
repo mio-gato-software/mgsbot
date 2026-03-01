@@ -21,28 +21,9 @@ const HOLIDAYS_2026: [number, number][] = [
 
 /**
  * Check if a date is a Dominican Republic holiday
+ * @param month 0-indexed month (0=January)
+ * @param day Day of the month
  */
-export function isHoliday(date: Date): boolean {
-	const month = date.getMonth();
-	const day = date.getDate();
-
+export function isHoliday(month: number, day: number): boolean {
 	return HOLIDAYS_2026.some(([m, d]) => m === month && d === day);
-}
-
-/**
- * Check if a date is a workday (not weekend, not holiday)
- */
-export function isWorkday(date: Date): boolean {
-	const dayOfWeek = date.getDay();
-	const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
-
-	return !isWeekend && !isHoliday(date);
-}
-
-/**
- * Check if a date is a weekend
- */
-export function isWeekend(date: Date): boolean {
-	const dayOfWeek = date.getDay();
-	return dayOfWeek === 0 || dayOfWeek === 6;
 }

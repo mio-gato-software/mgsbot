@@ -3,6 +3,13 @@ import {
 	getCurrentWeatherContext,
 	getDailyWeatherForImage,
 } from "./daily-weather.ts";
+import {
+	drNow,
+	formatDRDateTime,
+	formatDRTime,
+	getDRDay,
+	getDRHour,
+} from "./dr-time.ts";
 import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
@@ -34,12 +41,13 @@ function getTimeOfDayLabel(hour: number): string {
 	return "noche";
 }
 
-function getActivityGuidance(now: Date): string {
-	const hour = now.getHours();
-	const dayOfWeek = now.getDay();
+function getActivityGuidance(): string {
+	const hour = getDRHour();
+	const dayOfWeek = getDRDay();
 	const dayName = DAY_NAMES[dayOfWeek] ?? "Día";
 	const timeLabel = getTimeOfDayLabel(hour);
-	const holiday = isHoliday(now);
+	const now = drNow();
+	const holiday = isHoliday(now.month(), now.date());
 
 	const dayType = holiday
 		? "feriado"
@@ -78,11 +86,7 @@ export async function buildSystemPrompt(
 
 	const permanent = await loadPermanent();
 
-	const now = new Date().toLocaleString("es-DO", {
-		timeZone: "America/Santo_Domingo",
-		dateStyle: "full",
-		timeStyle: "short",
-	});
+	const now = formatDRDateTime();
 	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (hora de República Dominicana)`;
 
 	// Evolving personality description
@@ -152,10 +156,7 @@ export async function buildSystemPrompt(
 	}
 
 	// Activity context
-	const nowDR = new Date(
-		new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
-	);
-	const activityGuidance = getActivityGuidance(nowDR);
+	const activityGuidance = getActivityGuidance();
 
 	systemPrompt += `\n\n## Tu actividad actual\n${activityGuidance}`;
 
@@ -174,11 +175,7 @@ Presta atención a los marcadores de tiempo entre mensajes del historial (ej: "[
 			? `\n\n**Clima actual:** ${weatherContext}. Si tu escena es al aire libre (playa, parque, calle, terraza, piscina, jardín, balcón, ventana con vista exterior), incorpora este clima visualmente en el prompt: cielo, iluminación, lluvia si aplica, etc. No lo menciones en texto, solo muéstralo. Para escenas completamente interiores sin vista al exterior, ignora el clima.`
 			: "";
 
-		const currentTime = nowDR.toLocaleTimeString("es-DO", {
-			hour: "2-digit",
-			minute: "2-digit",
-			hour12: true,
-		});
+		const currentTime = formatDRTime();
 
 		systemPrompt += `\n\n## Generación de imagen
 Esta es tu foto de la semana. Incluye en tu respuesta un marcador [IMAGE: prompt artístico en inglés] describiendo una escena, ambiente o actividad que refleje tu estado de ánimo según el contexto de tu actividad actual.${weatherInstruction}

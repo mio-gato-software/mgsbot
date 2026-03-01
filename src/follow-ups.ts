@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Api } from "grammy";
 import { extractFollowUps, generateResponse } from "./ai.ts";
+import { drNow, formatDRDateTime, getDRHour, getDRMinute } from "./dr-time.ts";
 import {
 	addMessageToSensory,
 	computeTextScore,
@@ -70,13 +71,8 @@ export async function addFollowUp(
 // --- Scheduling ---
 
 function clampToReasonableHours(timestamp: number): number {
-	// DR timezone offset: UTC-4
-	const date = new Date(timestamp);
-	const drTime = new Date(
-		date.toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
-	);
-	const hour = drTime.getHours();
-	const minute = drTime.getMinutes();
+	const hour = getDRHour(timestamp);
+	const minute = getDRMinute(timestamp);
 
 	// 8:00 AM - 9:30 PM is acceptable
 	if (hour >= 8 && (hour < 21 || (hour === 21 && minute <= 30))) {
@@ -84,22 +80,12 @@ function clampToReasonableHours(timestamp: number): number {
 	}
 
 	// Too late (after 9:30 PM) or too early (before 8 AM) → move to 9:00 AM next day
-	const nextDay = new Date(drTime);
-	if (hour >= 21 || hour < 8) {
-		if (hour >= 21) {
-			nextDay.setDate(nextDay.getDate() + 1);
-		}
-		nextDay.setHours(9, 0, 0, 0);
+	let target = drNow(timestamp).hour(9).minute(0).second(0).millisecond(0);
+	if (hour >= 21) {
+		target = target.add(1, "day");
 	}
 
-	// Convert back: calculate offset from DR time to get UTC
-	const originalDR = new Date(
-		new Date(timestamp).toLocaleString("en-US", {
-			timeZone: "America/Santo_Domingo",
-		}),
-	);
-	const diffMs = timestamp - originalDR.getTime();
-	return nextDay.getTime() + diffMs;
+	return target.valueOf();
 }
 
 // --- Expiration ---
@@ -293,12 +279,7 @@ export async function detectAndStoreFollowUps(
 ): Promise<void> {
 	if (process.env.ENABLE_FOLLOW_UPS !== "true") return;
 
-	const now = new Date();
-	const currentDateDR = now.toLocaleString("es-DO", {
-		timeZone: "America/Santo_Domingo",
-		dateStyle: "full",
-		timeStyle: "short",
-	});
+	const currentDateDR = formatDRDateTime();
 
 	const extracted = await extractFollowUps(
 		recentMessages,

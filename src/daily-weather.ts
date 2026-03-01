@@ -1,3 +1,5 @@
+import { getDRDateString, getDRHour } from "./dr-time.ts";
+
 interface DailyWeather {
 	date: string; // "2026-02-03" (Dominican timezone)
 	period: string; // "morning" | "afternoon" | "night"
@@ -18,20 +20,11 @@ const LONGITUDE = -69.9312;
 let cachedWeather: DailyWeather | null = null;
 
 function getTodayDateRD(): string {
-	return new Date().toLocaleDateString("en-CA", {
-		timeZone: "America/Santo_Domingo",
-	});
+	return getDRDateString();
 }
 
 function getCurrentPeriod(): "morning" | "afternoon" | "night" {
-	const hour = Number.parseInt(
-		new Date().toLocaleString("en-US", {
-			timeZone: "America/Santo_Domingo",
-			hour: "numeric",
-			hour12: false,
-		}),
-		10,
-	);
+	const hour = getDRHour();
 	if (hour >= 18) return "night";
 	if (hour >= 12) return "afternoon";
 	return "morning";

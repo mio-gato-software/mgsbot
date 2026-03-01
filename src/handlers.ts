@@ -6,6 +6,7 @@ import {
 	isGroupChat,
 	processConversation,
 } from "./conversation.ts";
+import { getDRHour, getDRMinute } from "./dr-time.ts";
 import {
 	cleanupFile,
 	downloadAndTranscribe,
@@ -33,11 +34,8 @@ const enableSleepSchedule = process.env.ENABLE_SLEEP_SCHEDULE !== "false";
 
 export function isSleepingHour(): boolean {
 	if (!enableSleepSchedule) return false;
-	const now = new Date(
-		new Date().toLocaleString("en-US", { timeZone: "America/Santo_Domingo" }),
-	);
-	const hour = now.getHours();
-	const minute = now.getMinutes();
+	const hour = getDRHour();
+	const minute = getDRMinute();
 	// 11:30 PM (23:30) to 6:00 AM
 	return hour < 6 || (hour === 23 && minute >= 30);
 }

@@ -1,5 +1,6 @@
 import { isImageGenAvailable } from "./ai.ts";
 import { getBaseImagePath } from "./appearance.ts";
+import { getDRDateString } from "./dr-time.ts";
 import type { SensoryBuffer } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -8,9 +9,7 @@ const IMAGE_EARLIEST_HOUR = 8;
 const IMAGE_LATEST_HOUR = 23;
 
 export function getTodayDateRD(): string {
-	return new Date().toLocaleDateString("en-CA", {
-		timeZone: "America/Santo_Domingo",
-	});
+	return getDRDateString();
 }
 
 export function getWeekStartRD(): string {

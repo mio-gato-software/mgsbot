@@ -3,6 +3,7 @@
 	"module": "index.ts",
 	"dependencies": {
 		"@google/genai": "^1.43.0",
+		"dayjs": "^1.11.19",
 		"grammy": "^1.40.1"
 	},
 	"devDependencies": {
