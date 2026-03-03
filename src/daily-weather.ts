@@ -1,4 +1,4 @@
-import { getDRDateString, getDRHour } from "./dr-time.ts";
+import { DR_TZ, getDRDateString, getDRHour } from "./dr-time.ts";
 
 interface DailyWeather {
 	date: string; // "2026-02-03" (Dominican timezone)
@@ -140,7 +140,7 @@ interface OpenMeteoResponse {
 
 async function fetchWeather(): Promise<DailyWeather | null> {
 	try {
-		const url = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=America/Santo_Domingo`;
+		const url = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=${DR_TZ}`;
 
 		if (isDev) console.log("[daily-weather] Fetching from Open-Meteo...");
 		const res = await fetch(url);

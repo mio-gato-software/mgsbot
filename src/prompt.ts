@@ -4,6 +4,7 @@ import {
 	getDailyWeatherForImage,
 } from "./daily-weather.ts";
 import {
+	DR_TZ,
 	drNow,
 	formatDRDateTime,
 	formatDRTime,
@@ -87,7 +88,7 @@ export async function buildSystemPrompt(
 	const permanent = await loadPermanent();
 
 	const now = formatDRDateTime();
-	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (hora de República Dominicana)`;
+	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (zona horaria: ${DR_TZ})`;
 
 	// Evolving personality description
 	const personalityDesc = await getPersonalityDescription();

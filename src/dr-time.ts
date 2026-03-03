@@ -5,7 +5,7 @@ import utc from "dayjs/plugin/utc.js";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-const DR_TZ = "America/Santo_Domingo";
+export const DR_TZ = process.env.BOT_TIMEZONE || "America/Santo_Domingo";
 
 /**
  * Get current DR time as a dayjs instance.

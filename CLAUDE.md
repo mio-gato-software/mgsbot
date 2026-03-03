@@ -49,6 +49,7 @@ src/
   appearance.ts              ← Locates base character image for image generation
   holidays.ts                ← Dominican Republic holidays (hardcoded for current year, needs annual update)
   daily-weather.ts           ← Fetches weather from Open-Meteo API, cached daily in memory/daily-weather.json
+  dr-time.ts                 ← Centralized timezone utilities via dayjs (BOT_TIMEZONE env var, default: America/Santo_Domingo)
   providers/
     types.ts                 ← ChatProvider interface and ChatMessage type
     index.ts                 ← Provider factory: createChatProvider(), switchChatProvider(), getChatProviderInfo()
@@ -159,6 +160,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
 - `ENABLE_FOLLOW_UPS`: Set `true` to enable proactive follow-ups in DMs
 - `ENABLE_SLEEP_SCHEDULE`: Set `false` to disable sleep schedule (default: `true`)
+- `BOT_TIMEZONE`: IANA timezone for the bot (default: `America/Santo_Domingo`). Affects sleep schedule, time awareness, follow-ups, and weather.
 - `NODE_ENV`: Set `development` for verbose logging
 
 ## Tech Stack

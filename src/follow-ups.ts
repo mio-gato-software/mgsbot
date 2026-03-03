@@ -109,9 +109,7 @@ async function expireStaleFollowUps(): Promise<void> {
 // --- Rate Limiting ---
 
 function getSendsToday(all: FollowUp[]): number {
-	const todayStart = new Date();
-	todayStart.setHours(0, 0, 0, 0);
-	const todayMs = todayStart.getTime();
+	const todayMs = drNow().startOf("day").valueOf();
 
 	return all.filter((fu) => fu.status === "sent" && fu.detectedAt > todayMs)
 		.length;
