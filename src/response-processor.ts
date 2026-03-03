@@ -4,7 +4,7 @@ import { InputFile } from "grammy";
 import { generateImage, textToSpeech } from "./ai.ts";
 import { getBaseImagePath } from "./appearance.ts";
 import { getBotName } from "./config.ts";
-import { getWeekStartRD } from "./image-scheduler.ts";
+import { getWeekStart } from "./image-scheduler.ts";
 import { saveSensory } from "./memory.ts";
 import { isSimpleAssistantMode } from "./prompt.ts";
 import type { SensoryBuffer } from "./types.ts";
@@ -118,7 +118,7 @@ export async function sendResponse(
 				imageSent = true;
 
 				if (shouldGenImage) {
-					buffer.lastImageDate = getWeekStartRD();
+					buffer.lastImageDate = getWeekStart();
 					bufferDirty = true;
 				}
 				if (allowPhotoRequest) {

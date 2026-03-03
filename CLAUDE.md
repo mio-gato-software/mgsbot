@@ -49,7 +49,7 @@ src/
   appearance.ts              ← Locates base character image for image generation
   holidays.ts                ← Dominican Republic holidays (hardcoded for current year, needs annual update)
   daily-weather.ts           ← Fetches weather from Open-Meteo API, cached daily in memory/daily-weather.json
-  dr-time.ts                 ← Centralized timezone utilities via dayjs (BOT_TIMEZONE env var, default: America/Santo_Domingo)
+  bot-time.ts                ← Centralized timezone utilities via dayjs (BOT_TIMEZONE env var, default: America/Santo_Domingo)
   providers/
     types.ts                 ← ChatProvider interface and ChatMessage type
     index.ts                 ← Provider factory: createChatProvider(), switchChatProvider(), getChatProviderInfo()

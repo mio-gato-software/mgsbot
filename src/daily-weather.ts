@@ -1,4 +1,4 @@
-import { DR_TZ, getDRDateString, getDRHour } from "./dr-time.ts";
+import { BOT_TZ, getBotHour, getDateString } from "./bot-time.ts";
 
 interface DailyWeather {
 	date: string; // "2026-02-03" (Dominican timezone)
@@ -19,12 +19,12 @@ const LONGITUDE = -69.9312;
 
 let cachedWeather: DailyWeather | null = null;
 
-function getTodayDateRD(): string {
-	return getDRDateString();
+function getTodayDate(): string {
+	return getDateString();
 }
 
 function getCurrentPeriod(): "morning" | "afternoon" | "night" {
-	const hour = getDRHour();
+	const hour = getBotHour();
 	if (hour >= 18) return "night";
 	if (hour >= 12) return "afternoon";
 	return "morning";
@@ -140,7 +140,7 @@ interface OpenMeteoResponse {
 
 async function fetchWeather(): Promise<DailyWeather | null> {
 	try {
-		const url = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=${DR_TZ}`;
+		const url = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=${BOT_TZ}`;
 
 		if (isDev) console.log("[daily-weather] Fetching from Open-Meteo...");
 		const res = await fetch(url);
@@ -153,7 +153,7 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 		const current = data.current;
 
 		const weather: DailyWeather = {
-			date: getTodayDateRD(),
+			date: getTodayDate(),
 			period: getCurrentPeriod(),
 			description: WMO_DESCRIPTIONS_ES[current.weather_code] ?? "Desconocido",
 			temperature: current.temperature_2m,
@@ -178,7 +178,7 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 }
 
 async function getWeather(): Promise<DailyWeather | null> {
-	const today = getTodayDateRD();
+	const today = getTodayDate();
 	const period = getCurrentPeriod();
 	const cached = await loadCachedWeather();
 

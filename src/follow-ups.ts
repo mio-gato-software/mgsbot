@@ -1,7 +1,12 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Api } from "grammy";
 import { extractFollowUps, generateResponse } from "./ai.ts";
-import { drNow, formatDRDateTime, getDRHour, getDRMinute } from "./dr-time.ts";
+import {
+	botNow,
+	formatDateTime,
+	getBotHour,
+	getBotMinute,
+} from "./bot-time.ts";
 import {
 	addMessageToSensory,
 	computeTextScore,
@@ -71,8 +76,8 @@ export async function addFollowUp(
 // --- Scheduling ---
 
 function clampToReasonableHours(timestamp: number): number {
-	const hour = getDRHour(timestamp);
-	const minute = getDRMinute(timestamp);
+	const hour = getBotHour(timestamp);
+	const minute = getBotMinute(timestamp);
 
 	// 8:00 AM - 9:30 PM is acceptable
 	if (hour >= 8 && (hour < 21 || (hour === 21 && minute <= 30))) {
@@ -80,7 +85,7 @@ function clampToReasonableHours(timestamp: number): number {
 	}
 
 	// Too late (after 9:30 PM) or too early (before 8 AM) → move to 9:00 AM next day
-	let target = drNow(timestamp).hour(9).minute(0).second(0).millisecond(0);
+	let target = botNow(timestamp).hour(9).minute(0).second(0).millisecond(0);
 	if (hour >= 21) {
 		target = target.add(1, "day");
 	}
@@ -109,7 +114,7 @@ async function expireStaleFollowUps(): Promise<void> {
 // --- Rate Limiting ---
 
 function getSendsToday(all: FollowUp[]): number {
-	const todayMs = drNow().startOf("day").valueOf();
+	const todayMs = botNow().startOf("day").valueOf();
 
 	return all.filter((fu) => fu.status === "sent" && fu.detectedAt > todayMs)
 		.length;
@@ -277,7 +282,7 @@ export async function detectAndStoreFollowUps(
 ): Promise<void> {
 	if (process.env.ENABLE_FOLLOW_UPS !== "true") return;
 
-	const currentDateDR = formatDRDateTime();
+	const currentDateDR = formatDateTime();
 
 	const extracted = await extractFollowUps(
 		recentMessages,

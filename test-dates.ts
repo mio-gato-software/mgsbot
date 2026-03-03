@@ -13,19 +13,19 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 import {
-	DR_TZ,
-	drNow,
-	formatDRDateTime,
-	formatDRTime,
-	getDRDateString,
-	getDRDay,
-	getDRHour,
-	getDRMinute,
-} from "./src/dr-time.ts";
+	BOT_TZ,
+	botNow,
+	formatDateTime,
+	formatTime,
+	getBotDay,
+	getBotHour,
+	getBotMinute,
+	getDateString,
+} from "./src/bot-time.ts";
 import {
 	generateRandomWeeklyTargetTime,
-	getTodayDateRD,
-	getWeekStartRD,
+	getTodayDate,
+	getWeekStart,
 } from "./src/image-scheduler.ts";
 
 const SEP = "─".repeat(60);
@@ -39,7 +39,7 @@ console.log("\n[1] ENVIRONMENT");
 console.log(
 	`  BOT_TIMEZONE env:    ${process.env.BOT_TIMEZONE ?? "(not set)"}`,
 );
-console.log(`  DR_TZ resolved:      ${DR_TZ}`);
+console.log(`  BOT_TZ resolved:     ${BOT_TZ}`);
 console.log(`  TZ env:              ${process.env.TZ ?? "(not set)"}`);
 console.log(`  Bun version:         ${Bun.version}`);
 console.log(
@@ -64,35 +64,45 @@ console.log(
 console.log("\n[3] DAYJS RAW");
 const djNow = dayjs();
 const djUtc = dayjs.utc();
-const djTz = dayjs().tz(DR_TZ);
-console.log(`  dayjs():             ${djNow.format("YYYY-MM-DD HH:mm:ss Z")}`);
-console.log(`  dayjs.utc():         ${djUtc.format("YYYY-MM-DD HH:mm:ss Z")}`);
-console.log(`  dayjs().tz(${DR_TZ}): ${djTz.format("YYYY-MM-DD HH:mm:ss Z")}`);
-console.log(`  dayjs TZ offset:     ${djTz.utcOffset()} min`);
-
-// 4. dr-time.ts functions
-console.log("\n[4] dr-time.ts FUNCTIONS");
-const drNowVal = drNow();
+const djTzBug = dayjs().tz(BOT_TZ);
+const djTzFix = dayjs.utc().tz(BOT_TZ);
 console.log(
-	`  drNow():             ${drNowVal.format("YYYY-MM-DD HH:mm:ss Z")}`,
+	`  dayjs():                ${djNow.format("YYYY-MM-DD HH:mm:ss Z")}`,
 );
-console.log(`  drNow().hour():      ${drNowVal.hour()}`);
-console.log(`  drNow().minute():    ${drNowVal.minute()}`);
-console.log(`  drNow().day():       ${drNowVal.day()} (0=Sun)`);
-console.log(`  getDRHour():         ${getDRHour()}`);
-console.log(`  getDRMinute():       ${getDRMinute()}`);
-console.log(`  getDRDay():          ${getDRDay()}`);
-console.log(`  getDRDateString():   ${getDRDateString()}`);
-console.log(`  formatDRDateTime():  ${formatDRDateTime()}`);
-console.log(`  formatDRTime():      ${formatDRTime()}`);
+console.log(
+	`  dayjs.utc():            ${djUtc.format("YYYY-MM-DD HH:mm:ss Z")}`,
+);
+console.log(
+	`  dayjs().tz() [OLD BUG]: ${djTzBug.format("YYYY-MM-DD HH:mm:ss Z")}`,
+);
+console.log(
+	`  dayjs.utc().tz() [FIX]: ${djTzFix.format("YYYY-MM-DD HH:mm:ss Z")}`,
+);
+console.log(`  dayjs TZ offset:        ${djTzFix.utcOffset()} min`);
+
+// 4. bot-time.ts functions
+console.log("\n[4] bot-time.ts FUNCTIONS");
+const botNowVal = botNow();
+console.log(
+	`  botNow():            ${botNowVal.format("YYYY-MM-DD HH:mm:ss Z")}`,
+);
+console.log(`  botNow().hour():     ${botNowVal.hour()}`);
+console.log(`  botNow().minute():   ${botNowVal.minute()}`);
+console.log(`  botNow().day():      ${botNowVal.day()} (0=Sun)`);
+console.log(`  getBotHour():        ${getBotHour()}`);
+console.log(`  getBotMinute():      ${getBotMinute()}`);
+console.log(`  getBotDay():         ${getBotDay()}`);
+console.log(`  getDateString():     ${getDateString()}`);
+console.log(`  formatDateTime():    ${formatDateTime()}`);
+console.log(`  formatTime():        ${formatTime()}`);
 
 // 5. Sleep schedule check
 console.log("\n[5] SLEEP SCHEDULE CHECK");
-const hour = getDRHour();
-const minute = getDRMinute();
+const hour = getBotHour();
+const minute = getBotMinute();
 const isSleeping = hour < 6 || (hour === 23 && minute >= 30);
 console.log(
-	`  Current DR hour:     ${hour}:${String(minute).padStart(2, "0")}`,
+	`  Current bot hour:    ${hour}:${String(minute).padStart(2, "0")}`,
 );
 console.log(`  Sleep range:         23:30 - 06:00`);
 console.log(`  Is sleeping:         ${isSleeping}`);
@@ -102,41 +112,41 @@ console.log(
 
 // 6. Image scheduler dates
 console.log("\n[6] IMAGE SCHEDULER DATES");
-console.log(`  getTodayDateRD():    ${getTodayDateRD()}`);
-console.log(`  getWeekStartRD():    ${getWeekStartRD()}`);
+console.log(`  getTodayDate():      ${getTodayDate()}`);
+console.log(`  getWeekStart():      ${getWeekStart()}`);
 const target = generateRandomWeeklyTargetTime();
 console.log(`  random weekly target: ${target}`);
 console.log(`    parsed as Date:    ${new Date(target).toString()}`);
 console.log(
-	`    parsed as DR tz:   ${dayjs(target).tz(DR_TZ).format("YYYY-MM-DD HH:mm:ss Z")}`,
+	`    parsed as bot tz:  ${dayjs(target).tz(BOT_TZ).format("YYYY-MM-DD HH:mm:ss Z")}`,
 );
 
-// 7. Comparison: new Date() vs DR timezone
+// 7. Comparison: new Date() vs bot timezone
 console.log("\n[7] POTENTIAL ISSUES");
 const sysHour = now.getHours();
-const drHourVal = getDRHour();
-const hourDiff = drHourVal - sysHour;
+const botHourVal = getBotHour();
+const hourDiff = botHourVal - sysHour;
 console.log(`  System local hour:   ${sysHour}`);
-console.log(`  DR timezone hour:    ${drHourVal}`);
+console.log(`  Bot timezone hour:   ${botHourVal}`);
 console.log(
 	`  Difference:          ${hourDiff > 0 ? "+" : ""}${hourDiff} hours`,
 );
 if (hourDiff !== 0) {
 	console.log(
-		`  ⚠  System timezone differs from DR timezone by ${Math.abs(hourDiff)} hour(s)`,
+		`  ⚠  System timezone differs from bot timezone by ${Math.abs(hourDiff)} hour(s)`,
 	);
 	console.log(
 		`     This can cause issues in code that uses new Date() directly`,
 	);
-	console.log(`     instead of drNow() / getDRHour() / etc.`);
+	console.log(`     instead of botNow() / getBotHour() / etc.`);
 }
 
 // Check if image-scheduler's generateRandomWeeklyTargetTime uses local time
-const rdDateStr = getTodayDateRD();
-const [y, m, d] = rdDateStr.split("-").map(Number);
+const dateStr = getTodayDate();
+const [y, m, d] = dateStr.split("-").map(Number);
 const localDate = new Date(y, m - 1, d);
 console.log(`\n  Image scheduler date construction test:`);
-console.log(`    DR date string:    ${rdDateStr}`);
+console.log(`    Bot date string:   ${dateStr}`);
 console.log(`    new Date(y,m-1,d): ${localDate.toString()}`);
 console.log(
 	`    This Date's hours: ${localDate.getHours()} (should be 0 in local TZ)`,
@@ -149,18 +159,18 @@ console.log(`\n  ISO vs local comparison test:`);
 console.log(`    Local 10:30 AM:    ${fakeTarget.toString()}`);
 console.log(`    .toISOString():    ${fakeTarget.toISOString()}`);
 console.log(`    ⚠  Note: toISOString() converts to UTC. If VPS is in UTC,`);
-console.log(`       a target of "10:30 DR time" stored as ISO will actually`);
+console.log(`       a target of "10:30 bot time" stored as ISO will actually`);
 console.log(
-	`       be "${dayjs.tz(`${rdDateStr} 10:30`, DR_TZ).toISOString()}" in UTC`,
+	`       be "${dayjs.tz(`${dateStr} 10:30`, BOT_TZ).toISOString()}" in UTC`,
 );
 
 // 8. Follow-ups time window
 console.log("\n[8] FOLLOW-UPS TIME WINDOW");
-const drH = getDRHour();
+const botH = getBotHour();
 const isReasonableHour =
-	drH >= 8 && (drH < 21 || (drH === 21 && getDRMinute() <= 30));
-console.log(`  Reasonable hours:    8:00 AM - 9:30 PM DR time`);
-console.log(`  Current DR time:     ${formatDRTime()}`);
+	botH >= 8 && (botH < 21 || (botH === 21 && getBotMinute() <= 30));
+console.log(`  Reasonable hours:    8:00 AM - 9:30 PM bot time`);
+console.log(`  Current bot time:    ${formatTime()}`);
 console.log(`  Is reasonable hour:  ${isReasonableHour}`);
 
 // 9. Summary of potential bugs
@@ -173,7 +183,7 @@ const issues: string[] = [];
 if (hourDiff !== 0) {
 	issues.push(
 		`VPS system timezone (${Intl.DateTimeFormat().resolvedOptions().timeZone}) ` +
-			`differs from BOT_TIMEZONE (${DR_TZ}) by ${Math.abs(hourDiff)}h. ` +
+			`differs from BOT_TIMEZONE (${BOT_TZ}) by ${Math.abs(hourDiff)}h. ` +
 			`Code using new Date() directly will get wrong times.`,
 	);
 }
@@ -185,22 +195,10 @@ if (!process.env.BOT_TIMEZONE) {
 	);
 }
 
-if (process.env.TZ && process.env.TZ !== DR_TZ) {
+if (process.env.TZ && process.env.TZ !== BOT_TZ) {
 	issues.push(
-		`TZ env var (${process.env.TZ}) conflicts with BOT_TIMEZONE (${DR_TZ}). ` +
+		`TZ env var (${process.env.TZ}) conflicts with BOT_TIMEZONE (${BOT_TZ}). ` +
 			`This can cause new Date() and dayjs().tz() to disagree.`,
-	);
-}
-
-// Check image-scheduler bug: it constructs dates with new Date(y,m-1,d) which uses local TZ
-// then calls .toISOString() which converts to UTC, then compares with new Date() > new Date(isoString)
-if (hourDiff !== 0) {
-	issues.push(
-		"image-scheduler.ts: generateRandomWeeklyTargetTime() builds dates with " +
-			"new Date(year, month-1, day) (local TZ), sets hours in local TZ, " +
-			"then stores .toISOString() (UTC). shouldGenerateImageNow() compares " +
-			"new Date() >= new Date(isoTarget). When VPS TZ ≠ DR TZ, the target " +
-			"hour will be shifted.",
 	);
 }
 

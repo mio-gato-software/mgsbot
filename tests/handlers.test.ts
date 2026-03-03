@@ -18,21 +18,21 @@ describe("detectMentionType", () => {
 
 // Image scheduler pure functions
 describe("image-scheduler", () => {
-	test("getTodayDateRD returns YYYY-MM-DD format", async () => {
-		const { getTodayDateRD } = await import("../src/image-scheduler.ts");
-		const today = getTodayDateRD();
+	test("getTodayDate returns YYYY-MM-DD format", async () => {
+		const { getTodayDate } = await import("../src/image-scheduler.ts");
+		const today = getTodayDate();
 		expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 	});
 
-	test("getWeekStartRD returns YYYY-MM-DD format", async () => {
-		const { getWeekStartRD } = await import("../src/image-scheduler.ts");
-		const weekStart = getWeekStartRD();
+	test("getWeekStart returns YYYY-MM-DD format", async () => {
+		const { getWeekStart } = await import("../src/image-scheduler.ts");
+		const weekStart = getWeekStart();
 		expect(weekStart).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 	});
 
-	test("getWeekStartRD returns a Monday", async () => {
-		const { getWeekStartRD } = await import("../src/image-scheduler.ts");
-		const weekStart = getWeekStartRD();
+	test("getWeekStart returns a Monday", async () => {
+		const { getWeekStart } = await import("../src/image-scheduler.ts");
+		const weekStart = getWeekStart();
 		const [year, month, day] = weekStart.split("-").map(Number);
 		const date = new Date(year, month - 1, day);
 		expect(date.getDay()).toBe(1); // Monday

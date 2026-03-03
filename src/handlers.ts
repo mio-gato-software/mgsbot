@@ -1,12 +1,12 @@
 import type { Bot, Context } from "grammy";
 import { analyzeYouTube, describeImage } from "./ai.ts";
+import { getBotHour, getBotMinute } from "./bot-time.ts";
 import { getBotName, isBotConfigured, loadConfig } from "./config.ts";
 import {
 	getUserDisplayName,
 	isGroupChat,
 	processConversation,
 } from "./conversation.ts";
-import { getDRHour, getDRMinute } from "./dr-time.ts";
 import {
 	cleanupFile,
 	downloadAndTranscribe,
@@ -34,8 +34,8 @@ const enableSleepSchedule = process.env.ENABLE_SLEEP_SCHEDULE !== "false";
 
 export function isSleepingHour(): boolean {
 	if (!enableSleepSchedule) return false;
-	const hour = getDRHour();
-	const minute = getDRMinute();
+	const hour = getBotHour();
+	const minute = getBotMinute();
 	// 11:30 PM (23:30) to 6:00 AM
 	return hour < 6 || (hour === 23 && minute >= 30);
 }

@@ -1,16 +1,16 @@
+import {
+	BOT_TZ,
+	botNow,
+	formatDateTime,
+	formatTime,
+	getBotDay,
+	getBotHour,
+} from "./bot-time.ts";
 import { getBotName } from "./config.ts";
 import {
 	getCurrentWeatherContext,
 	getDailyWeatherForImage,
 } from "./daily-weather.ts";
-import {
-	DR_TZ,
-	drNow,
-	formatDRDateTime,
-	formatDRTime,
-	getDRDay,
-	getDRHour,
-} from "./dr-time.ts";
 import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
@@ -43,11 +43,11 @@ function getTimeOfDayLabel(hour: number): string {
 }
 
 function getActivityGuidance(): string {
-	const hour = getDRHour();
-	const dayOfWeek = getDRDay();
+	const hour = getBotHour();
+	const dayOfWeek = getBotDay();
 	const dayName = DAY_NAMES[dayOfWeek] ?? "Día";
 	const timeLabel = getTimeOfDayLabel(hour);
-	const now = drNow();
+	const now = botNow();
 	const holiday = isHoliday(now.month(), now.date());
 
 	const dayType = holiday
@@ -87,8 +87,8 @@ export async function buildSystemPrompt(
 
 	const permanent = await loadPermanent();
 
-	const now = formatDRDateTime();
-	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (zona horaria: ${DR_TZ})`;
+	const now = formatDateTime();
+	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (zona horaria: ${BOT_TZ})`;
 
 	// Evolving personality description
 	const personalityDesc = await getPersonalityDescription();
@@ -176,7 +176,7 @@ Presta atención a los marcadores de tiempo entre mensajes del historial (ej: "[
 			? `\n\n**Clima actual:** ${weatherContext}. Si tu escena es al aire libre (playa, parque, calle, terraza, piscina, jardín, balcón, ventana con vista exterior), incorpora este clima visualmente en el prompt: cielo, iluminación, lluvia si aplica, etc. No lo menciones en texto, solo muéstralo. Para escenas completamente interiores sin vista al exterior, ignora el clima.`
 			: "";
 
-		const currentTime = formatDRTime();
+		const currentTime = formatTime();
 
 		systemPrompt += `\n\n## Generación de imagen
 Esta es tu foto de la semana. Incluye en tu respuesta un marcador [IMAGE: prompt artístico en inglés] describiendo una escena, ambiente o actividad que refleje tu estado de ánimo según el contexto de tu actividad actual.${weatherInstruction}

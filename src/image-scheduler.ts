@@ -1,6 +1,6 @@
 import { isImageGenAvailable } from "./ai.ts";
 import { getBaseImagePath } from "./appearance.ts";
-import { getDRDateString } from "./dr-time.ts";
+import { getDateString } from "./bot-time.ts";
 import type { SensoryBuffer } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -8,12 +8,12 @@ const isDev = process.env.NODE_ENV === "development";
 const IMAGE_EARLIEST_HOUR = 8;
 const IMAGE_LATEST_HOUR = 23;
 
-export function getTodayDateRD(): string {
-	return getDRDateString();
+export function getTodayDate(): string {
+	return getDateString();
 }
 
-export function getWeekStartRD(): string {
-	const rdDate = getTodayDateRD();
+export function getWeekStart(): string {
+	const rdDate = getTodayDate();
 	const [year, month, day] = rdDate.split("-").map(Number);
 	const date = new Date(year, month - 1, day);
 	const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ...6=Sat
@@ -26,7 +26,7 @@ export function getWeekStartRD(): string {
 }
 
 export function generateRandomWeeklyTargetTime(): string {
-	const rdDate = getTodayDateRD();
+	const rdDate = getTodayDate();
 	const [year, month, day] = rdDate.split("-").map(Number);
 	const today = new Date(year, month - 1, day);
 	const todayDayOfWeek = today.getDay();
@@ -51,7 +51,7 @@ export function shouldGenerateImageNow(buffer: SensoryBuffer): boolean {
 	if (!isImageGenAvailable()) return false;
 	if (!getBaseImagePath()) return false;
 
-	const currentWeek = getWeekStartRD();
+	const currentWeek = getWeekStart();
 
 	// Already generated this week
 	if (buffer.lastImageDate === currentWeek) return false;

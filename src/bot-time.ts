@@ -5,22 +5,22 @@ import utc from "dayjs/plugin/utc.js";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-export const DR_TZ = process.env.BOT_TIMEZONE || "America/Santo_Domingo";
+export const BOT_TZ = process.env.BOT_TIMEZONE || "America/Santo_Domingo";
 
 /**
- * Get current DR time as a dayjs instance.
- * Optionally pass a Date/timestamp to convert to DR time.
+ * Get current bot-timezone time as a dayjs instance.
+ * Optionally pass a Date/timestamp to convert.
  */
-export function drNow(date?: Date | number): dayjs.Dayjs {
-	return dayjs(date).tz(DR_TZ);
+export function botNow(date?: Date | number): dayjs.Dayjs {
+	return dayjs.utc(date).tz(BOT_TZ);
 }
 
 /**
- * Format current DR date/time in Spanish for the system prompt.
+ * Format current date/time in Spanish for the system prompt.
  * Example: "domingo, 1 de marzo de 2026, 9:48 a.m."
  */
-export function formatDRDateTime(date?: Date | number): string {
-	const d = drNow(date);
+export function formatDateTime(date?: Date | number): string {
+	const d = botNow(date);
 
 	const days = [
 		"domingo",
@@ -61,39 +61,39 @@ export function formatDRDateTime(date?: Date | number): string {
 }
 
 /**
- * Get current DR date as YYYY-MM-DD string.
+ * Get current date as YYYY-MM-DD string in bot timezone.
  */
-export function getDRDateString(date?: Date | number): string {
-	return drNow(date).format("YYYY-MM-DD");
+export function getDateString(date?: Date | number): string {
+	return botNow(date).format("YYYY-MM-DD");
 }
 
 /**
- * Get the current hour in DR timezone (0-23).
+ * Get the current hour in bot timezone (0-23).
  */
-export function getDRHour(date?: Date | number): number {
-	return drNow(date).hour();
+export function getBotHour(date?: Date | number): number {
+	return botNow(date).hour();
 }
 
 /**
- * Get the current minute in DR timezone (0-59).
+ * Get the current minute in bot timezone (0-59).
  */
-export function getDRMinute(date?: Date | number): number {
-	return drNow(date).minute();
+export function getBotMinute(date?: Date | number): number {
+	return botNow(date).minute();
 }
 
 /**
- * Get the current day of week in DR timezone (0=Sunday, 6=Saturday).
+ * Get the current day of week in bot timezone (0=Sunday, 6=Saturday).
  */
-export function getDRDay(date?: Date | number): number {
-	return drNow(date).day();
+export function getBotDay(date?: Date | number): number {
+	return botNow(date).day();
 }
 
 /**
- * Format DR time as "h:mm a.m./p.m." string.
+ * Format bot-timezone time as "h:mm a.m./p.m." string.
  * Example: "9:48 a.m."
  */
-export function formatDRTime(date?: Date | number): string {
-	const d = drNow(date);
+export function formatTime(date?: Date | number): string {
+	const d = botNow(date);
 	const hour = d.hour();
 	const minute = d.minute();
 	const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
