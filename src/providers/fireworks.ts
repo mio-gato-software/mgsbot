@@ -93,7 +93,7 @@ export class FireworksChatProvider implements ChatProvider {
 						presence_penalty: 0,
 						frequency_penalty: 0,
 					}),
-					signal: AbortSignal.timeout(30_000),
+					signal: AbortSignal.timeout(60_000),
 				},
 			);
 			if (!response.ok) {
@@ -171,7 +171,7 @@ export class FireworksChatProvider implements ChatProvider {
 						presence_penalty: 0,
 						frequency_penalty: 0,
 					}),
-					signal: AbortSignal.timeout(30_000),
+					signal: AbortSignal.timeout(60_000),
 				},
 			);
 			if (!response.ok) {

@@ -29,7 +29,7 @@ export function atomicWriteFileSync(filePath: string, data: string): void {
 }
 
 /**
- * Retry a function on 429 (rate limit) or 503 (service unavailable) errors.
+ * Retry a function on 429 (rate limit), 503 (service unavailable), or timeout errors.
  * Uses exponential backoff.
  */
 export async function withRetry<T>(
@@ -43,7 +43,11 @@ export async function withRetry<T>(
 		} catch (error) {
 			if (attempt === maxAttempts) throw error;
 			const message = error instanceof Error ? error.message : String(error);
-			const isRetryable = message.includes("429") || message.includes("503");
+			const isTimeout =
+				(error instanceof DOMException && error.name === "TimeoutError") ||
+				message.includes("timed out");
+			const isRetryable =
+				message.includes("429") || message.includes("503") || isTimeout;
 			if (!isRetryable) throw error;
 			const delay = baseDelayMs * 2 ** (attempt - 1);
 			await new Promise((resolve) => setTimeout(resolve, delay));
