@@ -114,9 +114,8 @@ export function registerHandlers(bot: Bot): void {
 		await next();
 	});
 
-	// Voice messages (disabled in simple assistant mode)
+	// Voice messages
 	bot.on("message:voice", async (ctx) => {
-		if (isSimpleAssistantMode) return;
 		const mentionType = detectMentionType(ctx, ctx.me.id);
 		if (isGroupChat(ctx) && mentionType === "none") return;
 		try {
@@ -144,9 +143,8 @@ export function registerHandlers(bot: Bot): void {
 		}
 	});
 
-	// Audio files (disabled in simple assistant mode)
+	// Audio files
 	bot.on("message:audio", async (ctx) => {
-		if (isSimpleAssistantMode) return;
 		const mentionType = detectMentionType(ctx, ctx.me.id);
 		if (isGroupChat(ctx) && mentionType === "none") return;
 		try {
@@ -365,8 +363,8 @@ export function registerHandlers(bot: Bot): void {
 			return;
 		}
 
-		// Reply-to-audio: transcribe audio from replied message
-		if (!isSimpleAssistantMode) {
+		// Reply-to-audio/photo: transcribe audio or describe image from replied message
+		{
 			const replyMsg = ctx.message.reply_to_message;
 			const replyVoice = replyMsg?.voice;
 			const replyAudio = replyMsg?.audio;
