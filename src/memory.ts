@@ -378,6 +378,7 @@ export async function getRelevantFacts(
  */
 export async function getFactsForSubjects(
 	names: string[],
+	maxPerSubject = 10,
 ): Promise<SemanticFact[]> {
 	const store = await loadSemanticStore();
 
@@ -390,12 +391,28 @@ export async function getFactsForSubjects(
 		}
 	}
 
-	return store.filter(
+	const matching = store.filter(
 		(f) =>
 			f.category === "person" &&
 			f.subject &&
 			allAliases.has(normalizeName(f.subject)),
 	);
+
+	// Cap per subject: keep highest importance facts for each
+	const bySubject = new Map<string, SemanticFact[]>();
+	for (const fact of matching) {
+		const key = normalizeName(fact.subject ?? "");
+		const list = bySubject.get(key) ?? [];
+		list.push(fact);
+		bySubject.set(key, list);
+	}
+
+	const result: SemanticFact[] = [];
+	for (const facts of bySubject.values()) {
+		facts.sort((a, b) => b.importance - a.importance);
+		result.push(...facts.slice(0, maxPerSubject));
+	}
+	return result;
 }
 
 let lastDecayDate = "";
