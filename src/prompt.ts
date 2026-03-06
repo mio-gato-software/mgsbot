@@ -16,7 +16,12 @@ import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
 import { getPersonalityDescription } from "./personality.ts";
 import type { ChatMessage } from "./providers/types.ts";
-import type { Episode, SemanticFact, SensoryBuffer } from "./types.ts";
+import type {
+	ConversationMessage,
+	Episode,
+	SemanticFact,
+	SensoryBuffer,
+} from "./types.ts";
 
 export const isSimpleAssistantMode =
 	process.env.SIMPLE_ASSISTANT_MODE === "true";
@@ -222,16 +227,63 @@ function formatTimeGap(diffMs: number): string {
 }
 
 const TIME_GAP_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
+const PROMPT_HISTORY_MAX_MESSAGES = 6;
+const PROMPT_HISTORY_MAX_CHARS = 2200;
+const PROMPT_HISTORY_ALWAYS_KEEP_FULL = 2;
+const PROMPT_HISTORY_TRUNCATE_CHARS = 450;
+
+function formatConversationMessage(
+	msg: ConversationMessage,
+	preserveFull = false,
+): ChatMessage {
+	const role = msg.role === "user" ? "user" : "assistant";
+	const rawContent =
+		msg.role === "user" && msg.name
+			? `[${msg.name}]: ${msg.content}`
+			: msg.content;
+	const content =
+		preserveFull || rawContent.length <= PROMPT_HISTORY_TRUNCATE_CHARS
+			? rawContent
+			: `${rawContent.slice(0, PROMPT_HISTORY_TRUNCATE_CHARS).trimEnd()}... [mensaje anterior truncado]`;
+
+	return { role, content };
+}
 
 export function buildMessages(buffer: SensoryBuffer): ChatMessage[] {
 	const messages: ChatMessage[] = [];
+	const selected: Array<{
+		formatted: ChatMessage;
+		original: ConversationMessage;
+	}> = [];
+	let totalChars = 0;
 
-	for (let i = 0; i < buffer.messages.length; i++) {
-		const msg = buffer.messages[i];
+	for (let i = buffer.messages.length - 1; i >= 0; i--) {
+		const original = buffer.messages[i];
+		const preserveFull =
+			buffer.messages.length - i <= PROMPT_HISTORY_ALWAYS_KEEP_FULL;
+		const formatted = formatConversationMessage(original, preserveFull);
+		const isRequired = selected.length < PROMPT_HISTORY_ALWAYS_KEEP_FULL;
+		const fitsBudget =
+			selected.length < PROMPT_HISTORY_MAX_MESSAGES &&
+			totalChars + formatted.content.length <= PROMPT_HISTORY_MAX_CHARS;
+
+		if (!isRequired && !fitsBudget) {
+			break;
+		}
+
+		selected.push({ formatted, original });
+		totalChars += formatted.content.length;
+	}
+
+	selected.reverse();
+
+	for (let i = 0; i < selected.length; i++) {
+		const entry = selected[i];
+		const msg = entry.original;
 
 		// Insert time gap marker when significant time has passed between messages
 		if (i > 0) {
-			const prevMsg = buffer.messages[i - 1];
+			const prevMsg = selected[i - 1].original;
 			const gap = msg.timestamp - prevMsg.timestamp;
 			if (gap >= TIME_GAP_THRESHOLD_MS) {
 				messages.push({
@@ -241,13 +293,7 @@ export function buildMessages(buffer: SensoryBuffer): ChatMessage[] {
 			}
 		}
 
-		const role = msg.role === "user" ? "user" : "assistant";
-		const content =
-			msg.role === "user" && msg.name
-				? `[${msg.name}]: ${msg.content}`
-				: msg.content;
-
-		messages.push({ role, content });
+		messages.push(entry.formatted);
 	}
 
 	return messages;

@@ -36,6 +36,10 @@ import type {
 } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
+const ACTIVE_NAME_WINDOW_MESSAGES = 6;
+const MAX_RELEVANT_EPISODES = 3;
+const MAX_RELEVANT_FACTS = 8;
+const MAX_PARTICIPANT_FACTS_PER_SUBJECT = 3;
 
 export function isGroupChat(ctx: Context): boolean {
 	const type = ctx.chat?.type;
@@ -125,7 +129,10 @@ export async function processConversation(
 		const queryEmbeddingPromise = getQueryEmbedding(buffer.messages);
 		const rawActiveNames = [
 			...new Set(
-				buffer.messages.map((m) => m.name).filter((n): n is string => !!n),
+				buffer.messages
+					.slice(-ACTIVE_NAME_WINDOW_MESSAGES)
+					.map((m) => m.name)
+					.filter((n): n is string => !!n),
 			),
 		];
 		const activeNamesPromise = Promise.all(
@@ -138,10 +145,18 @@ export async function processConversation(
 
 		// Retrieve episodes, semantic facts, and participant facts in parallel
 		const [episodes, facts, participantFacts] = await Promise.all([
-			getRelevantEpisodes(chatId, queryEmbedding, queryText),
-			getRelevantFacts(queryEmbedding, { queryText }),
+			getRelevantEpisodes(
+				chatId,
+				queryEmbedding,
+				queryText,
+				MAX_RELEVANT_EPISODES,
+			),
+			getRelevantFacts(queryEmbedding, {
+				queryText,
+				maxCount: MAX_RELEVANT_FACTS,
+			}),
 			activeNames.length > 0
-				? getFactsForSubjects(activeNames)
+				? getFactsForSubjects(activeNames, MAX_PARTICIPANT_FACTS_PER_SUBJECT)
 				: ([] as SemanticFact[]),
 		]);
 
