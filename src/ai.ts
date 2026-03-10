@@ -356,17 +356,29 @@ IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba.
 
 1. **Resumen del episodio**: Una oración breve describiendo de qué se trató la conversación.
 2. **Importancia**: 1-5 (5 = muy importante).
-3. **Hechos atómicos**: Datos específicos extraídos. Cada hecho debe ser una oración independiente.
+3. **Hechos sobre las PERSONAS**: Extrae SOLO datos sobre las personas que participan en la conversación. NO guardes conocimiento general, datos enciclopédicos, ni información sobre temas que se discutieron (ej: si hablan de Corea del Sur, NO guardes datos sobre Corea; si hablan de una película, NO guardes la trama).
+   Lo que SÍ guardar:
+   - Datos personales: nombre, edad, trabajo, profesión, ubicación, familia
+   - Gustos, preferencias, opiniones y posturas personales
+   - Planes, metas, eventos personales futuros
+   - Relaciones entre las personas del chat
+   - Hábitos, rutinas, experiencias personales que comparten
+   - Intereses o temas que les apasionan (ej: "A Eliaquín le interesa la demografía", NO "La población de Corea bajará")
+   Lo que NO guardar:
+   - Datos del mundo, noticias, estadísticas, información enciclopédica
+   - Contenido de videos, artículos o enlaces compartidos
+   - Información general que se puede buscar en internet
+   Categorías:
    - category "person": dato sobre una persona específica (incluye "subject" con el NOMBRE COMPLETO tal como aparece en los mensajes, ej: "Eliaquín Encarnación", NO solo "Eliaquín")
-   - category "group": dinámica grupal o regla de interacción
+   - category "group": dinámica grupal o regla de interacción entre los participantes
    - category "rule": regla o límite establecido en la relación
-   - category "event": evento, fecha o plan
+   - category "event": evento PERSONAL futuro o plan de un participante (NO eventos mundiales)
 4. **Señales de personalidad**: ¿La conversación revela algo sobre cómo el bot está evolucionando emocionalmente? Solo si hay señales claras. Ejemplo: si mostró más paciencia, si se volvió más juguetona, si mostró vulnerabilidad, etc. Cada cambio es un rasgo con un delta entre -0.15 y +0.15.
 ${contextSection}
 Responde SOLO JSON:
-{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5}], "personalitySignals": {"traitChanges": [{"trait": "nombre del rasgo", "delta": 0.1, "reason": "razón del cambio"}]}}
+{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho sobre la PERSONA", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5}], "personalitySignals": {"traitChanges": [{"trait": "nombre del rasgo", "delta": 0.1, "reason": "razón del cambio"}]}}
 
-Si no hay nada relevante: {"summary": "conversación casual", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
+Si no hay nada personal relevante: {"summary": "conversación casual", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
 
 Conversación:
 ${recentMessages}`;
