@@ -5,7 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import { isFileNotFound } from "./utils.ts";
 
 const ai = new GoogleGenAI({});
-const EMBEDDING_MODEL = "gemini-embedding-001";
+const EMBEDDING_MODEL = "gemini-embedding-2-preview";
 
 const isDev = process.env.NODE_ENV === "development";
 
