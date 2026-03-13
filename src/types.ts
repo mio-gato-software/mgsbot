@@ -69,6 +69,19 @@ export interface FollowUp {
 
 // --- Evolving Personality ---
 
+export const TRAIT_NAMES = [
+	"calidez",
+	"humor",
+	"paciencia",
+	"curiosidad",
+	"asertividad",
+	"energia",
+	"vulnerabilidad",
+	"picardia",
+] as const;
+
+export type TraitName = (typeof TRAIT_NAMES)[number];
+
 export interface PersonalityTrait {
 	value: number; // 0.0–1.0 (0.5 = neutral)
 	momentum: number; // -1.0–1.0 (direction of recent change)
@@ -83,16 +96,14 @@ export interface PersonalityGrowthEvent {
 }
 
 export interface PersonalityState {
-	description: string; // ~100-150 words, injected into prompt
+	version?: number;
 	traits: Record<string, PersonalityTrait>;
 	recentGrowth: PersonalityGrowthEvent[]; // max 10
-	lastDescriptionUpdate: number;
-	evaluationsSinceUpdate: number;
 }
 
 export interface PersonalitySignals {
 	traitChanges: Array<{
-		trait: string; // trait name in Spanish, emergent
+		trait: string; // must be one of TRAIT_NAMES
 		delta: number; // -0.15 to +0.15
 		reason: string; // why it changed
 	}>;

@@ -14,7 +14,7 @@ import {
 import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
-import { getPersonalityDescription } from "./personality.ts";
+import { getPersonalityInstructions } from "./personality.ts";
 import type { ChatMessage } from "./providers/types.ts";
 import type {
 	ConversationMessage,
@@ -95,10 +95,10 @@ export async function buildSystemPrompt(
 	const now = formatDateTime();
 	let systemPrompt = `${permanent}\n\n## Fecha y hora actual\n${now} (zona horaria: ${BOT_TZ})`;
 
-	// Evolving personality description
-	const personalityDesc = await getPersonalityDescription();
-	if (personalityDesc) {
-		systemPrompt += `\n\n## Tu evolución personal\n${personalityDesc}`;
+	// Behavioral personality instructions (fixed trait system)
+	const personalityInstructions = await getPersonalityInstructions();
+	if (personalityInstructions) {
+		systemPrompt += `\n\n${personalityInstructions}`;
 	}
 
 	// Episodes (recent conversation memories)

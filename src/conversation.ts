@@ -19,10 +19,7 @@ import {
 	loadSemanticStore,
 	loadSensory,
 } from "./memory.ts";
-import {
-	applyPersonalitySignals,
-	regenerateDescription,
-} from "./personality.ts";
+import { applyPersonalitySignals } from "./personality.ts";
 import {
 	buildMessages,
 	buildSystemPrompt,
@@ -301,12 +298,6 @@ export async function promoteToMemory(
 
 	// Process personality signals
 	if (result.personalitySignals?.traitChanges?.length) {
-		const shouldRegenerate = await applyPersonalitySignals(
-			result.personalitySignals,
-			recentText,
-		);
-		if (shouldRegenerate) {
-			regenerateDescription().catch(console.error);
-		}
+		await applyPersonalitySignals(result.personalitySignals, recentText);
 	}
 }

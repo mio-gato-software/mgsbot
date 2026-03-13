@@ -6,6 +6,7 @@ import {
 	GoogleGenAI,
 	type Part,
 } from "@google/genai";
+import { getTraitDefinitionsForPrompt } from "./personality.ts";
 import { type ChatMessage, createChatProvider } from "./providers/index.ts";
 import { supportsVision } from "./providers/types.ts";
 import type { PromotionResult } from "./types.ts";
@@ -373,10 +374,15 @@ IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba.
    - category "group": dinámica grupal o regla de interacción entre los participantes
    - category "rule": regla o límite establecido en la relación
    - category "event": evento PERSONAL futuro o plan de un participante (NO eventos mundiales)
-4. **Señales de personalidad**: ¿La conversación revela algo sobre cómo el bot está evolucionando emocionalmente? Solo si hay señales claras. Ejemplo: si mostró más paciencia, si se volvió más juguetona, si mostró vulnerabilidad, etc. Cada cambio es un rasgo con un delta entre -0.15 y +0.15.
+4. **Señales de personalidad**: ¿La conversación revela algo sobre cómo el bot está evolucionando emocionalmente? Solo si hay señales claras.
+Solo puedes usar estos rasgos EXACTOS (no inventes otros):
+${getTraitDefinitionsForPrompt()}
+
+Si la conversación no muestra señales claras, deja traitChanges vacío.
+Cada delta debe estar entre -0.15 y +0.15.
 ${contextSection}
 Responde SOLO JSON:
-{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho sobre la PERSONA", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5}], "personalitySignals": {"traitChanges": [{"trait": "nombre del rasgo", "delta": 0.1, "reason": "razón del cambio"}]}}
+{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho sobre la PERSONA", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5}], "personalitySignals": {"traitChanges": [{"trait": "calidez", "delta": 0.1, "reason": "razón del cambio"}]}}
 
 Si no hay nada personal relevante: {"summary": "conversación casual", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
 
@@ -484,7 +490,10 @@ ${recentMessages}`;
 	}
 }
 
+import { TRAIT_NAMES } from "./types.ts";
+
 const VALID_CATEGORIES = new Set(["person", "group", "rule", "event"]);
+const VALID_TRAIT_NAMES = new Set<string>(TRAIT_NAMES);
 
 function validatePromotionResult(raw: PromotionResult): PromotionResult {
 	const summary =
@@ -525,6 +534,7 @@ function validatePromotionResult(raw: PromotionResult): PromotionResult {
 				(c) =>
 					c.trait &&
 					typeof c.trait === "string" &&
+					VALID_TRAIT_NAMES.has(c.trait.toLowerCase().trim()) &&
 					typeof c.delta === "number" &&
 					Math.abs(c.delta) >= 0.01 &&
 					c.reason &&

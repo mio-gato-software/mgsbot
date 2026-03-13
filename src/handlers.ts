@@ -15,7 +15,6 @@ import {
 	extractYouTubeUrl,
 } from "./media-handlers.ts";
 import { decayConfidence, loadSensory, saveSensory } from "./memory.ts";
-import { decayPersonalityTraits } from "./personality.ts";
 import { isSimpleAssistantMode } from "./prompt.ts";
 import { getChatProviderInfo, switchChatProvider } from "./providers/index.ts";
 import { processSetupConversation } from "./setup.ts";
@@ -69,9 +68,8 @@ export function detectMentionType(ctx: Context, botId: number): MentionType {
 export function registerHandlers(bot: Bot): void {
 	const botToken = bot.token;
 
-	// Run confidence decay and personality trait decay on startup
+	// Run confidence decay on startup
 	decayConfidence().catch(console.error);
-	decayPersonalityTraits().catch(console.error);
 
 	// Security: only allow the owner (DMs) and the permitted group
 	bot.use(async (ctx, next) => {
