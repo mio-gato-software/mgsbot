@@ -101,6 +101,21 @@ export interface PersonalityState {
 	recentGrowth: PersonalityGrowthEvent[]; // max 10
 }
 
+// --- Proactive Check-Ins ---
+
+export interface CheckInSlot {
+	scheduledFor: number; // Unix timestamp
+	status: "pending" | "sent" | "skipped";
+}
+
+export interface CheckInState {
+	chatId: number;
+	weekStart: string; // "2026-03-09" (ISO date of Monday)
+	slots: CheckInSlot[]; // N slots per week
+	lastSentTimestamp: number; // When the last check-in was sent
+	recentStrategies: string[]; // Last 5 strategies used (anti-repetition)
+}
+
 export interface PersonalitySignals {
 	traitChanges: Array<{
 		trait: string; // must be one of TRAIT_NAMES

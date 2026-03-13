@@ -96,6 +96,19 @@ if (process.env.ENABLE_FOLLOW_UPS === "true") {
 	}, 60_000);
 }
 
+// Check-in proactive messages (only if enabled)
+if (process.env.ENABLE_CHECK_INS === "true") {
+	const { initCheckIns, checkAndSendCheckIns } = await import(
+		"./src/check-ins.ts"
+	);
+	await initCheckIns();
+	setInterval(() => {
+		checkAndSendCheckIns(bot.api, isBotOff, isSleepingHour).catch(
+			console.error,
+		);
+	}, 60_000);
+}
+
 // --- Graceful shutdown ---
 
 async function shutdown(signal: string): Promise<void> {

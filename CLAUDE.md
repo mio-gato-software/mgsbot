@@ -43,6 +43,7 @@ src/
   embeddings.ts              ← Gemini embedding generation (gemini-embedding-001) with disk-persisted LRU cache
   personality.ts             ← Emergent personality traits: growth events, trait decay, AI description regen
   identities.ts              ← User identity tracking: canonical names, aliases, name change handling
+  check-ins.ts               ← Proactive check-in messages: cadence-driven weekly scheduling, strategy rotation
   follow-ups.ts              ← Proactive follow-up detection, scheduling, and delivery (DR timezone-aware)
   config.ts                  ← Bot configuration state (name, birth year, setup completion)
   setup.ts                   ← Interactive bot personality setup conversation (4-step)
@@ -64,6 +65,7 @@ memory/
   semantic.json              ← Global semantic facts with embeddings, categories, confidence decay
   identities.json            ← User ID → canonical name + alias tracking
   personality.json            ← Evolving personality traits and growth events
+  check-ins.json             ← Proactive check-in weekly slots and state per DM chat
   embedding-cache.json       ← LRU cache of vector embeddings (max 5000, SHA256-keyed)
   daily-weather.json         ← Cached daily weather data
   bot_config.json            ← Bot setup state (name, birthYear, isConfigured)
@@ -113,6 +115,21 @@ Proactive follow-up feature (`src/follow-ups.ts`), enabled via `ENABLE_FOLLOW_UP
 - Won't interrupt active conversations (15-min cooldown).
 - Stored in `memory/follow-ups.json` (gitignored).
 
+### Check-In System
+
+Proactive check-in feature (`src/check-ins.ts`), enabled via `ENABLE_CHECK_INS=true`:
+
+- Cadence-driven (not event-driven like follow-ups): bot reaches out ~2 times/week to chat like a real friend.
+- Weekly slot scheduling: at the start of each Monday-based week, generates N random time slots with minimum 2-day gap.
+- Time slots weighted toward morning (10-12) and evening (17-20) windows, clamped to 8am–9:30pm.
+- If bot starts mid-week, only schedules slots for remaining days.
+- Check-in strategies rotate to avoid repetition: `general`, `memory_callback`, `weather_comment`, `curiosity`, `activity_sharing`.
+- Full context generation: loads sensory buffer, relevant episodes, semantic facts, and builds system prompt for natural messages.
+- Guards: won't send if bot is off/sleeping, active conversation in last 15 min (postpones by 1 hour), or follow-up was sent today.
+- Only targets DM chats (chatId == OWNER_USER_ID).
+- Configurable frequency via `CHECK_INS_PER_WEEK` env var (default: 2).
+- Stored in `memory/check-ins.json` (gitignored).
+
 ### Bot Setup System
 
 Interactive setup flow (`src/setup.ts` + `src/config.ts`):
@@ -159,6 +176,8 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `STT_PROVIDER`: Set `gemini` to force Gemini for audio transcription instead of LemonFox (default: uses LemonFox when `LEMON_FOX_API_KEY` is set)
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
 - `ENABLE_FOLLOW_UPS`: Set `true` to enable proactive follow-ups in DMs
+- `ENABLE_CHECK_INS`: Set `true` to enable proactive check-in messages in DMs (~2/week)
+- `CHECK_INS_PER_WEEK`: Number of check-in messages per week (default: `2`)
 - `ENABLE_SLEEP_SCHEDULE`: Set `false` to disable sleep schedule (default: `true`)
 - `BOT_TIMEZONE`: IANA timezone for the bot (default: `America/Santo_Domingo`). Affects sleep schedule, time awareness, follow-ups, and weather.
 - `NODE_ENV`: Set `development` for verbose logging
