@@ -88,6 +88,13 @@ export function registerHandlers(bot: Bot): void {
 			console.log(
 				`[guard] Unauthorized DM from user ${ctx.from?.id}, ignoring`,
 			);
+			const userId = ctx.from?.id;
+			if (userId && ctx.message) {
+				await ctx.reply(
+					`⚠️ No tienes acceso a este bot.\n\nTu ID de usuario es: \`${userId}\`\n\nComparte este ID con la persona que administra el bot para que te dé acceso.`,
+					{ parse_mode: "Markdown" },
+				);
+			}
 			return;
 		}
 
