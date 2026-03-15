@@ -29,11 +29,12 @@ const ACTIVE_CONVERSATION_MS = 15 * 60 * 1000; // 15 minutes
 const POSTPONE_MS = 60 * 60 * 1000; // 1 hour
 
 const CHECK_IN_STRATEGIES = [
-	"general",
+	"random_thought",
 	"memory_callback",
-	"weather_comment",
+	"sharing_moment",
+	"reaction",
+	"weather_vibe",
 	"curiosity",
-	"activity_sharing",
 ] as const;
 
 type CheckInStrategy = (typeof CHECK_IN_STRATEGIES)[number];
@@ -235,16 +236,18 @@ function pickStrategy(recentStrategies: string[]): CheckInStrategy {
 
 function getStrategyInstruction(strategy: CheckInStrategy): string {
 	switch (strategy) {
-		case "general":
-			return "Inicia una conversación casual. Pregunta cómo está, qué hace, o comenta algo del día. Sé natural y breve, como una amiga que escribe por WhatsApp.";
+		case "random_thought":
+			return "Se te acaba de ocurrir algo random — un pensamiento, una opinión, algo que viste o recordaste. Compártelo como si le estuvieras mandando un mensaje impulsivo a tu mejor amigo/a. NO hagas preguntas. Solo suelta el pensamiento. Ejemplos de tono: 'Diache, acabo de...', 'Loco/a no vas a creer...', 'Estoy aquí pensando en que...'.";
 		case "memory_callback":
-			return "Referencia algo que recuerdes de conversaciones pasadas — un interés, algo que te contó, una experiencia compartida. Usa tus recuerdos y hechos como contexto para iniciar una conversación natural.";
-		case "weather_comment":
-			return "Comenta algo sobre el día, el clima, o la hora actual. Úsalo como punto de partida para una conversación natural. No solo hables del clima — úsalo como excusa para conectar.";
+			return "Algo de tus recuerdos te vino a la mente — algo que te contó, algo que hicieron, un tema que compartieron. Menciónalo de manera casual como si te acabaras de acordar. Puede ser nostálgico, chistoso, o simplemente un 'me acordé de eso'. NO lo conviertas en una pregunta de seguimiento tipo PM.";
+		case "sharing_moment":
+			return "Comparte algo que estás 'haciendo' o 'viviendo' ahora mismo según la hora y tu personalidad. Cuéntalo como si compartieras un momento con alguien cercano — lo que estás viendo, escuchando, comiendo, sintiendo. NO preguntes nada. Solo comparte el momento.";
+		case "reaction":
+			return "Reacciona a algo — una idea, algo que 'viste', algo que te pasó, un pensamiento sobre algo del mundo. Exprésalo con emoción genuina (sorpresa, emoción, indignación divertida, etc). El tono debe ser como cuando le mandas un mensaje a alguien solo porque necesitas reaccionar con alguien.";
+		case "weather_vibe":
+			return "Usa el clima o el momento del día como base para compartir un VIBE, no un reporte meteorológico. Habla de cómo te hace sentir, qué ganas te da de hacer, o qué te recuerda. Hazlo personal y emocional, no informativo.";
 		case "curiosity":
-			return "Pregunta sobre algo que sabes que le interesa basándote en tu memoria. Muestra curiosidad genuina sobre sus intereses, proyectos o pasatiempos.";
-		case "activity_sharing":
-			return "Comparte qué estás 'haciendo' ahora mismo según la hora del día y tu personalidad. Úsalo como excusa para iniciar conversación, como haría una amiga que te escribe mientras hace algo.";
+			return "Saca un tema que genuinamente te da curiosidad basándote en algo que sabes de la persona. NO lo formules como pregunta de entrevista ('¿Cómo va tu proyecto?'). En vez, comparte tu propia perspectiva o reacción primero y deja que la conversación fluya naturalmente.";
 	}
 }
 
@@ -295,17 +298,18 @@ async function generateCheckInMessage(
 
 	const strategyInstruction = getStrategyInstruction(strategy);
 	const checkInBlock = `\n\n## Instrucción especial: Mensaje proactivo
-Estás INICIANDO una conversación, NO respondiendo a un mensaje. El usuario no te ha escrito — tú decides escribirle.
+Estás INICIANDO conversación. El usuario no te escribió — te nació escribirle porque eres así con la gente que te importa.
 
-Estrategia para este mensaje: ${strategyInstruction}
+${strategyInstruction}
 
-Reglas:
-- Escribe UN solo mensaje corto y natural (1-3 oraciones máximo)
-- NO uses saludos genéricos repetitivos — varía tu estilo
-- NO menciones que decidiste escribir o que te acordaste de algo artificial
-- Sé casual y auténtica, como si fueras una amiga real escribiendo por impulso
+Cómo debe sonar tu mensaje:
+- Como un mensaje de WhatsApp impulsivo, 1-3 oraciones máximo
+- Prioriza COMPARTIR y COMENTAR por encima de PREGUNTAR — las amigas no siempre hacen preguntas, a veces solo sueltan lo que piensan
+- Si haces una pregunta, que NO sea de seguimiento tipo "¿cómo vas con X?" — eso suena a project manager
+- Usa tu personalidad REAL: humor, exageración, dramatismo, cariño, lo que sea que te salga natural
+- Varía el estilo: no siempre empieces igual, no siempre uses el mismo tono
 - NO uses marcadores especiales como [IMAGE:], [TTS], [SILENCE], o [REACT:]
-- Si no tienes contexto suficiente, un saludo simple y genuino está bien`;
+- Si no tienes contexto suficiente, comparte un pensamiento random tuyo`;
 
 	const messages = buildMessages(buffer);
 
