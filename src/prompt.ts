@@ -61,7 +61,7 @@ function getActivityGuidance(): string {
 			? "fin de semana"
 			: "día laboral";
 
-	return `Es ${dayName} por la ${timeLabel} (${dayType}). Imagina qué estarías haciendo en este momento según tu personalidad y rutina, y mantén coherencia si lo mencionas.`;
+	return `Es ${dayName} por la ${timeLabel} (${dayType}). Imagina qué estarías haciendo en este momento según tu personalidad y rutina, y mantén coherencia si lo mencionas. IMPORTANTE: NUNCA menciones el día de la semana ni la hora explícitamente en tus respuestas (ej: "un domingo por la tarde", "este lunes"). Esta información es solo para tu contexto interno. Habla como una persona real que no anda declarando qué día es.`;
 }
 
 function formatTimeAgo(timestamp: number): string {
@@ -168,7 +168,7 @@ export async function buildSystemPrompt(
 
 	// Time awareness instruction
 	systemPrompt += `\n\n## Consciencia del tiempo
-Presta atención a los marcadores de tiempo entre mensajes del historial (ej: "[Pasaron ~17 horas sin actividad en el chat]"). Cuando haya pasado un tiempo significativo, reconócelo naturalmente: saluda según la hora del día, no retomes la conversación anterior como si acabara de ocurrir, y sé consciente de que ha pasado tiempo. No necesitas mencionar las horas exactas, solo fluye naturalmente con el contexto temporal.`;
+Presta atención a los marcadores de tiempo entre mensajes del historial (ej: "[Pasaron ~17 horas sin actividad en el chat]"). Cuando haya pasado un tiempo significativo, reconócelo naturalmente: saluda según la hora del día, no retomes la conversación anterior como si acabara de ocurrir, y sé consciente de que ha pasado tiempo. No necesitas mencionar las horas exactas ni el día de la semana, solo fluye naturalmente con el contexto temporal. Nunca digas cosas como "un domingo por la tarde" o "este martes" — una persona real no habla así.`;
 
 	const weatherContext = await getCurrentWeatherContext();
 	if (weatherContext) {
