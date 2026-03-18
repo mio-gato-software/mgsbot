@@ -295,10 +295,10 @@ export async function generateImage(
 		]),
 		config: {
 			thinkingConfig: {
-				thinkingLevel: "MINIMAL",
+				thinkingLevel: "minimal",
 			},
 			imageConfig: {
-				imageSize: "0.5K",
+				imageSize: "512",
 			},
 			responseModalities: ["IMAGE", "TEXT"],
 		},
