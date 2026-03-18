@@ -14,7 +14,7 @@ COPY package.json tsconfig.json index.ts ./
 COPY src/ ./src/
 
 # Create writable directories and empty runtime data files
-RUN mkdir -p memory/sensory memory/episodes audios \
+RUN mkdir -p memory/sensory memory/episodes audios logs \
     && echo '[]' > memory/semantic.json
 
 ENV NODE_ENV=production
