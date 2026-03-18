@@ -1,5 +1,6 @@
 import type { Context } from "grammy";
 import { evaluateConversationChunk, generateResponse } from "./ai.ts";
+import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { generateEmbedding } from "./embeddings.ts";
 import {
 	checkAndCancelResolvedFollowUps,
@@ -99,6 +100,7 @@ export async function processConversation(
 		timestamp: Date.now(),
 	};
 	const overflow = await addMessageToSensory(buffer, userMessage);
+	logUserMessage(userName, userContent).catch(console.error);
 
 	// Promote overflow to memory in background
 	if (overflow) {
@@ -205,6 +207,7 @@ export async function processConversation(
 			timestamp: Date.now(),
 		};
 		const botOverflow = await addMessageToSensory(buffer, botMessage);
+		logBotMessage(result.cleanedText).catch(console.error);
 
 		// Promote bot overflow too
 		if (botOverflow) {

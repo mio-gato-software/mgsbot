@@ -50,6 +50,7 @@ src/
   appearance.ts              ← Locates base character image for image generation
   holidays.ts                ← Dominican Republic holidays (hardcoded for current year, needs annual update)
   daily-weather.ts           ← Fetches weather from Open-Meteo API, cached daily in memory/daily-weather.json
+  chat-logger.ts              ← Daily conversation log to text files (logs/ folder), toggled via ENABLE_CHAT_LOG
   bot-time.ts                ← Centralized timezone utilities via dayjs (BOT_TIMEZONE env var, default: America/Santo_Domingo)
   providers/
     types.ts                 ← ChatProvider interface and ChatMessage type
@@ -75,6 +76,8 @@ memory/
     <chat_id>.json           ← Per-chat recent messages (max 10) + image scheduling
   base.{png,jpg,jpeg}        ← Optional reference image for character image generation
 audios/                      ← Downloaded audio files and generated TTS
+logs/
+  <YYYY-MM-DD>.txt           ← Daily conversation logs (gitignored)
 ```
 
 ### Chat Provider System
@@ -178,6 +181,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `ENABLE_FOLLOW_UPS`: Set `true` to enable proactive follow-ups in DMs
 - `ENABLE_CHECK_INS`: Set `true` to enable proactive check-in messages in DMs (~2/week)
 - `CHECK_INS_PER_WEEK`: Number of check-in messages per week (default: `2`)
+- `ENABLE_CHAT_LOG`: Set `true` to enable daily conversation logging to `logs/` folder
 - `ENABLE_SLEEP_SCHEDULE`: Set `false` to disable sleep schedule (default: `true`)
 - `BOT_TIMEZONE`: IANA timezone for the bot (default: `America/Santo_Domingo`). Affects sleep schedule, time awareness, follow-ups, and weather.
 - `NODE_ENV`: Set `development` for verbose logging
