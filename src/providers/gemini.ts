@@ -2,6 +2,7 @@ import {
 	type Content,
 	type GenerateContentResponse,
 	GoogleGenAI,
+	type Part,
 } from "@google/genai";
 
 import { withRetry } from "../utils.ts";
@@ -20,11 +21,25 @@ function logTokenUsage(label: string, response: GenerateContentResponse): void {
 
 function messagesToContents(messages: ChatMessage[]): Content[] {
 	return messages
-		.filter((msg) => msg.content?.trim())
-		.map((msg) => ({
-			role: msg.role === "user" ? "user" : "model",
-			parts: [{ text: msg.content }],
-		}));
+		.filter((msg) => msg.content?.trim() || msg.mediaAttachment)
+		.map((msg) => {
+			const parts: Part[] = [];
+			if (msg.content?.trim()) {
+				parts.push({ text: msg.content });
+			}
+			if (msg.mediaAttachment) {
+				parts.push({
+					inlineData: {
+						data: msg.mediaAttachment.data,
+						mimeType: msg.mediaAttachment.mimeType,
+					},
+				});
+			}
+			return {
+				role: msg.role === "user" ? "user" : "model",
+				parts,
+			};
+		});
 }
 
 export class GeminiChatProvider implements ChatProvider {

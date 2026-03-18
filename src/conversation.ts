@@ -25,6 +25,7 @@ import {
 	buildSystemPrompt,
 	isSimpleAssistantMode,
 } from "./prompt.ts";
+import type { MediaAttachment } from "./providers/types.ts";
 import { sendResponse } from "./response-processor.ts";
 import type {
 	ConversationMessage,
@@ -67,6 +68,7 @@ export async function processConversation(
 	mentionType: MentionType = "none",
 	botOff = false,
 	isSleepingHour = false,
+	mediaAttachment?: MediaAttachment,
 ): Promise<void> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
@@ -177,7 +179,7 @@ export async function processConversation(
 			allowPhotoRequest,
 		);
 	}
-	const messages = buildMessages(buffer);
+	const messages = buildMessages(buffer, mediaAttachment);
 
 	// Show typing indicator (non-critical, don't crash if it fails)
 	await ctx.replyWithChatAction("typing").catch(() => {});

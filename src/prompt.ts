@@ -15,7 +15,7 @@ import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
 import { getPersonalityInstructions } from "./personality.ts";
-import type { ChatMessage } from "./providers/types.ts";
+import type { ChatMessage, MediaAttachment } from "./providers/types.ts";
 import type {
 	ConversationMessage,
 	Episode,
@@ -249,7 +249,10 @@ function formatConversationMessage(
 	return { role, content };
 }
 
-export function buildMessages(buffer: SensoryBuffer): ChatMessage[] {
+export function buildMessages(
+	buffer: SensoryBuffer,
+	mediaAttachment?: MediaAttachment,
+): ChatMessage[] {
 	const messages: ChatMessage[] = [];
 	const selected: Array<{
 		formatted: ChatMessage;
@@ -294,6 +297,16 @@ export function buildMessages(buffer: SensoryBuffer): ChatMessage[] {
 		}
 
 		messages.push(entry.formatted);
+	}
+
+	// Attach media to the last user message (transient, not persisted)
+	if (mediaAttachment && messages.length > 0) {
+		for (let i = messages.length - 1; i >= 0; i--) {
+			if (messages[i].role === "user") {
+				messages[i] = { ...messages[i], mediaAttachment };
+				break;
+			}
+		}
 	}
 
 	return messages;

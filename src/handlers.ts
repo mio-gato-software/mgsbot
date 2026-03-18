@@ -16,7 +16,12 @@ import {
 } from "./media-handlers.ts";
 import { decayConfidence, loadSensory, saveSensory } from "./memory.ts";
 import { isSimpleAssistantMode } from "./prompt.ts";
-import { getChatProviderInfo, switchChatProvider } from "./providers/index.ts";
+import {
+	createChatProvider,
+	getChatProviderInfo,
+	switchChatProvider,
+} from "./providers/index.ts";
+import { supportsInlineImages } from "./providers/types.ts";
 import { processSetupConversation } from "./setup.ts";
 
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
@@ -187,20 +192,42 @@ export function registerHandlers(bot: Bot): void {
 		try {
 			const { filePath, mimeType } = await downloadImage(ctx, botToken);
 			const caption = ctx.message.caption;
-			const description = await describeImage(filePath, mimeType, caption);
-			await cleanupFile(filePath);
 			const userName = getUserDisplayName(ctx);
-			const content = caption
-				? `[Image from ${userName}, caption: "${caption}"]: ${description}`
-				: `[Image from ${userName}]: ${description}`;
-			await processConversation(
-				ctx,
-				content,
-				userName,
-				mentionType,
-				botOff,
-				isSleepingHour(),
-			);
+			const provider = createChatProvider();
+
+			if (supportsInlineImages(provider)) {
+				// Pass raw image inline to Gemini — skip describeImage()
+				const imageBuffer = await Bun.file(filePath).arrayBuffer();
+				const data = Buffer.from(imageBuffer).toString("base64");
+				await cleanupFile(filePath);
+				const content = caption
+					? `[Image from ${userName}, caption: "${caption}"]`
+					: `[Image from ${userName}]`;
+				await processConversation(
+					ctx,
+					content,
+					userName,
+					mentionType,
+					botOff,
+					isSleepingHour(),
+					{ data, mimeType },
+				);
+			} else {
+				// Non-Gemini: use describeImage() as before
+				const description = await describeImage(filePath, mimeType, caption);
+				await cleanupFile(filePath);
+				const content = caption
+					? `[Image from ${userName}, caption: "${caption}"]: ${description}`
+					: `[Image from ${userName}]: ${description}`;
+				await processConversation(
+					ctx,
+					content,
+					userName,
+					mentionType,
+					botOff,
+					isSleepingHour(),
+				);
+			}
 		} catch (error) {
 			console.error("[photo handler] Error:", error);
 			if (isDev)
@@ -464,14 +491,6 @@ export function registerHandlers(bot: Bot): void {
 							`(${imageBuffer.length} bytes)`,
 						);
 
-					const replyCaption = replyMsg?.caption;
-					const description = await describeImage(
-						filePath,
-						mimeType,
-						replyCaption ?? undefined,
-					);
-					await cleanupFile(filePath);
-
 					const photoSenderUser = replyMsg?.from;
 					const photoSender = photoSenderUser
 						? (photoSenderUser.first_name ??
@@ -479,18 +498,45 @@ export function registerHandlers(bot: Bot): void {
 							"Unknown")
 						: "Unknown";
 
-					const content = text
-						? `[Image from ${photoSender}]: ${description}\n\n${userName}'s message: "${text}"`
-						: `[Image from ${photoSender}]: ${description}`;
+					const provider = createChatProvider();
+					const replyCaption = replyMsg?.caption;
 
-					await processConversation(
-						ctx,
-						content,
-						userName,
-						mentionType,
-						botOff,
-						isSleepingHour(),
-					);
+					if (supportsInlineImages(provider)) {
+						// Pass raw image inline to Gemini — skip describeImage()
+						const data = imageBuffer.toString("base64");
+						await cleanupFile(filePath);
+						const content = text
+							? `[Image from ${photoSender}]\n\n${userName}'s message: "${text}"`
+							: `[Image from ${photoSender}]`;
+						await processConversation(
+							ctx,
+							content,
+							userName,
+							mentionType,
+							botOff,
+							isSleepingHour(),
+							{ data, mimeType },
+						);
+					} else {
+						// Non-Gemini: use describeImage() as before
+						const description = await describeImage(
+							filePath,
+							mimeType,
+							replyCaption ?? undefined,
+						);
+						await cleanupFile(filePath);
+						const content = text
+							? `[Image from ${photoSender}]: ${description}\n\n${userName}'s message: "${text}"`
+							: `[Image from ${photoSender}]: ${description}`;
+						await processConversation(
+							ctx,
+							content,
+							userName,
+							mentionType,
+							botOff,
+							isSleepingHour(),
+						);
+					}
 				} catch (error) {
 					console.error("[reply-to-photo handler] Error:", error);
 					if (isDev)

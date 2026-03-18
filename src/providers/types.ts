@@ -1,6 +1,12 @@
+export interface MediaAttachment {
+	data: string;
+	mimeType: string;
+}
+
 export interface ChatMessage {
 	role: "user" | "assistant";
 	content: string;
+	mediaAttachment?: MediaAttachment;
 }
 
 export interface ChatProvider {
@@ -21,4 +27,8 @@ export function supportsVision(
 	provider: ChatProvider,
 ): provider is ChatProvider & Required<Pick<ChatProvider, "describeImage">> {
 	return typeof provider.describeImage === "function";
+}
+
+export function supportsInlineImages(provider: ChatProvider): boolean {
+	return provider.name === "gemini";
 }
