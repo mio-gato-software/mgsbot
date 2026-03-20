@@ -1,8 +1,8 @@
-# andrordbot
+# MGS Bot
 
 A conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities. Built with [grammY](https://grammy.dev), [Google Gemini](https://ai.google.dev), and [Bun](https://bun.sh).
 
-andrordbot isn't a typical chatbot — it remembers conversations, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, and YouTube links out of the box.
+MGS Bot isn't a typical chatbot — it remembers conversations, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, and YouTube links out of the box.
 
 ## Features
 
@@ -31,8 +31,8 @@ andrordbot isn't a typical chatbot — it remembers conversations, develops pers
 ### Setup
 
 ```bash
-git clone https://github.com/eliaquinencarnacion/andrordbot.git
-cd andrordbot
+git clone https://github.com/eliaquinencarnacion/mgsbot.git
+cd mgsbot
 bun install
 bun run start
 ```

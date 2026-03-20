@@ -1,4 +1,4 @@
-# Contributing to andrordbot
+# Contributing to MGS Bot
 
 Thanks for your interest in contributing! Here's how to get started.
 
@@ -8,8 +8,8 @@ Thanks for your interest in contributing! Here's how to get started.
 2. Clone the repo and install dependencies:
 
    ```bash
-   git clone https://github.com/eliaquinencarnacion/andrordbot.git
-   cd andrordbot
+   git clone https://github.com/eliaquinencarnacion/mgsbot.git
+   cd mgsbot
    bun install
    ```
 

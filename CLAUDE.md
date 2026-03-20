@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-andrordbot is a conversational Telegram bot built with **grammY** + **Google Gemini**, running on **Bun**. It features a 4-tier memory system (permanent, semantic, episodes, sensory), vector embeddings for semantic search, an emergent personality system, proactive follow-ups, and responds naturally to text, voice notes, audio files, photos/images, and YouTube links. It can also generate images of its character and respond with TTS voice notes.
+MGS Bot is a conversational Telegram bot built with **grammY** + **Google Gemini**, running on **Bun**. It features a 4-tier memory system (permanent, semantic, episodes, sensory), vector embeddings for semantic search, an emergent personality system, proactive follow-ups, and responds naturally to text, voice notes, audio files, photos/images, and YouTube links. It can also generate images of its character and respond with TTS voice notes.
 
 ## Commands
 
