@@ -303,7 +303,7 @@ The bot's conversational language is configured during setup and stored in `memo
 
 - **Runtime:** [Bun](https://bun.sh) v1.3+
 - **Bot framework:** [grammY](https://grammy.dev) ^1.40
-- **AI:** [Google GenAI](https://ai.google.dev) ^1 — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen), gemini-embedding-001 (embeddings)
+- **AI:** [Google GenAI](https://ai.google.dev) ^1 — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen), gemini-embedding-002 (embeddings)
 - **Language:** TypeScript (strict mode)
 - **Linter/Formatter:** [Biome](https://biomejs.dev) 2.4 — tabs, double quotes, auto-organized imports
 
