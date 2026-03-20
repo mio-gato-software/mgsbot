@@ -17,6 +17,7 @@ export function botNow(date?: Date | number): dayjs.Dayjs {
 
 /**
  * Format current date/time in Spanish for the system prompt.
+ * To change the bot's date locale, update the day/month names below.
  * Example: "domingo, 1 de marzo de 2026, 9:48 a.m."
  */
 export function formatDateTime(date?: Date | number): string {

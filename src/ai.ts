@@ -364,13 +364,13 @@ IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba.
    - Planes, metas, eventos personales futuros
    - Relaciones entre las personas del chat
    - Hábitos, rutinas, experiencias personales que comparten
-   - Intereses o temas que les apasionan (ej: "A Eliaquín le interesa la demografía", NO "La población de Corea bajará")
+   - Intereses o temas que les apasionan (ej: "A Juan le interesa la demografía", NO "La población de Corea bajará")
    Lo que NO guardar:
    - Datos del mundo, noticias, estadísticas, información enciclopédica
    - Contenido de videos, artículos o enlaces compartidos
    - Información general que se puede buscar en internet
    Categorías:
-   - category "person": dato sobre una persona específica (incluye "subject" con el NOMBRE COMPLETO tal como aparece en los mensajes, ej: "Eliaquín Encarnación", NO solo "Eliaquín")
+   - category "person": dato sobre una persona específica (incluye "subject" con el NOMBRE COMPLETO tal como aparece en los mensajes, ej: "Juan Pérez", NO solo "Juan")
    - category "group": dinámica grupal o regla de interacción entre los participantes
    - category "rule": regla o límite establecido en la relación
    - category "event": evento PERSONAL futuro o plan de un participante (NO eventos mundiales)

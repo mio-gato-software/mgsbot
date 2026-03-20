@@ -126,7 +126,7 @@ export async function buildSystemPrompt(
 			: personFacts;
 
 		if (filteredPersonFacts.length > 0) {
-			// Group by normalized name to merge variants (e.g., "Eliaquín" + "Eliaquín Encarnación")
+			// Group by normalized name to merge variants (e.g., "Juan" + "Juan Pérez")
 			const grouped = new Map<string, SemanticFact[]>();
 			const displayNames = new Map<string, string>(); // normalized -> longest display name
 			for (const fact of filteredPersonFacts) {

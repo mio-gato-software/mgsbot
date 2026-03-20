@@ -98,7 +98,7 @@ export async function registerIdentity(
 
 /**
  * Given an LLM-extracted subject name, find the best matching canonical name.
- * Checks: exact alias match, then prefix match (e.g., "Eliaquín" matches "Eliaquín Encarnación").
+ * Checks: exact alias match, then prefix match (e.g., "Juan" matches "Juan Pérez").
  * Falls back to raw name if no match.
  */
 export async function resolveCanonicalName(rawName: string): Promise<string> {
