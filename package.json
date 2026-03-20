@@ -1,5 +1,24 @@
 {
 	"name": "andrordbot",
+	"description": "Conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities",
+	"version": "1.0.0",
+	"author": "Eliaquin Encarnacion",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/eliaquinencarnacion/andrordbot.git"
+	},
+	"keywords": [
+		"telegram",
+		"bot",
+		"ai",
+		"gemini",
+		"conversational",
+		"memory",
+		"personality",
+		"grammy",
+		"bun"
+	],
 	"module": "index.ts",
 	"dependencies": {
 		"@google/genai": "^1.43.0",
@@ -11,7 +30,7 @@
 		"@biomejs/biome": "2.4.4",
 		"@types/bun": "latest"
 	},
-	"private": true,
+	"private": false,
 	"scripts": {
 		"start": "bun run index.ts",
 		"dev": "bun --watch run index.ts",
