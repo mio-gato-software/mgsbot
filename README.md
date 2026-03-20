@@ -70,7 +70,7 @@ All configuration is via environment variables. Copy `.env.sample` to `.env` and
 ### Required
 
 | Variable | Description |
-|---|---|
+| --- | --- |
 | `BOT_TOKEN` | Telegram bot token from @BotFather |
 | `GOOGLE_API_KEY` | Google AI API key — always required, even when using a different chat provider. Used for embeddings, image analysis, YouTube analysis, audio transcription, and image generation. |
 | `OWNER_USER_ID` | Your Telegram user ID. The bot only responds to DMs from this user. |
@@ -78,7 +78,7 @@ All configuration is via environment variables. Copy `.env.sample` to `.env` and
 ### Chat Provider
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, or `openai` |
 | `GEMINI_MODEL` | `gemini-3-flash-preview` | Gemini model for chat |
 | `OPENROUTER_API_KEY` | — | Required if using OpenRouter |
@@ -93,10 +93,11 @@ All configuration is via environment variables. Copy `.env.sample` to `.env` and
 | `FIREWORKS_API_KEY` | — | Required if using Fireworks |
 | `FIREWORKS_MODEL` | `accounts/fireworks/models/glm-5` | Fireworks model |
 | `OPENAI_API_KEY` | — | Required if using OpenAI |
+| `OPENAI_MODEL` | `gpt-5.4` | OpenAI model |
 
 You can switch providers at runtime via the `/provider` Telegram command (DM only, owner only):
 
-```
+```text
 /provider anthropic claude-sonnet-4-5-20250929
 /provider gemini
 /provider openrouter meta-llama/llama-4-scout
@@ -105,7 +106,7 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 ### Access Control
 
 | Variable | Description |
-|---|---|
+| --- | --- |
 | `ALLOWED_GROUP_ID` | Telegram group ID where the bot is allowed. If unset, the bot ignores all group messages. |
 | `OWNER_USER_ID` | Telegram user ID of the owner. If unset, the bot ignores all DMs. |
 
@@ -114,14 +115,14 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 ### Optional Services
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `LEMON_FOX_API_KEY` | — | Enables TTS voice responses and LemonFox audio transcription |
 | `STT_PROVIDER` | *(auto)* | Set `gemini` to force Gemini for audio transcription instead of LemonFox |
 
 ### Behavior
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `SIMPLE_ASSISTANT_MODE` | `false` | Disables personality, media processing, image generation, and memory. Uses a basic "helpful assistant" prompt. |
 | `ENABLE_SLEEP_SCHEDULE` | `true` | Bot sleeps 11:30 PM – 6:00 AM in its configured timezone |
 | `BOT_TIMEZONE` | `America/Santo_Domingo` | IANA timezone for sleep schedule, time awareness, follow-ups, and weather |
@@ -133,7 +134,7 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 
 ## Architecture
 
-```
+```text
 index.ts                     Entry point: env loading, setup wizard, bot startup
 src/
   ai.ts                      Gemini API: transcription, image description, YouTube analysis,
@@ -175,7 +176,7 @@ src/
 
 The bot uses a 4-tier memory architecture inspired by human cognition:
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │  Permanent Memory (memory/permanent.md)         │
 │  Bot personality and rules. Auto-generated      │
@@ -262,7 +263,7 @@ bun run format       # Format only (Biome)
 ### Telegram Commands
 
 | Command | Scope | Description |
-|---|---|---|
+| --- | --- | --- |
 | `/provider [name] [model]` | DM only, owner only | View or switch the active chat provider |
 | `/allowphotorequest` | DM only | Toggle on-demand photo request permission |
 
