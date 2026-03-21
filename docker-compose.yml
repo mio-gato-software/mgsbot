@@ -5,6 +5,7 @@ services:
     env_file:
       - .env
     volumes:
+      - ./.env:/app/.env:ro
       - ./memory:/app/memory
       - ./audios:/app/audios
       - ./logs:/app/logs

@@ -19,31 +19,11 @@ function loadEnvFile(): void {
 		) {
 			value = value.slice(1, -1);
 		}
-		if (!process.env[key]) process.env[key] = value;
+		process.env[key] = value;
 	}
 }
 
 loadEnvFile();
-
-// --- Sanitize env values (strip stray quotes from Docker env_file injection) ---
-
-function sanitizeEnvValues(): void {
-	for (const key of Object.keys(process.env)) {
-		const val = process.env[key];
-		if (!val) continue;
-		const trimmed = val.trim();
-		if (
-			(trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-			(trimmed.startsWith("'") && trimmed.endsWith("'"))
-		) {
-			process.env[key] = trimmed.slice(1, -1);
-		} else if (trimmed !== val) {
-			process.env[key] = trimmed;
-		}
-	}
-}
-
-sanitizeEnvValues();
 
 // --- Normalize env var aliases ---
 
@@ -64,7 +44,6 @@ if (needsSetup) {
 	const { runSetupWizard } = await import("./src/wizard.ts");
 	await runSetupWizard();
 	loadEnvFile();
-	sanitizeEnvValues();
 }
 
 // --- Bot imports (after env vars are confirmed present) ---
