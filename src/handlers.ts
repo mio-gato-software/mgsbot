@@ -249,10 +249,17 @@ export function registerHandlers(bot: Bot): void {
 	bot.command("provider", async (ctx) => {
 		if (isGroupChat(ctx)) return;
 
-		const args = ctx.match?.toString().trim().toLowerCase() ?? "";
-		console.log(`[provider] Command received: "${args}" from ${ctx.from?.id}`);
+		const matchStr = typeof ctx.match === "string" ? ctx.match.trim() : "";
+		const parts = matchStr.split(/\s+/).filter(Boolean);
+		const providerArg = parts[0]?.toLowerCase() ?? "";
+		const modelArg =
+			parts.length > 1 ? parts.slice(1).join(" ").trim() : undefined;
 
-		if (!args) {
+		console.log(
+			`[provider] Command received: "${matchStr}" from ${ctx.from?.id}`,
+		);
+
+		if (!providerArg) {
 			const info = getChatProviderInfo();
 			await ctx.reply(
 				`Proveedor: ${info.provider}\nModelo: ${info.model}\n\nProveedores: ${VALID_PROVIDERS.join(", ")}`,
@@ -260,15 +267,17 @@ export function registerHandlers(bot: Bot): void {
 			return;
 		}
 
-		if (!VALID_PROVIDERS.includes(args as (typeof VALID_PROVIDERS)[number])) {
+		if (
+			!VALID_PROVIDERS.includes(providerArg as (typeof VALID_PROVIDERS)[number])
+		) {
 			await ctx.reply(
-				`Uso:\n/provider — ver proveedor actual\n/provider <proveedor>\n\nProveedores: ${VALID_PROVIDERS.join(", ")}`,
+				`Uso:\n/provider — ver proveedor actual\n/provider <proveedor> [modelo]\n\nEjemplos:\n/provider gemini\n/provider openrouter meta-llama/llama-4-scout\n\nProveedores: ${VALID_PROVIDERS.join(", ")}`,
 			);
 			return;
 		}
 
 		try {
-			const provider = switchChatProvider(args);
+			const provider = switchChatProvider(providerArg, modelArg);
 			await ctx.reply(
 				`Cambiado a proveedor: ${provider.name}\nModelo: ${provider.model}`,
 			);

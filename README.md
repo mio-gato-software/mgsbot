@@ -72,7 +72,7 @@ All configuration is via environment variables. Copy `.env.sample` to `.env` and
 | Variable | Description |
 | --- | --- |
 | `BOT_TOKEN` | Telegram bot token from @BotFather |
-| `GOOGLE_API_KEY` | Google AI API key — always required, even when using a different chat provider. Used for embeddings, image analysis, YouTube analysis, audio transcription, and image generation. |
+| `GOOGLE_API_KEY` | Google AI API key — always required, even when using a different chat provider. Used for embeddings, image analysis, YouTube analysis, image generation, and Gemini-based audio transcription when LemonFox is not used or `STT_PROVIDER=gemini`. |
 | `OWNER_USER_ID` | Your Telegram user ID. The bot only responds to DMs from this user. |
 
 ### Chat Provider
@@ -80,7 +80,7 @@ All configuration is via environment variables. Copy `.env.sample` to `.env` and
 | Variable | Default | Description |
 | --- | --- | --- |
 | `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, or `openai` |
-| `GEMINI_MODEL` | `gemini-3-flash-preview` | Gemini model for chat |
+| `GEMINI_MODEL` | `gemini-3-flash-preview` | Gemini model when `CHAT_PROVIDER=gemini` (other Gemini-only paths in code use fixed models; see **Google AI usage** below) |
 | `OPENROUTER_API_KEY` | — | Required if using OpenRouter |
 | `OPENROUTER_MODEL` | `anthropic/claude-3.5-sonnet` | OpenRouter model |
 | `ANTHROPIC_API_KEY` | — | Required if using Anthropic |
@@ -102,6 +102,8 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 /provider gemini
 /provider openrouter meta-llama/llama-4-scout
 ```
+
+**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2-preview`. Character image generation uses `gemini-3.1-flash-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview` in `src/ai.ts`.
 
 ### Access Control
 
@@ -144,7 +146,7 @@ src/
   conversation.ts            Conversation processing pipeline (prompt → generate → save → reply)
   handlers.ts                grammY handlers: voice, audio, photo, text, YouTube, /provider,
                               security middleware (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
-  embeddings.ts              Vector embeddings (gemini-embedding-001) with disk-persisted LRU cache
+  embeddings.ts              Vector embeddings (gemini-embedding-2-preview) with disk-persisted LRU cache
   personality.ts             Emergent personality: trait growth, decay, momentum, AI description
   identities.ts              User identity tracking: canonical names, aliases, name changes
   check-ins.ts               Proactive check-in scheduling and delivery
@@ -184,10 +186,10 @@ The bot uses a 4-tier memory architecture inspired by human cognition:
 ├─────────────────────────────────────────────────┤
 │  Semantic Store (memory/semantic.json)           │
 │  Global knowledge base of atomic facts with     │
-│  768-dim vector embeddings. Categories:         │
-│  person, group, rule, event. Confidence         │
-│  decays 0.02/day (min 0.1). Deduplication       │
-│  via cosine similarity at 0.85 threshold.       │
+│  vector embeddings (gemini-embedding-2-preview). │
+│  Categories: person, group, rule, event.        │
+│  Confidence decays 0.02/day (min 0.1).          │
+│  Deduplication via cosine similarity at 0.85.   │
 ├─────────────────────────────────────────────────┤
 │  Episodes (memory/episodes/<chat_id>.json)      │
 │  Per-chat summarized conversations (max 20).    │
@@ -235,7 +237,7 @@ The bot develops emergent personality traits that evolve over time:
 The bot generates character images on a weekly schedule:
 
 - One random day per week, at a random time between 8 AM and 11 PM (bot timezone)
-- Uses `gemini-3-pro-image-preview` with an optional base character image (`memory/base.{png,jpg,jpeg}`)
+- Uses `gemini-3.1-flash-image-preview` with an optional base character image (`memory/base.{png,jpg,jpeg}`)
 - Schedule tracked per-chat via sensory buffer fields (`lastImageDate`, `imageTargetDate`, `imageTargetTime`)
 - On-demand photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command)
 
@@ -264,7 +266,7 @@ bun run format       # Format only (Biome)
 
 | Command | Scope | Description |
 | --- | --- | --- |
-| `/provider [name] [model]` | DM only, owner only | View or switch the active chat provider |
+| `/provider [name] [model]` | DM only, owner only | View or switch the active chat provider; optional second argument sets the model for that session (until restart) |
 | `/allowphotorequest` | DM only | Toggle on-demand photo request permission |
 
 ### Maintenance Scripts
@@ -303,9 +305,9 @@ The bot's conversational language is configured during setup and stored in `memo
 
 - **Runtime:** [Bun](https://bun.sh) v1.3+
 - **Bot framework:** [grammY](https://grammy.dev) ^1.40
-- **AI:** [Google GenAI](https://ai.google.dev) ^1 — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen), gemini-embedding-002 (embeddings)
+- **AI:** [Google GenAI](https://ai.google.dev) ^1 — default chat: Gemini 3 Flash Preview (`gemini-3-flash-preview`); character images: `gemini-3.1-flash-image-preview`; embeddings: `gemini-embedding-2-preview`
 - **Language:** TypeScript (strict mode)
-- **Linter/Formatter:** [Biome](https://biomejs.dev) 2.4 — tabs, double quotes, auto-organized imports
+- **Linter/Formatter:** [Biome](https://biomejs.dev) 2.4.4 — tabs, double quotes, auto-organized imports
 
 ## License
 
