@@ -16,7 +16,11 @@ export function createChatProvider(): ChatProvider {
 		return cachedProvider;
 	}
 
-	const providerName = process.env.CHAT_PROVIDER ?? "gemini";
+	const rawValue = process.env.CHAT_PROVIDER ?? "";
+	const providerName = (rawValue || "gemini").trim().toLowerCase();
+	console.log(
+		`[chat] CHAT_PROVIDER env: ${JSON.stringify(rawValue)} → resolved: ${JSON.stringify(providerName)}`,
+	);
 
 	switch (providerName) {
 		case "openrouter":

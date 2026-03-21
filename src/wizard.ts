@@ -60,7 +60,13 @@ function loadExistingEnv(): Record<string, string> {
 		const eqIdx = trimmed.indexOf("=");
 		if (eqIdx === -1) continue;
 		const key = trimmed.slice(0, eqIdx).trim();
-		const value = trimmed.slice(eqIdx + 1).trim();
+		let value = trimmed.slice(eqIdx + 1).trim();
+		if (
+			(value.startsWith('"') && value.endsWith('"')) ||
+			(value.startsWith("'") && value.endsWith("'"))
+		) {
+			value = value.slice(1, -1);
+		}
 		env[key] = value;
 	}
 	return env;

@@ -11,12 +11,45 @@ function loadEnvFile(): void {
 		const eqIdx = trimmed.indexOf("=");
 		if (eqIdx === -1) continue;
 		const key = trimmed.slice(0, eqIdx).trim();
-		const value = trimmed.slice(eqIdx + 1).trim();
+		let value = trimmed.slice(eqIdx + 1).trim();
+		// Strip surrounding quotes (single or double)
+		if (
+			(value.startsWith('"') && value.endsWith('"')) ||
+			(value.startsWith("'") && value.endsWith("'"))
+		) {
+			value = value.slice(1, -1);
+		}
 		if (!process.env[key]) process.env[key] = value;
 	}
 }
 
 loadEnvFile();
+
+// --- Sanitize env values (strip stray quotes from Docker env_file injection) ---
+
+function sanitizeEnvValues(): void {
+	for (const key of Object.keys(process.env)) {
+		const val = process.env[key];
+		if (!val) continue;
+		const trimmed = val.trim();
+		if (
+			(trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+			(trimmed.startsWith("'") && trimmed.endsWith("'"))
+		) {
+			process.env[key] = trimmed.slice(1, -1);
+		} else if (trimmed !== val) {
+			process.env[key] = trimmed;
+		}
+	}
+}
+
+sanitizeEnvValues();
+
+// --- Normalize env var aliases ---
+
+if (!process.env.CHAT_PROVIDER && process.env.PROVIDER) {
+	process.env.CHAT_PROVIDER = process.env.PROVIDER;
+}
 
 // --- Setup wizard check (before any bot imports that need env vars) ---
 
@@ -31,6 +64,7 @@ if (needsSetup) {
 	const { runSetupWizard } = await import("./src/wizard.ts");
 	await runSetupWizard();
 	loadEnvFile();
+	sanitizeEnvValues();
 }
 
 // --- Bot imports (after env vars are confirmed present) ---
