@@ -180,20 +180,29 @@ export async function sendResponse(
 					// ignore fallback failure
 				}
 			}
-		} else if (
-			isVoiceMessage &&
-			!isSimpleAssistantMode &&
-			isTtsAvailable() &&
-			Math.random() < 0.3
-		) {
-			// Random voice response (~30%) when user sends a voice message
-			try {
-				if (isDev) console.log("[TTS:random] Generating voice response");
-				const audioPath = await textToSpeech(responseText);
-				await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
-				unlink(audioPath).catch(() => {});
-			} catch (error) {
-				console.error("[TTS:random] Error generating speech:", error);
+		} else if (isVoiceMessage && !isSimpleAssistantMode && isTtsAvailable()) {
+			const roll = Math.random();
+			console.log(
+				`[TTS:random] Voice message detected, roll=${roll.toFixed(2)} (need <0.50)`,
+			);
+			if (roll < 0.5) {
+				try {
+					console.log("[TTS:random] 🎤 Responding with voice note");
+					const audioPath = await textToSpeech(responseText);
+					await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
+					unlink(audioPath).catch(() => {});
+				} catch (error) {
+					console.error("[TTS:random] Error generating speech:", error);
+					try {
+						await ctx.reply(responseText, {
+							...replyOptions,
+							parse_mode: "Markdown",
+						});
+					} catch {
+						await ctx.reply(responseText, replyOptions);
+					}
+				}
+			} else {
 				try {
 					await ctx.reply(responseText, {
 						...replyOptions,
