@@ -35,7 +35,8 @@ index.ts                     ← Entry point: bot setup, handler registration, b
 src/
   types.ts                   ← TypeScript interfaces for all memory/data structures
   ai.ts                      ← GoogleGenAI instance, transcribeAudio(), describeImage(), analyzeYouTube(),
-                               evaluateMemory(), textToSpeech(), generateImage()
+                               evaluateMemory(), generateImage()
+  tts.ts                     ← TTS provider abstraction: ElevenLabs + LemonFox, random voice responses on voice messages
   memory.ts                  ← Read/write for all memory tiers + promotion/decay logic
   prompt.ts                  ← Prompt assembly: buildSystemPrompt(), buildMessages(), activity/time context
   handlers.ts                ← grammY handlers: voice, audio, photo, text (catch-all), YouTube detection,
@@ -150,7 +151,8 @@ Interactive setup flow (`src/setup.ts` + `src/config.ts`):
 4. In groups: detect mention type (reply/tag/name/none) — only respond when mentioned
 5. Assemble prompt: permanent.md + personality description + relevant semantic facts + relevant episodes + sensory messages + activity/time context
 6. Call chat provider, save exchange, reply (with Markdown, falling back to plain text)
-7. Special response markers: `[SILENCE]` (no response), `[REACT:emoji]` (emoji reaction), `[IMAGE: prompt]` (generate character image), `[TTS]text[/TTS]` (voice reply via LemonFox)
+7. Special response markers: `[SILENCE]` (no response), `[REACT:emoji]` (emoji reaction), `[IMAGE: prompt]` (generate character image), `[TTS]text[/TTS]` (voice reply via TTS provider)
+8. When receiving a voice message, ~30% chance of responding with a voice note (via TTS provider, independent of `[TTS]` marker)
 8. Periodically: background memory evaluation (semantic facts + personality signals + follow-up detection)
 
 ### Image Generation
@@ -175,7 +177,9 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `DASHSCOPE_API_KEY` / `DASHSCOPE_MODEL`: Required if using Alibaba (default model: `qwen3.5-plus`)
 - `FIREWORKS_API_KEY` / `FIREWORKS_MODEL`: Required if using Fireworks (default model: `accounts/fireworks/models/glm-5`)
 - `ALLOWED_GROUP_ID` / `OWNER_USER_ID`: Access control
-- `LEMON_FOX_API_KEY`: For TTS voice responses and audio transcription (STT)
+- `LEMON_FOX_API_KEY`: For TTS voice responses (if `TTS_PROVIDER=lemonfox`) and audio transcription (STT)
+- `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`: For ElevenLabs TTS voice responses (default voice ID if not set)
+- `TTS_PROVIDER`: `elevenlabs` or `lemonfox` (auto-detected based on available API keys, ElevenLabs takes priority)
 - `STT_PROVIDER`: Set `gemini` to force Gemini for audio transcription instead of LemonFox (default: uses LemonFox when `LEMON_FOX_API_KEY` is set)
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
 - `ENABLE_FOLLOW_UPS`: Set `true` to enable proactive follow-ups in DMs

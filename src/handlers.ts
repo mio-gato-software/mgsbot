@@ -145,6 +145,8 @@ export function registerHandlers(bot: Bot): void {
 				mentionType,
 				botOff,
 				isSleepingHour(),
+				undefined,
+				true,
 			);
 		} catch (error) {
 			console.error("[voice handler] Error:", error);

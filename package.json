@@ -21,6 +21,7 @@
 	],
 	"module": "index.ts",
 	"dependencies": {
+		"@elevenlabs/elevenlabs-js": "^2.40.0",
 		"@google/genai": "^1.43.0",
 		"dayjs": "^1.11.19",
 		"grammy": "^1.40.1",

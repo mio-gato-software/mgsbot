@@ -78,8 +78,15 @@ if (!process.env.OWNER_USER_ID) {
 	console.warn("[startup] OWNER_USER_ID not set — bot will ignore all DMs");
 }
 
-if (!process.env.LEMON_FOX_API_KEY) {
-	console.warn("[startup] LEMON_FOX_API_KEY not set — TTS will be unavailable");
+if (!process.env.LEMON_FOX_API_KEY && !process.env.ELEVENLABS_API_KEY) {
+	console.warn(
+		"[startup] No TTS API key set (LEMON_FOX_API_KEY or ELEVENLABS_API_KEY) — TTS will be unavailable",
+	);
+} else {
+	const ttsProvider =
+		process.env.TTS_PROVIDER ||
+		(process.env.ELEVENLABS_API_KEY ? "elevenlabs" : "lemonfox");
+	console.log(`[startup] TTS provider: ${ttsProvider}`);
 }
 
 const bot = new Bot(token);

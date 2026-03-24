@@ -1,12 +1,13 @@
 import { unlink } from "node:fs/promises";
 import type { Context } from "grammy";
 import { InputFile } from "grammy";
-import { generateImage, textToSpeech } from "./ai.ts";
+import { generateImage } from "./ai.ts";
 import { getBaseImagePath } from "./appearance.ts";
 import { getBotName } from "./config.ts";
 import { getWeekStart } from "./image-scheduler.ts";
 import { saveSensory } from "./memory.ts";
 import { isSimpleAssistantMode } from "./prompt.ts";
+import { isTtsAvailable, textToSpeech } from "./tts.ts";
 import type { SensoryBuffer } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -22,6 +23,7 @@ export interface SendResponseOptions {
 	allowPhotoRequest: boolean;
 	buffer: SensoryBuffer;
 	isGroup: boolean;
+	isVoiceMessage?: boolean;
 }
 
 export interface SendResponseResult {
@@ -39,7 +41,14 @@ export interface SendResponseResult {
 export async function sendResponse(
 	options: SendResponseOptions,
 ): Promise<SendResponseResult | null> {
-	const { ctx, shouldGenImage, allowPhotoRequest, buffer, isGroup } = options;
+	const {
+		ctx,
+		shouldGenImage,
+		allowPhotoRequest,
+		buffer,
+		isGroup,
+		isVoiceMessage,
+	} = options;
 	let responseText = options.responseText;
 
 	// Guard against empty responses
@@ -169,6 +178,29 @@ export async function sendResponse(
 					await ctx.reply(ttsText, replyOptions);
 				} catch {
 					// ignore fallback failure
+				}
+			}
+		} else if (
+			isVoiceMessage &&
+			!isSimpleAssistantMode &&
+			isTtsAvailable() &&
+			Math.random() < 0.3
+		) {
+			// Random voice response (~30%) when user sends a voice message
+			try {
+				if (isDev) console.log("[TTS:random] Generating voice response");
+				const audioPath = await textToSpeech(responseText);
+				await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
+				unlink(audioPath).catch(() => {});
+			} catch (error) {
+				console.error("[TTS:random] Error generating speech:", error);
+				try {
+					await ctx.reply(responseText, {
+						...replyOptions,
+						parse_mode: "Markdown",
+					});
+				} catch {
+					await ctx.reply(responseText, replyOptions);
 				}
 			}
 		} else {

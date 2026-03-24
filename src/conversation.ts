@@ -70,6 +70,7 @@ export async function processConversation(
 	botOff = false,
 	isSleepingHour = false,
 	mediaAttachment?: MediaAttachment,
+	isVoiceMessage?: boolean,
 ): Promise<void> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
@@ -197,6 +198,7 @@ export async function processConversation(
 		allowPhotoRequest,
 		buffer,
 		isGroup: isGroupChat(ctx),
+		isVoiceMessage,
 	});
 
 	// Save bot response to sensory buffer (only if non-silenced and non-empty)
