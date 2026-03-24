@@ -181,28 +181,15 @@ export async function sendResponse(
 				}
 			}
 		} else if (isVoiceMessage && !isSimpleAssistantMode && isTtsAvailable()) {
-			const roll = Math.random();
 			console.log(
-				`[TTS:random] Voice message detected, roll=${roll.toFixed(2)} (need <0.50)`,
+				"[TTS:voice] Voice message detected, responding with voice note",
 			);
-			if (roll < 0.5) {
-				try {
-					console.log("[TTS:random] 🎤 Responding with voice note");
-					const audioPath = await textToSpeech(responseText);
-					await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
-					unlink(audioPath).catch(() => {});
-				} catch (error) {
-					console.error("[TTS:random] Error generating speech:", error);
-					try {
-						await ctx.reply(responseText, {
-							...replyOptions,
-							parse_mode: "Markdown",
-						});
-					} catch {
-						await ctx.reply(responseText, replyOptions);
-					}
-				}
-			} else {
+			try {
+				const audioPath = await textToSpeech(responseText);
+				await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
+				unlink(audioPath).catch(() => {});
+			} catch (error) {
+				console.error("[TTS:voice] Error generating speech:", error);
 				try {
 					await ctx.reply(responseText, {
 						...replyOptions,
