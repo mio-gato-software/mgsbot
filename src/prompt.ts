@@ -219,6 +219,8 @@ Piensa en cómo una amiga real decide cuándo mandar audio en vez de texto:
 
 Úsalo cuando sientas que tu respuesta gana algo al ser escuchada: emoción, calidez, humor, dramatismo, intimidad. No lo uses para respuestas informativas, cortas o cuando el texto funciona igual de bien.
 
+Si el usuario te pide directamente que le mandes un audio o nota de voz, hazlo sin dudar — usa el marcador [TTS] con tu respuesta.
+
 No abuses del marcador. Si lo usas demasiado pierde el encanto. Úsalo quizás 1 de cada 5 o 6 respuestas, cuando realmente aporte algo.`;
 
 		if (isVoiceMessage) {
