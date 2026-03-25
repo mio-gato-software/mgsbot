@@ -23,7 +23,7 @@ export class InworldTtsProvider implements TtsProvider {
 		const response = await fetch("https://api.inworld.ai/tts/v1/voice", {
 			method: "POST",
 			headers: {
-				Authorization: this.apiKey,
+				Authorization: `Basic ${this.apiKey}`,
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({
@@ -31,8 +31,7 @@ export class InworldTtsProvider implements TtsProvider {
 				voiceId: this.voiceId,
 				modelId: "inworld-tts-1.5-max",
 				audioConfig: {
-					audioEncoding: "LINEAR16",
-					sampleRateHertz: 22050,
+					audioEncoding: "MP3",
 				},
 				temperature: 1,
 				applyTextNormalization: "ON",
@@ -59,7 +58,7 @@ export class InworldTtsProvider implements TtsProvider {
 			);
 
 		const audioBuffer = Buffer.from(data.audioContent, "base64");
-		const filePath = `./audios/tts_${Date.now()}.wav`;
+		const filePath = `./audios/tts_${Date.now()}.mp3`;
 		await Bun.write(filePath, audioBuffer);
 		if (isDev)
 			console.log("[TTS:inworld] Saved bytes:", audioBuffer.byteLength);
