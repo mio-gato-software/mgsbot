@@ -7,7 +7,7 @@ import { getBotName } from "./config.ts";
 import { getWeekStart } from "./image-scheduler.ts";
 import { saveSensory } from "./memory.ts";
 import { isSimpleAssistantMode } from "./prompt.ts";
-import { isTtsAvailable, textToSpeech } from "./tts.ts";
+import { textToSpeech } from "./tts.ts";
 import type { SensoryBuffer } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -23,7 +23,6 @@ export interface SendResponseOptions {
 	allowPhotoRequest: boolean;
 	buffer: SensoryBuffer;
 	isGroup: boolean;
-	isVoiceMessage?: boolean;
 }
 
 export interface SendResponseResult {
@@ -41,14 +40,7 @@ export interface SendResponseResult {
 export async function sendResponse(
 	options: SendResponseOptions,
 ): Promise<SendResponseResult | null> {
-	const {
-		ctx,
-		shouldGenImage,
-		allowPhotoRequest,
-		buffer,
-		isGroup,
-		isVoiceMessage,
-	} = options;
+	const { ctx, shouldGenImage, allowPhotoRequest, buffer, isGroup } = options;
 	let responseText = options.responseText;
 
 	// Guard against empty responses
@@ -178,25 +170,6 @@ export async function sendResponse(
 					await ctx.reply(ttsText, replyOptions);
 				} catch {
 					// ignore fallback failure
-				}
-			}
-		} else if (isVoiceMessage && !isSimpleAssistantMode && isTtsAvailable()) {
-			console.log(
-				"[TTS:voice] Voice message detected, responding with voice note",
-			);
-			try {
-				const audioPath = await textToSpeech(responseText);
-				await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
-				unlink(audioPath).catch(() => {});
-			} catch (error) {
-				console.error("[TTS:voice] Error generating speech:", error);
-				try {
-					await ctx.reply(responseText, {
-						...replyOptions,
-						parse_mode: "Markdown",
-					});
-				} catch {
-					await ctx.reply(responseText, replyOptions);
 				}
 			}
 		} else {

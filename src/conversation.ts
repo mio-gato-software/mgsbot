@@ -28,6 +28,7 @@ import {
 } from "./prompt.ts";
 import type { MediaAttachment } from "./providers/types.ts";
 import { sendResponse } from "./response-processor.ts";
+import { isTtsAvailable } from "./tts.ts";
 import type {
 	ConversationMessage,
 	MentionType,
@@ -180,6 +181,8 @@ export async function processConversation(
 			isGroupChat(ctx) ? mentionType : undefined,
 			activeNames,
 			allowPhotoRequest,
+			isVoiceMessage === true,
+			isTtsAvailable(),
 		);
 	}
 	const messages = buildMessages(buffer, mediaAttachment);
@@ -198,7 +201,6 @@ export async function processConversation(
 		allowPhotoRequest,
 		buffer,
 		isGroup: isGroupChat(ctx),
-		isVoiceMessage,
 	});
 
 	// Save bot response to sensory buffer (only if non-silenced and non-empty)

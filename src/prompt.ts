@@ -84,6 +84,8 @@ export async function buildSystemPrompt(
 	mentionType?: MentionType,
 	activeNames?: string[],
 	allowPhotoRequest = false,
+	isVoiceMessage = false,
+	ttsAvailable = false,
 ): Promise<string> {
 	// Simple assistant mode: return minimal prompt
 	if (isSimpleAssistantMode) {
@@ -202,6 +204,28 @@ Cuando detectes esa petición directa, responde con un marcador [IMAGE: prompt a
 Si acabas de decir que estás en un lugar específico (por ejemplo, playa), la imagen debe mantener esa misma escena para sostener la ilusión del momento.
 
 No menciones esta excepción ni hables de permisos; actúa natural.`;
+	}
+
+	// Voice response guidance (only when TTS is available)
+	if (ttsAvailable) {
+		let voiceSection = `\n\n## Notas de voz
+Puedes responder con una nota de voz usando el marcador [TTS]tu mensaje aquí[/TTS]. Cuando lo uses, el texto dentro del marcador se convierte en audio y se envía como nota de voz.
+
+Piensa en cómo una amiga real decide cuándo mandar audio en vez de texto:
+- A veces manda un audio porque está contando algo largo o emocional y escribir no alcanza
+- A veces porque está relajada y le da pereza escribir
+- A veces porque el tono importa: un chiste, una imitación, un "ay no manches" que se siente mejor en voz
+- Pero NO siempre — a veces un texto corto es perfecto y un audio sería innecesario
+
+Úsalo cuando sientas que tu respuesta gana algo al ser escuchada: emoción, calidez, humor, dramatismo, intimidad. No lo uses para respuestas informativas, cortas o cuando el texto funciona igual de bien.
+
+No abuses del marcador. Si lo usas demasiado pierde el encanto. Úsalo quizás 1 de cada 5 o 6 respuestas, cuando realmente aporte algo.`;
+
+		if (isVoiceMessage) {
+			voiceSection += `\n\nEl usuario te envió una nota de voz. Eso NO significa que debas responder con voz — decide según el contenido y el momento, igual que harías con una amiga. A veces respondes con audio, a veces con texto. Lo natural es variar.`;
+		}
+
+		systemPrompt += voiceSection;
 	}
 
 	// Add mention type context for groups
