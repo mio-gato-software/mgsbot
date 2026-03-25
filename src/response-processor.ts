@@ -7,7 +7,7 @@ import { getBotName } from "./config.ts";
 import { getWeekStart } from "./image-scheduler.ts";
 import { saveSensory } from "./memory.ts";
 import { isSimpleAssistantMode } from "./prompt.ts";
-import { textToSpeech } from "./tts.ts";
+import { textToSpeech } from "./tts/index.ts";
 import type { SensoryBuffer } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";

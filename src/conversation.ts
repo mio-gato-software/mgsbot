@@ -28,7 +28,7 @@ import {
 } from "./prompt.ts";
 import type { MediaAttachment } from "./providers/types.ts";
 import { sendResponse } from "./response-processor.ts";
-import { isTtsAvailable } from "./tts.ts";
+import { isTtsAvailable } from "./tts/index.ts";
 import type {
 	ConversationMessage,
 	MentionType,
