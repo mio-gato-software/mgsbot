@@ -13,6 +13,7 @@ import {
 	addMessageToSensory,
 	addSemanticFacts,
 	getFactsForSubjects,
+	getPermanentFacts,
 	getQueryEmbedding,
 	getRelevantEpisodes,
 	getRelevantFacts,
@@ -146,22 +147,24 @@ export async function processConversation(
 		const [{ embedding: queryEmbedding, text: queryText }, activeNames] =
 			await Promise.all([queryEmbeddingPromise, activeNamesPromise]);
 
-		// Retrieve episodes, semantic facts, and participant facts in parallel
-		const [episodes, facts, participantFacts] = await Promise.all([
-			getRelevantEpisodes(
-				chatId,
-				queryEmbedding,
-				queryText,
-				MAX_RELEVANT_EPISODES,
-			),
-			getRelevantFacts(queryEmbedding, {
-				queryText,
-				maxCount: MAX_RELEVANT_FACTS,
-			}),
-			activeNames.length > 0
-				? getFactsForSubjects(activeNames, MAX_PARTICIPANT_FACTS_PER_SUBJECT)
-				: ([] as SemanticFact[]),
-		]);
+		// Retrieve episodes, semantic facts, participant facts, and permanent facts in parallel
+		const [episodes, facts, participantFacts, permanentFacts] =
+			await Promise.all([
+				getRelevantEpisodes(
+					chatId,
+					queryEmbedding,
+					queryText,
+					MAX_RELEVANT_EPISODES,
+				),
+				getRelevantFacts(queryEmbedding, {
+					queryText,
+					maxCount: MAX_RELEVANT_FACTS,
+				}),
+				activeNames.length > 0
+					? getFactsForSubjects(activeNames, MAX_PARTICIPANT_FACTS_PER_SUBJECT)
+					: ([] as SemanticFact[]),
+				getPermanentFacts(),
+			]);
 
 		// Merge and deduplicate facts
 		const allFactIds = new Set(facts.map((f) => f.id));
@@ -183,6 +186,7 @@ export async function processConversation(
 			allowPhotoRequest,
 			isVoiceMessage === true,
 			isTtsAvailable(),
+			permanentFacts,
 		);
 	}
 	const messages = buildMessages(buffer, mediaAttachment);
@@ -301,6 +305,7 @@ export async function promoteToMemory(
 			confidence: 1.0,
 			createdAt: now,
 			lastConfirmed: now,
+			...(fact.permanent ? { permanent: true } : {}),
 		}));
 		await addSemanticFacts(semanticFacts);
 	}

@@ -86,6 +86,7 @@ export async function buildSystemPrompt(
 	allowPhotoRequest = false,
 	isVoiceMessage = false,
 	ttsAvailable = false,
+	permanentFacts?: SemanticFact[],
 ): Promise<string> {
 	// Simple assistant mode: return minimal prompt
 	if (isSimpleAssistantMode) {
@@ -109,6 +110,48 @@ export async function buildSystemPrompt(
 			.map((e) => `- [${formatTimeAgo(e.timestamp)}] ${e.summary}`)
 			.join("\n");
 		systemPrompt += `\n\n## Recuerdos recientes\nEpisodios de conversaciones pasadas:\n${episodesText}`;
+	}
+
+	// Permanent facts (always included, never forgotten)
+	if (permanentFacts && permanentFacts.length > 0) {
+		const personPermanent = permanentFacts.filter(
+			(f) => f.category === "person",
+		);
+		const otherPermanent = permanentFacts.filter(
+			(f) => f.category !== "person",
+		);
+
+		if (personPermanent.length > 0) {
+			const grouped = new Map<string, SemanticFact[]>();
+			const displayNames = new Map<string, string>();
+			for (const fact of personPermanent) {
+				const subject = fact.subject ?? "Desconocido";
+				const key = normalizeName(subject);
+				const existing = grouped.get(key) ?? [];
+				existing.push(fact);
+				grouped.set(key, existing);
+				const currentDisplay = displayNames.get(key) ?? "";
+				if (subject.length > currentDisplay.length) {
+					displayNames.set(key, subject);
+				}
+			}
+
+			let section =
+				"\n\n## Datos fundamentales de las personas\nEstos son datos biográficos permanentes que NUNCA debes olvidar.";
+			for (const [key, facts] of grouped) {
+				const displayName = displayNames.get(key) ?? key;
+				section += `\n### ${displayName}`;
+				for (const fact of facts) {
+					section += `\n  - ${fact.content}`;
+				}
+			}
+			systemPrompt += section;
+		}
+
+		if (otherPermanent.length > 0) {
+			const text = otherPermanent.map((f) => `- ${f.content}`).join("\n");
+			systemPrompt += `\n\n## Hechos permanentes\n${text}`;
+		}
 	}
 
 	// Separate person facts from general facts

@@ -54,6 +54,7 @@ export interface SemanticFact {
 	confidence: number; // 0-1, decays if not reconfirmed
 	createdAt: number;
 	lastConfirmed: number;
+	permanent?: boolean; // never decays, always included in prompt
 }
 
 export interface FollowUp {
@@ -133,6 +134,7 @@ export interface PromotionResult {
 		subject?: string;
 		context?: string;
 		importance: number;
+		permanent?: boolean;
 	}>;
 	personalitySignals?: PersonalitySignals;
 }

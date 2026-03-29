@@ -6,6 +6,7 @@ import { generateEmbedding } from "./embeddings.ts";
 import {
 	addMessageToSensory,
 	getFactsForSubjects,
+	getPermanentFacts,
 	getQueryEmbedding,
 	getRelevantEpisodes,
 	getRelevantFacts,
@@ -271,9 +272,10 @@ async function generateCheckInMessage(
 	}
 
 	// Gather context
-	const [episodes, facts] = await Promise.all([
+	const [episodes, facts, permanentFacts] = await Promise.all([
 		getRelevantEpisodes(chatId, queryEmbedding),
 		getRelevantFacts(queryEmbedding),
+		getPermanentFacts(),
 	]);
 
 	// Get person-specific facts from recent conversation participants
@@ -294,7 +296,17 @@ async function generateCheckInMessage(
 		}
 	}
 
-	const systemPrompt = await buildSystemPrompt(episodes, allFacts);
+	const systemPrompt = await buildSystemPrompt(
+		episodes,
+		allFacts,
+		false,
+		undefined,
+		undefined,
+		false,
+		false,
+		false,
+		permanentFacts,
+	);
 
 	const strategyInstruction = getStrategyInstruction(strategy);
 	const checkInBlock = `\n\n## Instrucción especial: Mensaje proactivo

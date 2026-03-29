@@ -25,6 +25,7 @@ const INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const SEMANTIC_DEDUP_THRESHOLD = 0.85;
 const CONFIDENCE_DECAY_RATE = 0.02; // Per day
 const MIN_CONFIDENCE = 0.1;
+const MAX_PERMANENT_FACTS = 25;
 const MEDIA_MESSAGE_COMPACT_TARGET_CHARS = 240;
 const UNCOMPRESSED_RECENT_MESSAGES = 2;
 const MEDIA_MESSAGE_PATTERNS = [
@@ -357,6 +358,13 @@ export async function addSemanticFacts(
 					existing.importance = newFact.importance;
 					existing.embedding = newFact.embedding;
 				}
+				// Promote to permanent if new fact is permanent and cap allows
+				if (newFact.permanent && !existing.permanent) {
+					const permanentCount = store.filter((f) => f.permanent).length;
+					if (permanentCount < MAX_PERMANENT_FACTS) {
+						existing.permanent = true;
+					}
+				}
 				merged = true;
 				if (isDev)
 					console.log(
@@ -367,10 +375,21 @@ export async function addSemanticFacts(
 		}
 
 		if (!merged) {
+			// Enforce permanent fact cap
+			if (newFact.permanent) {
+				const permanentCount = store.filter((f) => f.permanent).length;
+				if (permanentCount >= MAX_PERMANENT_FACTS) {
+					if (isDev)
+						console.log(
+							`[semantic] Permanent fact cap reached (${MAX_PERMANENT_FACTS}), skipping: "${newFact.content.slice(0, 60)}"`,
+						);
+					continue;
+				}
+			}
 			store.push(newFact);
 			if (isDev)
 				console.log(
-					`[semantic] Added new fact: "${newFact.content.slice(0, 60)}"`,
+					`[semantic] Added new ${newFact.permanent ? "permanent " : ""}fact: "${newFact.content.slice(0, 60)}"`,
 				);
 		}
 	}
@@ -393,7 +412,8 @@ export async function getRelevantFacts(
 	const maxCount = options?.maxCount ?? 15;
 	const now = Date.now();
 
-	let candidates = store;
+	// Exclude permanent facts (they are always included separately)
+	let candidates = store.filter((f) => !f.permanent);
 
 	// Filter by category if specified
 	if (options?.category) {
@@ -453,6 +473,7 @@ export async function getFactsForSubjects(
 
 	const matching = store.filter(
 		(f) =>
+			!f.permanent &&
 			f.category === "person" &&
 			f.subject &&
 			allAliases.has(normalizeName(f.subject)),
@@ -475,6 +496,11 @@ export async function getFactsForSubjects(
 	return result;
 }
 
+export async function getPermanentFacts(): Promise<SemanticFact[]> {
+	const store = await loadSemanticStore();
+	return store.filter((f) => f.permanent === true);
+}
+
 let lastDecayDate = "";
 
 export async function decayConfidence(): Promise<{
@@ -492,6 +518,7 @@ export async function decayConfidence(): Promise<{
 	const now = Date.now();
 
 	for (const fact of store) {
+		if (fact.permanent) continue;
 		const daysSinceConfirmed = (now - fact.lastConfirmed) / 86_400_000;
 		fact.confidence = Math.max(
 			0,
@@ -499,8 +526,10 @@ export async function decayConfidence(): Promise<{
 		);
 	}
 
-	// Remove facts below minimum confidence
-	const filtered = store.filter((f) => f.confidence >= MIN_CONFIDENCE);
+	// Remove facts below minimum confidence (preserve permanent)
+	const filtered = store.filter(
+		(f) => f.permanent || f.confidence >= MIN_CONFIDENCE,
+	);
 	const removed = totalBefore - filtered.length;
 
 	if (removed > 0 && isDev) {

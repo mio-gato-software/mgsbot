@@ -338,7 +338,20 @@ IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba.
    - category "group": dinámica grupal o regla de interacción entre los participantes
    - category "rule": regla o límite establecido en la relación
    - category "event": evento PERSONAL futuro o plan de un participante (NO eventos mundiales)
-4. **Señales de personalidad**: ¿La conversación revela algo sobre cómo el bot está evolucionando emocionalmente? Solo si hay señales claras.
+4. **Permanencia**: Si un hecho es un dato biográfico FUNDAMENTAL e INMUTABLE de una persona, márcalo como "permanent": true.
+   Ejemplos de hechos permanentes:
+   - Lugar de nacimiento ("Nací en Neyba")
+   - Miembros de familia y sus nombres ("Mi hija se llama Elianny", "Mi esposa se llama Anny")
+   - Fecha de matrimonio, nacimiento de hijos ("Me casé en 2006")
+   - País de origen, nacionalidad
+   - Nombre completo real
+   Ejemplos de hechos que NO son permanentes:
+   - Trabajo actual (puede cambiar)
+   - Gustos y preferencias (pueden cambiar)
+   - Planes futuros
+   - Estado de ánimo, opiniones
+   Sé MUY selectivo: solo datos que NUNCA cambiarán en la vida de la persona.
+5. **Señales de personalidad**: ¿La conversación revela algo sobre cómo el bot está evolucionando emocionalmente? Solo si hay señales claras.
 Solo puedes usar estos rasgos EXACTOS (no inventes otros):
 ${getTraitDefinitionsForPrompt()}
 
@@ -346,7 +359,7 @@ Si la conversación no muestra señales claras, deja traitChanges vacío.
 Cada delta debe estar entre -0.15 y +0.15.
 ${contextSection}
 Responde SOLO JSON:
-{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho sobre la PERSONA", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5}], "personalitySignals": {"traitChanges": [{"trait": "calidez", "delta": 0.1, "reason": "razón del cambio"}]}}
+{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho sobre la PERSONA", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5, "permanent": false}], "personalitySignals": {"traitChanges": [{"trait": "calidez", "delta": 0.1, "reason": "razón del cambio"}]}}
 
 Si no hay nada personal relevante: {"summary": "conversación casual", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
 
@@ -488,6 +501,7 @@ function validatePromotionResult(raw: PromotionResult): PromotionResult {
 				typeof f.importance === "number"
 					? Math.max(1, Math.min(5, Math.round(f.importance)))
 					: importance,
+			permanent: f.permanent === true,
 		}));
 
 	// Validate personality signals
