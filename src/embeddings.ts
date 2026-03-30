@@ -71,23 +71,48 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 	const cached = diskCache.get(hash);
 	if (cached) return cached;
 
-	const response = await ai.models.embedContent({
-		model: EMBEDDING_MODEL,
-		contents: text,
-	});
+	const MAX_RETRIES = 3;
+	let lastError: unknown;
 
-	const embedding = response.embeddings?.[0]?.values;
-	if (!embedding) {
-		throw new Error("No embedding returned from API");
+	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+		try {
+			const response = await ai.models.embedContent({
+				model: EMBEDDING_MODEL,
+				contents: text,
+			});
+
+			const embedding = response.embeddings?.[0]?.values;
+			if (!embedding) {
+				throw new Error("No embedding returned from API");
+			}
+
+			diskCache.set(hash, embedding);
+			diskCacheDirty = true;
+			if (isDev)
+				console.log(
+					`[embeddings] Generated embedding for: "${text.slice(0, 60)}..."`,
+				);
+			return embedding;
+		} catch (err: unknown) {
+			lastError = err;
+			const status =
+				err instanceof Error && "status" in err
+					? (err as { status: number }).status
+					: undefined;
+			if (status === 429 && attempt < MAX_RETRIES - 1) {
+				const delay = 1000 * 2 ** attempt;
+				if (isDev)
+					console.warn(
+						`[embeddings] Rate limited (429), retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
+					);
+				await new Promise((resolve) => setTimeout(resolve, delay));
+				continue;
+			}
+			throw err;
+		}
 	}
 
-	diskCache.set(hash, embedding);
-	diskCacheDirty = true;
-	if (isDev)
-		console.log(
-			`[embeddings] Generated embedding for: "${text.slice(0, 60)}..."`,
-		);
-	return embedding;
+	throw lastError;
 }
 
 /** Flush the embedding cache to disk immediately (e.g. on shutdown). */
