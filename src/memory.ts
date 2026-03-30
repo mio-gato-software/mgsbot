@@ -363,6 +363,10 @@ export async function addSemanticFacts(
 					const permanentCount = store.filter((f) => f.permanent).length;
 					if (permanentCount < MAX_PERMANENT_FACTS) {
 						existing.permanent = true;
+						if (isDev)
+							console.log(
+								`[semantic] Promoted to permanent: "${existing.content.slice(0, 60)}"`,
+							);
 					}
 				}
 				merged = true;
