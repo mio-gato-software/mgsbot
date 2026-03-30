@@ -90,7 +90,7 @@ logs/
 The memory system uses 4 tiers with vector embeddings for semantic search:
 
 - **Permanent** (`memory/permanent.md`): Bot personality and rules. Auto-generated during setup or manually edited. Cached with 1-minute refresh.
-- **Semantic Store** (`memory/semantic.json`): Global knowledge base of `SemanticFact` objects with 768-dim embeddings. Categories: "person", "group", "rule", "event". Facts have `importance`, `confidence` (decays 0.02/day, min 0.1), and `subject`. Deduplication via cosine similarity at 0.85 threshold.
+- **Semantic Store** (`memory/semantic.json`): Global knowledge base of `SemanticFact` objects with 768-dim embeddings. Categories: "person", "group", "rule", "event". Facts have `importance`, `confidence` (decays 0.02/day, min 0.1), and `subject`. Deduplication via cosine similarity at 0.85 threshold. Facts can be marked `permanent: true` for immutable biographical data (birthplace, family, marriage) — these never decay and are always included in prompts (max 25).
 - **Episodes** (`memory/episodes/<chat_id>.json`): Per-chat summarized conversations (max 20). Each episode has `summary`, `participants`, `timestamp`, `importance`, and an `embedding` for similarity search. Top 3 most relevant episodes selected for prompts.
 - **Sensory Buffer** (`memory/sensory/<chat_id>.json`): Per-chat recent messages (max 10, FIFO). Tracks `lastActivity`, `messageCountSincePromotion`. When overflow, oldest 5 are promoted to an episode via AI summarization. Inactive chats (>3 days) clear messages but keep summary.
 
