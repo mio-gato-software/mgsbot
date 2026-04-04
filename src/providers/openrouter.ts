@@ -69,8 +69,10 @@ export class OpenRouterChatProvider implements ChatProvider {
 					headers: {
 						Authorization: `Bearer ${this.apiKey}`,
 						"Content-Type": "application/json",
-						"HTTP-Referer": "https://github.com/eliaquinencarnacion/mgsbot",
-						"X-Title": "MGS Bot",
+						"HTTP-Referer":
+							process.env.OPENROUTER_HTTP_REFERER ??
+							"https://github.com/eliaquinencarnacion/mgsbot",
+						"X-Title": process.env.OPENROUTER_TITLE ?? "MGS Bot",
 					},
 					body: JSON.stringify({
 						model: this.model,

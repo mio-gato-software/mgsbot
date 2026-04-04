@@ -15,7 +15,7 @@ const PERMANENT_PATH = "./memory/permanent.md";
 
 const DEFAULT_CONFIG: BotConfig = {
 	isConfigured: false,
-	botName: "Brendy", // Default fallback
+	botName: "MGS Bot", // Default fallback — overridden during setup
 };
 
 // Cache config in memory (1-minute TTL, same pattern as loadPermanent)
@@ -58,7 +58,7 @@ export function loadConfig(): BotConfig {
 		const parsed = JSON.parse(data);
 		configCache = {
 			isConfigured: parsed.isConfigured ?? false,
-			botName: parsed.botName ?? "Brendy",
+			botName: parsed.botName ?? "MGS Bot",
 			birthYear: parsed.birthYear,
 			language: parsed.language,
 		};

@@ -78,7 +78,7 @@ describe("computeTextScore", () => {
 
 describe("normalizeName", () => {
 	test("lowercases and strips accents", () => {
-		expect(normalizeName("Eliaquín")).toBe("eliaquin");
+		expect(normalizeName("François")).toBe("francois");
 	});
 
 	test("handles compound names", () => {

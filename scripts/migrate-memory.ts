@@ -131,7 +131,8 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 // --- Category inference ---
 
-const PERSON_PATTERNS = /\b(eliaquín|eliaquin|brendy|elianny)\b/i;
+// Add your own known person names here for better category inference during migration
+const PERSON_PATTERNS = /(?!)/; // Matches nothing by default — customize if needed
 const EVENT_PATTERNS =
 	/\b(evento|feriado|fecha|cumpleaños|27 de febrero|independencia|navidad|año nuevo)\b/i;
 const RULE_PATTERNS =
@@ -144,10 +145,9 @@ function inferCategory(content: string): "person" | "group" | "rule" | "event" {
 	return "group";
 }
 
-function inferSubject(content: string): string | undefined {
-	// Try to extract a person name from the content
-	const nameMatch = content.match(/\b(Eliaquín|Eliaquin|Brendy|Elianny)\b/i);
-	return nameMatch ? nameMatch[1] : undefined;
+function inferSubject(_content: string): string | undefined {
+	// No default names — category inference handles "person" via PERSON_PATTERNS
+	return undefined;
 }
 
 // --- Main migration ---
