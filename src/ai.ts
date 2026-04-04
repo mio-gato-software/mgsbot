@@ -250,7 +250,7 @@ export async function generateImage(
 	});
 
 	const response = await ai.models.generateContentStream({
-		model: "gemini-3.1-flash-image-preview",
+		model: "gemini-3-pro-image-preview",
 		contents: createUserContent([
 			{ inlineData: { mimeType, data: base64Data } },
 			{
@@ -258,11 +258,9 @@ export async function generateImage(
 			},
 		]),
 		config: {
-			thinkingConfig: {
-				thinkingLevel: "minimal",
-			},
 			imageConfig: {
-				imageSize: "512",
+				imageSize: "1K",
+				personGeneration: "allow_all",
 			},
 			responseModalities: ["IMAGE", "TEXT"],
 		},
