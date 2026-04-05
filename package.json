@@ -1,46 +1,46 @@
 {
-	"name": "mgsbot",
-	"description": "Conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities",
-	"version": "1.0.0",
-	"author": "Mio Gato Software",
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/eliaquin/mgsbot.git"
-	},
-	"keywords": [
-		"telegram",
-		"bot",
-		"ai",
-		"gemini",
-		"conversational",
-		"memory",
-		"personality",
-		"grammy",
-		"bun"
-	],
-	"module": "index.ts",
-	"dependencies": {
-		"@elevenlabs/elevenlabs-js": "^2.41.1",
-		"@google/genai": "^1.48.0",
-		"dayjs": "^1.11.20",
-		"grammy": "^1.42.0",
-		"openai": "^6.33.0"
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.4.10",
-		"@types/bun": "latest"
-	},
-	"private": false,
-	"scripts": {
-		"start": "bun run index.ts",
-		"dev": "bun --watch run index.ts",
-		"test": "bun test",
-		"lint": "biome check .",
-		"lint:fix": "biome check --write .",
-		"format": "biome format --write .",
-		"build": "bun build --compile --minify index.ts --outfile mgsbot",
-		"build:linux": "bun build --compile --minify --target=bun-linux-x64 index.ts --outfile mgsbot"
-	},
-	"type": "module"
+  "name": "mgsbot",
+  "description": "Conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities",
+  "version": "1.0.1",
+  "author": "Mio Gato Software",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eliaquin/mgsbot.git"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "ai",
+    "gemini",
+    "conversational",
+    "memory",
+    "personality",
+    "grammy",
+    "bun"
+  ],
+  "module": "index.ts",
+  "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.41.1",
+    "@google/genai": "^1.48.0",
+    "dayjs": "^1.11.20",
+    "grammy": "^1.42.0",
+    "openai": "^6.33.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.10",
+    "@types/bun": "latest"
+  },
+  "private": false,
+  "scripts": {
+    "start": "bun run index.ts",
+    "dev": "bun --watch run index.ts",
+    "test": "bun test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "build": "bun build --compile --minify index.ts --outfile mgsbot",
+    "build:linux": "bun build --compile --minify --target=bun-linux-x64 index.ts --outfile mgsbot"
+  },
+  "type": "module"
 }
