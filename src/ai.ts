@@ -264,6 +264,7 @@ export async function generateImage(
 		config: {
 			imageConfig: {
 				imageSize: "1K",
+				personGeneration: "",
 			},
 			responseModalities: ["IMAGE", "TEXT"],
 		},

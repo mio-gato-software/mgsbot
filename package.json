@@ -21,11 +21,11 @@
 	],
 	"module": "index.ts",
 	"dependencies": {
-		"@elevenlabs/elevenlabs-js": "^2.40.0",
-		"@google/genai": "^1.43.0",
-		"dayjs": "^1.11.19",
-		"grammy": "^1.40.1",
-		"openai": "^6.27.0"
+		"@elevenlabs/elevenlabs-js": "^2.41.1",
+		"@google/genai": "^1.48.0",
+		"dayjs": "^1.11.20",
+		"grammy": "^1.42.0",
+		"openai": "^6.33.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.4",
