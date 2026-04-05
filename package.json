@@ -41,9 +41,9 @@
 		"format": "biome format --write .",
 		"build": "bun build --compile --minify index.ts --outfile mgsbot",
 		"build:linux": "bun build --compile --minify --target=bun-linux-x64 index.ts --outfile mgsbot",
-		"release:patch": "bun pm version patch -m 'chore: bump version to v%s'",
-		"release:minor": "bun pm version minor -m 'chore: bump version to v%s'",
-		"release:major": "bun pm version major -m 'chore: bump version to v%s'"
+		"release:patch": "bun pm version patch -m 'chore: bump version to v%s' && git push origin main --tags",
+		"release:minor": "bun pm version minor -m 'chore: bump version to v%s' && git push origin main --tags",
+		"release:major": "bun pm version major -m 'chore: bump version to v%s' && git push origin main --tags"
 	},
 	"type": "module"
 }
