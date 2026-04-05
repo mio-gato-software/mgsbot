@@ -33,13 +33,29 @@ jobs:
       - name: Build for Windows
         run: bun build index.ts --compile --target=bun-windows-x64 --outfile=mgsbot-windows.exe
 
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-v:refname | sed -n '2p')
+          if [ -n "$PREV_TAG" ]; then
+            LOGS=$(git log "$PREV_TAG".."${{ github.ref_name }}" --pretty=format:"- %s (%h)" --no-merges | grep -v "chore: bump version")
+          else
+            LOGS=$(git log "${{ github.ref_name }}" --pretty=format:"- %s (%h)" --no-merges | grep -v "chore: bump version")
+          fi
+          echo "logs<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$LOGS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2.6.1
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          generate_release_notes: true
           make_latest: "true"
+          body: |
+            ## Changes
+
+            ${{ steps.changelog.outputs.logs }}
           files: |
             mgsbot-linux
             mgsbot-macos
