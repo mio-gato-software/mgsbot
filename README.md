@@ -4,6 +4,8 @@ A conversational Telegram bot with long-term memory, emergent personality, and m
 
 MGS Bot isn't a typical chatbot — it remembers conversations, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, and YouTube links out of the box.
 
+> **Note:** This project is not currently accepting contributions. Feel free to fork it for your own use.
+
 ## Features
 
 - **4-tier memory system** — permanent personality, semantic knowledge base with vector embeddings, per-chat episode summaries, and a sensory buffer of recent messages
