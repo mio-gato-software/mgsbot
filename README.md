@@ -18,7 +18,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations, develops persona
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
 - **Multi-modal input** — text, voice notes, audio files, photos/images, and YouTube link analysis
 - **Image generation** — generates character images using Gemini with an optional reference image
-- **Voice responses** — text-to-speech replies via LemonFox API
+- **Voice responses** — text-to-speech replies via ElevenLabs, LemonFox, or Inworld
 - **Proactive behavior** — follow-up questions about mentioned plans and periodic check-in messages
 - **User identity tracking** — canonical names with alias support, handles name changes gracefully
 - **Multi-provider chat** — swap between Gemini, OpenRouter, Anthropic, Azure, Alibaba, Fireworks, or OpenAI at runtime
@@ -133,7 +133,12 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `LEMON_FOX_API_KEY` | — | Enables TTS voice responses and LemonFox audio transcription |
+| `TTS_PROVIDER` | *(auto)* | TTS provider: `elevenlabs`, `lemonfox`, or `inworld`. Auto-detected from available API keys if unset. |
+| `LEMON_FOX_API_KEY` | — | Enables LemonFox TTS and audio transcription |
+| `ELEVENLABS_API_KEY` | — | Enables ElevenLabs TTS |
+| `ELEVENLABS_VOICE_ID` | — | ElevenLabs voice ID (default: `JBFqnCBsd6RMkjVDRZzb`) |
+| `INWORLD_API_KEY` | — | Enables Inworld TTS |
+| `INWORLD_VOICE_ID` | — | Inworld voice ID (required if using Inworld) |
 | `STT_PROVIDER` | *(auto)* | Set `gemini` to force Gemini for audio transcription instead of LemonFox |
 
 ### Behavior
@@ -159,6 +164,7 @@ src/
   memory.ts                  4-tier memory read/write + promotion/decay logic
   prompt.ts                  System prompt assembly with context from all memory tiers
   conversation.ts            Conversation processing pipeline (prompt → generate → save → reply)
+  response-processor.ts      Response marker processing and reply formatting
   handlers.ts                grammY handlers: voice, audio, photo, text, YouTube, /provider,
                               security middleware (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
   embeddings.ts              Vector embeddings (gemini-embedding-2-preview) with disk-persisted LRU cache
@@ -174,6 +180,7 @@ src/
   daily-weather.ts           Weather data from Open-Meteo API, cached daily
   chat-logger.ts             Daily conversation log writer
   appearance.ts              Base character image locator for image generation
+  image-scheduler.ts         Weekly character image generation schedule
   media-handlers.ts          Audio/image download and processing
   utils.ts                   Atomic file writes
   types.ts                   TypeScript interfaces for all data structures
@@ -187,6 +194,12 @@ src/
     alibaba.ts               Alibaba DashScope provider
     fireworks.ts             Fireworks AI provider
     openai.ts                OpenAI provider
+  tts/
+    types.ts                 TTS provider interface
+    index.ts                 TTS provider factory and selection
+    elevenlabs.ts            ElevenLabs TTS provider
+    lemonfox.ts              LemonFox TTS provider
+    inworld.ts               Inworld TTS provider
 ```
 
 ### Memory System
@@ -244,7 +257,7 @@ The bot develops emergent personality traits that evolve over time:
    - `[SILENCE]` — no response
    - `[REACT:emoji]` — react with an emoji instead of replying
    - `[IMAGE: prompt]` — generate and send a character image
-   - `[TTS]text[/TTS]` — send a voice note via LemonFox TTS
+   - `[TTS]text[/TTS]` — send a voice note via the configured TTS provider
 8. Background: memory evaluation extracts semantic facts, personality signals, and follow-up opportunities
 
 ### Image Generation
@@ -260,7 +273,7 @@ The bot generates character images on a weekly schedule:
 
 **Follow-ups** (`ENABLE_FOLLOW_UPS=true`): The bot detects planned events or activities mentioned in conversation and schedules follow-up questions. For example, if you mention going to a movie tonight, it might ask "How was the movie?" tomorrow. Rate limited to 2 sends/day with a 2-hour cooldown. Expires after 3 days. Cancelled if you already mentioned the topic.
 
-**Check-ins** (`ENABLE_CHECK_INS=true`): Cadence-driven proactive messages — the bot reaches out ~2 times/week to chat like a real friend. Weekly slots are scheduled on Mondays with a minimum 2-day gap. Time slots favor morning (10–12) and evening (17–20) windows. Check-in strategies rotate: `general`, `memory_callback`, `weather_comment`, `curiosity`, `activity_sharing`.
+**Check-ins** (`ENABLE_CHECK_INS=true`): Cadence-driven proactive messages — the bot reaches out ~2 times/week to chat like a real friend. Weekly slots are scheduled on Mondays with a minimum 2-day gap. Time slots favor morning (10–12) and evening (17–20) windows. Check-in strategies rotate: `random_thought`, `memory_callback`, `sharing_moment`, `reaction`, `weather_vibe`, `curiosity`.
 
 Both features respect the sleep schedule, won't interrupt active conversations (15-minute cooldown), and are timezone-aware.
 
@@ -272,17 +285,26 @@ Both features respect the sleep schedule, won't interrupt active conversations (
 bun install          # Install dependencies
 bun run start        # Run the bot
 bun run dev          # Run with watch mode (auto-restart on changes)
+bun run test         # Run tests
 bun run lint         # Check lint + format issues
 bun run lint:fix     # Auto-fix lint + format issues
 bun run format       # Format only (Biome)
+bun run build        # Compile to standalone binary
+bun run build:linux  # Cross-compile for Linux x64
 ```
+
+Tests live in `tests/` and cover handlers, memory, and utility logic.
 
 ### Telegram Commands
 
 | Command | Scope | Description |
 | --- | --- | --- |
-| `/provider [name] [model]` | DM only, owner only | View or switch the active chat provider; optional second argument sets the model for that session (until restart) |
+| `/help` | DM only | Show available commands |
+| `/provider [name] [model]` | DM only | View or switch the active chat provider; optional second argument sets the model for that session (until restart) |
 | `/allowphotorequest` | DM only | Toggle on-demand photo request permission |
+| `/on` | DM only | Re-enable bot responses |
+| `/off` | DM only | Disable bot responses |
+| `/optimize` | DM only | Run confidence decay on semantic memory |
 
 ### Maintenance Scripts
 
@@ -318,11 +340,11 @@ The bot's conversational language is configured during setup and stored in `memo
 
 ## Tech Stack
 
-- **Runtime:** [Bun](https://bun.sh) v1.3+
-- **Bot framework:** [grammY](https://grammy.dev) ^1.40
-- **AI:** [Google GenAI](https://ai.google.dev) ^1 — default chat: Gemini 3 Flash Preview (`gemini-3-flash-preview`); character images: `gemini-3.1-flash-image-preview`; embeddings: `gemini-embedding-2-preview`
+- **Runtime:** [Bun](https://bun.sh)
+- **Bot framework:** [grammY](https://grammy.dev)
+- **AI:** [Google GenAI](https://ai.google.dev) — default chat: `gemini-3-flash-preview`; character images: `gemini-3.1-flash-image-preview`; embeddings: `gemini-embedding-2-preview`
 - **Language:** TypeScript (strict mode)
-- **Linter/Formatter:** [Biome](https://biomejs.dev) 2.4.4 — tabs, double quotes, auto-organized imports
+- **Linter/Formatter:** [Biome](https://biomejs.dev) — tabs, double quotes, auto-organized imports
 
 ## License
 
