@@ -4,7 +4,11 @@ import { rename, writeFile } from "node:fs/promises";
 import { GoogleGenAI } from "@google/genai";
 import { isFileNotFound } from "./utils.ts";
 
-const ai = new GoogleGenAI({});
+let _ai: GoogleGenAI | null = null;
+function getAI(): GoogleGenAI {
+	if (!_ai) _ai = new GoogleGenAI({});
+	return _ai;
+}
 const EMBEDDING_MODEL = "gemini-embedding-2-preview";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -76,7 +80,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
 	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 		try {
-			const response = await ai.models.embedContent({
+			const response = await getAI().models.embedContent({
 				model: EMBEDDING_MODEL,
 				contents: text,
 			});
