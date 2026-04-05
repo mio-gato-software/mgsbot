@@ -2,6 +2,8 @@
 
 <p align="center">
   <img src="assets/bot-avatar.jpg" alt="MGS Bot" width="300" />
+  <br />
+  <sub>Character image generated with Gemini from a prompt by my daughter</sub>
 </p>
 
 A conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities. Built with [grammY](https://grammy.dev), [Google Gemini](https://ai.google.dev), and [Bun](https://bun.sh).
