@@ -12,7 +12,11 @@ import { supportsVision } from "./providers/types.ts";
 import type { PromotionResult } from "./types.ts";
 
 const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
-const ai = new GoogleGenAI({});
+let _ai: GoogleGenAI | null = null;
+function getAI(): GoogleGenAI {
+	if (!_ai) _ai = new GoogleGenAI({});
+	return _ai;
+}
 const MODEL = "gemini-3-flash-preview";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -69,7 +73,7 @@ async function transcribeWithGemini(
 ): Promise<string> {
 	if (isDev) console.log("[transcribeAudio] Using Gemini STT");
 
-	const uploaded = await ai.files.upload({
+	const uploaded = await getAI().files.upload({
 		file: filePath,
 		config: { mimeType },
 	});
@@ -94,7 +98,7 @@ async function transcribeWithGemini(
 				`[transcribeAudio] Polling file state (${i + 1}/${MAX_POLL_ATTEMPTS})...`,
 			);
 		await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-		const fileInfo = await ai.files.get({ name: uploaded.name ?? "" });
+		const fileInfo = await getAI().files.get({ name: uploaded.name ?? "" });
 		fileState = fileInfo.state;
 	}
 
@@ -110,7 +114,7 @@ async function transcribeWithGemini(
 			"[transcribeAudio] File is ACTIVE, generating transcription...",
 		);
 
-	const response = await ai.models.generateContent({
+	const response = await getAI().models.generateContent({
 		model: MODEL,
 		contents: createUserContent([
 			createPartFromUri(uploaded.uri ?? "", uploaded.mimeType ?? ""),
@@ -174,7 +178,7 @@ export async function describeImage(
 			},
 		];
 
-		const response = await ai.models.generateContent({
+		const response = await getAI().models.generateContent({
 			model: MODEL,
 			contents: createUserContent(parts),
 		});
@@ -205,7 +209,7 @@ export async function analyzeYouTube(
 
 		if (isDev) console.log("[analyzeYouTube] URL:", videoUrl);
 
-		const response = await ai.models.generateContent({
+		const response = await getAI().models.generateContent({
 			model: MODEL,
 			contents: createUserContent(parts),
 		});
@@ -249,7 +253,7 @@ export async function generateImage(
 		encoding: "base64",
 	});
 
-	const response = await ai.models.generateContentStream({
+	const response = await getAI().models.generateContentStream({
 		model: "gemini-3-pro-image-preview",
 		contents: createUserContent([
 			{ inlineData: { mimeType, data: base64Data } },
