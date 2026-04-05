@@ -490,8 +490,7 @@ function validatePromotionResult(raw: PromotionResult): PromotionResult {
 			if (!f.content || typeof f.content !== "string" || !f.content.trim())
 				return false;
 			if (!VALID_CATEGORIES.has(f.category)) return false;
-			if (f.category === "person" && (!f.subject || !f.subject.trim()))
-				return false;
+			if (f.category === "person" && !f.subject?.trim()) return false;
 			return true;
 		})
 		.map((f) => ({
