@@ -40,17 +40,17 @@ jobs:
       - name: Build for Windows
         run: bun build index.ts --compile --target=bun-windows-x64 --outfile=mgsbot-windows.exe
 
-      - uses: actions/upload-artifact@v6
-        with:
-          name: mgsbot-linux
-          path: mgsbot-linux
+      - name: Get short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v6
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: mgsbot-macos
-          path: mgsbot-macos
-
-      - uses: actions/upload-artifact@v6
-        with:
-          name: mgsbot-windows
-          path: mgsbot-windows.exe
+          tag_name: build-${{ steps.sha.outputs.short }}
+          name: Build ${{ steps.sha.outputs.short }}
+          make_latest: "true"
+          files: |
+            mgsbot-linux
+            mgsbot-macos
+            mgsbot-windows.exe
