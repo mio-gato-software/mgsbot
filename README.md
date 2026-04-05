@@ -97,6 +97,13 @@ All configuration is via environment variables. Copy `.env.sample` to `.env` and
 | `OPENAI_API_KEY` | — | Required if using OpenAI |
 | `OPENAI_MODEL` | `gpt-5.4` | OpenAI model |
 
+#### Recommended Models
+
+| Goal | Provider | Model | Notes |
+| --- | --- | --- | --- |
+| **Best compatibility** | `gemini` | `gemini-3.1-pro` | Best overall experience — native support for all features including function calling and vision |
+| **Best value** | `fireworks` | `accounts/fireworks/models/kimi-k2.5` | Strong performance at low cost |
+
 You can switch providers at runtime via the `/provider` Telegram command (DM only, owner only):
 
 ```text
