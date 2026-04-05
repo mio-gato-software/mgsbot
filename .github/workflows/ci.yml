@@ -50,7 +50,7 @@ jobs:
           MINOR=$(echo "$CURRENT" | cut -d. -f2)
           PATCH=$(echo "$CURRENT" | cut -d. -f3)
           NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
-          jq --arg v "$NEXT" '.version = $v' package.json > tmp.json && mv tmp.json package.json
+          jq --tab --arg v "$NEXT" '.version = $v' package.json > tmp.json && mv tmp.json package.json
           echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
 
       - name: Push version bump
