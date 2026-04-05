@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun test
+
+      - name: Build for Linux
+        run: bun build index.ts --compile --target=bun-linux-x64 --outfile=mgsbot-linux
+
+      - name: Build for macOS
+        run: bun build index.ts --compile --target=bun-darwin-arm64 --outfile=mgsbot-macos
+
+      - name: Build for Windows
+        run: bun build index.ts --compile --target=bun-windows-x64 --outfile=mgsbot-windows.exe
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2.6.1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          make_latest: "true"
+          files: |
+            mgsbot-linux
+            mgsbot-macos
+            mgsbot-windows.exe

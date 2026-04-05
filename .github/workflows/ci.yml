@@ -11,7 +11,7 @@ env:
 
 jobs:
   lint:
-    name: Lint & Type Check
+    name: Lint & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -21,56 +21,3 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun test
-
-  build:
-    name: Build Executables
-    runs-on: ubuntu-latest
-    needs: lint
-    if: github.event_name == 'push'
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-
-      - name: Build for Linux
-        run: bun build index.ts --compile --target=bun-linux-x64 --outfile=mgsbot-linux
-
-      - name: Build for macOS
-        run: bun build index.ts --compile --target=bun-darwin-arm64 --outfile=mgsbot-macos
-
-      - name: Build for Windows
-        run: bun build index.ts --compile --target=bun-windows-x64 --outfile=mgsbot-windows.exe
-
-      - name: Bump patch version
-        id: version
-        run: |
-          CURRENT=$(jq -r .version package.json)
-          MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-          MINOR=$(echo "$CURRENT" | cut -d. -f2)
-          PATCH=$(echo "$CURRENT" | cut -d. -f3)
-          NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
-          jq --tab --arg v "$NEXT" '.version = $v' package.json > tmp.json && mv tmp.json package.json
-          echo "tag=v${NEXT}" >> "$GITHUB_OUTPUT"
-
-      - name: Push version bump
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add package.json
-          git commit -m "chore: bump version to ${{ steps.version.outputs.tag }} [skip ci]"
-          git push
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2.6.1
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: ${{ steps.version.outputs.tag }}
-          make_latest: "true"
-          files: |
-            mgsbot-linux
-            mgsbot-macos
-            mgsbot-windows.exe

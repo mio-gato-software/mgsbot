@@ -1,7 +1,7 @@
 {
 	"name": "mgsbot",
 	"description": "Conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities",
-	"version": "1.0.3",
+	"version": "0.0.0",
 	"author": "Mio Gato Software",
 	"license": "MIT",
 	"repository": {
@@ -31,7 +31,7 @@
 		"@biomejs/biome": "2.4.10",
 		"@types/bun": "latest"
 	},
-	"private": false,
+	"private": true,
 	"scripts": {
 		"start": "bun run index.ts",
 		"dev": "bun --watch run index.ts",
@@ -40,7 +40,8 @@
 		"lint:fix": "biome check --write .",
 		"format": "biome format --write .",
 		"build": "bun build --compile --minify index.ts --outfile mgsbot",
-		"build:linux": "bun build --compile --minify --target=bun-linux-x64 index.ts --outfile mgsbot"
+		"build:linux": "bun build --compile --minify --target=bun-linux-x64 index.ts --outfile mgsbot",
+		"release": "bun run scripts/release.ts"
 	},
 	"type": "module"
 }
