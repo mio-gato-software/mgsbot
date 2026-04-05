@@ -18,3 +18,39 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun test
+
+  build:
+    name: Build Executables
+    runs-on: ubuntu-latest
+    needs: lint
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+
+      - name: Build for Linux
+        run: bun build index.ts --compile --target=bun-linux-x64 --outfile=mgsbot-linux
+
+      - name: Build for macOS
+        run: bun build index.ts --compile --target=bun-darwin-arm64 --outfile=mgsbot-macos
+
+      - name: Build for Windows
+        run: bun build index.ts --compile --target=bun-windows-x64 --outfile=mgsbot-windows.exe
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mgsbot-linux
+          path: mgsbot-linux
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mgsbot-macos
+          path: mgsbot-macos
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: mgsbot-windows
+          path: mgsbot-windows.exe
