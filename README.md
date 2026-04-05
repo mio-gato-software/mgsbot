@@ -1,5 +1,9 @@
 # MGS Bot
 
+<p align="center">
+  <img src="assets/bot-avatar.jpg" alt="MGS Bot" width="300" />
+</p>
+
 A conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities. Built with [grammY](https://grammy.dev), [Google Gemini](https://ai.google.dev), and [Bun](https://bun.sh).
 
 MGS Bot isn't a typical chatbot — it remembers conversations, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, and YouTube links out of the box.
