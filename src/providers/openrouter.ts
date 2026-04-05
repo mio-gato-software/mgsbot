@@ -71,7 +71,7 @@ export class OpenRouterChatProvider implements ChatProvider {
 						"Content-Type": "application/json",
 						"HTTP-Referer":
 							process.env.OPENROUTER_HTTP_REFERER ??
-							"https://github.com/eliaquinencarnacion/mgsbot",
+							"https://github.com/eliaquin/mgsbot",
 						"X-Title": process.env.OPENROUTER_TITLE ?? "MGS Bot",
 					},
 					body: JSON.stringify({

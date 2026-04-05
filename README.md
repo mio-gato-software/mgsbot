@@ -33,7 +33,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations, develops persona
 ### Setup
 
 ```bash
-git clone https://github.com/eliaquinencarnacion/mgsbot.git
+git clone https://github.com/eliaquin/mgsbot.git
 cd mgsbot
 bun install
 bun run start
