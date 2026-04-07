@@ -35,10 +35,7 @@ if (!process.env.CHAT_PROVIDER && process.env.PROVIDER) {
 
 const forceSetup = process.argv.includes("--setup");
 const needsSetup =
-	forceSetup ||
-	!process.env.BOT_TOKEN ||
-	!process.env.GOOGLE_API_KEY ||
-	!process.env.OWNER_USER_ID;
+	forceSetup || !process.env.BOT_TOKEN || !process.env.GOOGLE_API_KEY;
 
 if (needsSetup) {
 	const { runSetupWizard } = await import("./src/wizard.ts");
