@@ -1,6 +1,6 @@
-import { isImageGenAvailable } from "./ai.ts";
 import { getBaseImagePath } from "./appearance.ts";
 import { getDateString } from "./bot-time.ts";
+import { isImageGenAvailable } from "./image/index.ts";
 import type { SensoryBuffer } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";

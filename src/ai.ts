@@ -9,15 +9,17 @@ import {
 import { getTraitDefinitionsForPrompt } from "./personality.ts";
 import { type ChatMessage, createChatProvider } from "./providers/index.ts";
 import { supportsVision } from "./providers/types.ts";
+import { isTutorActive } from "./tutor.ts";
 import type { PromotionResult } from "./types.ts";
+import { withRetry } from "./utils.ts";
 
-const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
 	if (!_ai) _ai = new GoogleGenAI({});
 	return _ai;
 }
 const MODEL = "gemini-3-flash-preview";
+const CLASSIFIER_MODEL = "gemini-flash-lite-latest";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -29,9 +31,10 @@ function logTokenUsage(label: string, response: GenerateContentResponse): void {
 	);
 }
 
+const sttProvider = process.env.STT_PROVIDER?.toLowerCase();
+const useFalSTT = sttProvider === "fal" && !!process.env.FAL_API_KEY;
 const useLemonFoxSTT =
-	!!process.env.LEMON_FOX_API_KEY &&
-	process.env.STT_PROVIDER?.toLowerCase() !== "gemini";
+	!useFalSTT && !!process.env.LEMON_FOX_API_KEY && sttProvider !== "gemini";
 
 async function transcribeWithLemonFox(filePath: string): Promise<string> {
 	if (isDev) console.log("[transcribeAudio] Using LemonFox STT");
@@ -42,6 +45,9 @@ async function transcribeWithLemonFox(filePath: string): Promise<string> {
 	const body = new FormData();
 	body.append("file", new Blob([fileBuffer]), fileName);
 	body.append("response_format", "json");
+	if (isTutorActive()) {
+		body.append("language", "en");
+	}
 
 	const response = await fetch(
 		"https://api.lemonfox.ai/v1/audio/transcriptions",
@@ -63,6 +69,51 @@ async function transcribeWithLemonFox(filePath: string): Promise<string> {
 	const data = (await response.json()) as { text?: string };
 	const text = data.text?.trim();
 	if (!text) throw new Error("LemonFox STT returned empty text");
+	if (isDev) console.log("[transcribeAudio] Result:", text.slice(0, 200));
+	return text;
+}
+
+async function transcribeWithFal(
+	filePath: string,
+	mimeType: string,
+): Promise<string> {
+	if (isDev) console.log("[transcribeAudio] Using fal.ai Scribe v2 STT");
+
+	const fileBuffer = await Bun.file(filePath).arrayBuffer();
+	const base64Data = Buffer.from(fileBuffer).toString("base64");
+	const audioUrl = `data:${mimeType};base64,${base64Data}`;
+
+	const body: Record<string, unknown> = {
+		audio_url: audioUrl,
+		diarize: false,
+		tag_audio_events: false,
+	};
+
+	if (isTutorActive()) {
+		body.language_code = "eng";
+	}
+
+	const response = await fetch(
+		"https://fal.run/fal-ai/elevenlabs/speech-to-text/scribe-v2",
+		{
+			method: "POST",
+			headers: {
+				Authorization: `Key ${process.env.FAL_API_KEY}`,
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(body),
+			signal: AbortSignal.timeout(30_000),
+		},
+	);
+
+	if (!response.ok) {
+		const errorBody = await response.text().catch(() => "");
+		throw new Error(`fal.ai STT failed: ${response.status} ${errorBody}`);
+	}
+
+	const data = (await response.json()) as { text?: string };
+	const text = data.text?.trim();
+	if (!text) throw new Error("fal.ai STT returned empty text");
 	if (isDev) console.log("[transcribeAudio] Result:", text.slice(0, 200));
 	return text;
 }
@@ -118,7 +169,9 @@ async function transcribeWithGemini(
 		model: MODEL,
 		contents: createUserContent([
 			createPartFromUri(uploaded.uri ?? "", uploaded.mimeType ?? ""),
-			"Transcribe this audio exactly as spoken, in the original language. Return ONLY the transcription, nothing else.",
+			isTutorActive()
+				? "Transcribe this audio exactly as spoken. The speaker is practicing English, so the audio is most likely in English. Return ONLY the transcription, nothing else."
+				: "Transcribe this audio exactly as spoken, in the original language. Return ONLY the transcription, nothing else.",
 		]),
 	});
 
@@ -133,6 +186,9 @@ export async function transcribeAudio(
 	mimeType: string,
 ): Promise<string> {
 	try {
+		if (useFalSTT) {
+			return await transcribeWithFal(filePath, mimeType);
+		}
 		if (useLemonFoxSTT) {
 			return await transcribeWithLemonFox(filePath);
 		}
@@ -178,10 +234,12 @@ export async function describeImage(
 			},
 		];
 
-		const response = await getAI().models.generateContent({
-			model: MODEL,
-			contents: createUserContent(parts),
-		});
+		const response = await withRetry(() =>
+			getAI().models.generateContent({
+				model: MODEL,
+				contents: createUserContent(parts),
+			}),
+		);
 
 		logTokenUsage("describeImage", response);
 		const text = response.text ?? "[image description failed]";
@@ -190,6 +248,75 @@ export async function describeImage(
 	} catch (error) {
 		console.error("[describeImage] Error:", error);
 		return "[image description failed]";
+	}
+}
+
+const CLASSIFIER_PROMPT = (caption: string) =>
+	`The user attached an image and wrote this message: "${caption}"
+
+Decide: is the user asking to EDIT, MODIFY, TRANSFORM, or GENERATE A NEW VERSION of the image? (vs. just commenting on it, asking a question about it, or sharing it)
+
+Answer with a single word: "yes" or "no".`;
+
+let warnedClassifierFallback = false;
+
+/**
+ * Decide whether the caption expresses intent to edit/modify an attached image.
+ * Uses Gemini Flash for a cheap, fast classification when GOOGLE_API_KEY is
+ * available; otherwise falls back to the configured chat provider. Returns
+ * null on failure so the caller can fall back to a regex heuristic.
+ */
+export async function classifyEditIntent(
+	caption: string,
+): Promise<boolean | null> {
+	const trimmed = caption.trim();
+	if (!trimmed) return false;
+
+	const useGemini = !!process.env.GOOGLE_API_KEY;
+	if (!useGemini && !warnedClassifierFallback) {
+		warnedClassifierFallback = true;
+		console.warn(
+			"[classifyEditIntent] GOOGLE_API_KEY not set — falling back to the configured chat provider for edit-intent classification.",
+		);
+	}
+
+	try {
+		let text: string;
+		if (useGemini) {
+			const response = await withRetry(
+				() =>
+					getAI().models.generateContent({
+						model: CLASSIFIER_MODEL,
+						contents: createUserContent([CLASSIFIER_PROMPT(trimmed)]),
+						config: {
+							temperature: 0,
+							maxOutputTokens: 5,
+						},
+					}),
+				2,
+				500,
+			);
+			text = (response.text ?? "").trim().toLowerCase();
+		} else {
+			const provider = createChatProvider();
+			const raw = await withRetry(
+				() =>
+					provider.generateResponse("", [
+						{ role: "user", content: CLASSIFIER_PROMPT(trimmed) },
+					]),
+				2,
+				500,
+			);
+			text = raw.trim().toLowerCase();
+		}
+
+		if (isDev) console.log(`[classifyEditIntent] "${trimmed}" → ${text}`);
+		if (text.startsWith("yes")) return true;
+		if (text.startsWith("no")) return false;
+		return null;
+	} catch (error) {
+		console.error("[classifyEditIntent] Error:", error);
+		return null;
 	}
 }
 
@@ -230,57 +357,6 @@ export async function generateResponse(
 ): Promise<string> {
 	const provider = createChatProvider();
 	return provider.generateResponse(systemPrompt, messages);
-}
-
-export function isImageGenAvailable(): boolean {
-	return hasGoogleApiKey;
-}
-
-export async function generateImage(
-	prompt: string,
-	referenceImagePath: string,
-): Promise<Buffer> {
-	if (!hasGoogleApiKey) {
-		throw new Error(
-			"GOOGLE_API_KEY is required for image generation (Gemini-only feature)",
-		);
-	}
-	if (isDev) console.log("[generateImage] Prompt:", prompt.slice(0, 200));
-
-	const ext = referenceImagePath.split(".").pop() ?? "jpg";
-	const mimeType = ext === "png" ? "image/png" : "image/jpeg";
-	const base64Data = fs.readFileSync(referenceImagePath, {
-		encoding: "base64",
-	});
-
-	const response = await getAI().models.generateContentStream({
-		model: "gemini-3-pro-image-preview",
-		contents: createUserContent([
-			{ inlineData: { mimeType, data: base64Data } },
-			{
-				text: `This is a reference image of a character in cartoon illustration style. Generate a new image of this same character (same face, body features) in the SAME cartoon/illustrated art style (flat colors, clean linework, digital illustration) but with a completely different outfit, pose, and setting. The scene: ${prompt}. The setting and atmosphere should feel natural for the described scene (e.g. indoor scenes like a bedroom, living room, restaurant, bar, mall, gym, or office should have appropriate indoor lighting; outdoor scenes like a beach, park, city street, rooftop, garden, or poolside should have appropriate natural lighting). IMPORTANT: Maintain the cartoon illustration style throughout. Do NOT render any text, clocks, timestamps, or time indicators in the image. Only the character's identity should match the reference — everything else should be new and fit the scene.`,
-			},
-		]),
-		config: {
-			imageConfig: {
-				imageSize: "1K",
-			},
-			responseModalities: ["IMAGE", "TEXT"],
-		},
-	});
-
-	for await (const chunk of response) {
-		const parts = chunk.candidates?.[0]?.content?.parts;
-		if (!parts) continue;
-		for (const part of parts) {
-			if (part.inlineData?.data) {
-				if (isDev) console.log("[generateImage] Image generated successfully");
-				return Buffer.from(part.inlineData.data, "base64");
-			}
-		}
-	}
-
-	throw new Error("No image data in response");
 }
 
 export async function summarizeConversation(

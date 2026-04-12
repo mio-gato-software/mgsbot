@@ -1,16 +1,18 @@
 import { unlink } from "node:fs/promises";
 import type { Context } from "grammy";
 import { InputFile } from "grammy";
-import { generateImage } from "./ai.ts";
 import { getBaseImagePath } from "./appearance.ts";
 import { getBotName } from "./config.ts";
+import { editImage, generateImage } from "./image/index.ts";
 import { getWeekStart } from "./image-scheduler.ts";
 import { saveSensory } from "./memory.ts";
 import { isSimpleAssistantMode } from "./prompt.ts";
 import { textToSpeech } from "./tts/index.ts";
+import { isTutorActive } from "./tutor.ts";
 import type { SensoryBuffer } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
+const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
 
 export const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
 export const REACTION_MARKER_REGEX = /\[REACT:\s*([^\]]+)\]/;
@@ -23,6 +25,7 @@ export interface SendResponseOptions {
 	allowPhotoRequest: boolean;
 	buffer: SensoryBuffer;
 	isGroup: boolean;
+	userImagePath?: string;
 }
 
 export interface SendResponseResult {
@@ -40,7 +43,14 @@ export interface SendResponseResult {
 export async function sendResponse(
 	options: SendResponseOptions,
 ): Promise<SendResponseResult | null> {
-	const { ctx, shouldGenImage, allowPhotoRequest, buffer, isGroup } = options;
+	const {
+		ctx,
+		shouldGenImage,
+		allowPhotoRequest,
+		buffer,
+		isGroup,
+		userImagePath,
+	} = options;
 	let responseText = options.responseText;
 
 	// Guard against empty responses
@@ -89,7 +99,9 @@ export async function sendResponse(
 	};
 
 	// Check for image marker
-	const canGenerateImage = shouldGenImage || allowPhotoRequest;
+	// If the user attached an image this turn, always allow the marker (edit intent).
+	const canGenerateImage =
+		shouldGenImage || allowPhotoRequest || !!userImagePath;
 	const imageMatch = canGenerateImage
 		? responseText.match(IMAGE_MARKER_REGEX)
 		: null;
@@ -103,13 +115,21 @@ export async function sendResponse(
 		const extractedPrompt = imageMatch[1].trim();
 		responseText = responseText.replace(IMAGE_MARKER_REGEX, "").trim();
 		const basePath = getBaseImagePath();
+		const isEdit = !!userImagePath;
 
-		if (basePath) {
+		// In tutor mode, base image is optional. When editing a user's image,
+		// we don't need the character base either.
+		if (isEdit || basePath || isTutorActive()) {
 			try {
 				await ctx.replyWithChatAction("upload_photo");
 				if (isDev)
-					console.log("[image] Prompt:", extractedPrompt.slice(0, 300));
-				const imageBuffer = await generateImage(extractedPrompt, basePath);
+					console.log(
+						`[image] ${isEdit ? "Edit" : "Generate"} prompt:`,
+						extractedPrompt.slice(0, 300),
+					);
+				const imageBuffer = isEdit
+					? await editImage(extractedPrompt, userImagePath as string)
+					: await generateImage(extractedPrompt, basePath ?? undefined);
 
 				const filename = `${getBotName().toLowerCase()}.png`;
 				await ctx.replyWithPhoto(new InputFile(imageBuffer, filename), {
@@ -118,11 +138,12 @@ export async function sendResponse(
 				});
 				imageSent = true;
 
-				if (shouldGenImage) {
+				// User-initiated edits don't consume the weekly/photo quotas.
+				if (!isEdit && shouldGenImage) {
 					buffer.lastImageDate = getWeekStart();
 					bufferDirty = true;
 				}
-				if (allowPhotoRequest) {
+				if (!isEdit && allowPhotoRequest) {
 					buffer.allowPhotoRequest = false;
 					bufferDirty = true;
 				}
@@ -162,6 +183,9 @@ export async function sendResponse(
 				const audioPath = await textToSpeech(ttsText);
 				if (isDev) console.log("[TTS] Audio saved to:", audioPath);
 				await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
+				if (showTranscription) {
+					await ctx.reply(`📝 ${ttsText}`, replyOptions).catch(() => {});
+				}
 				// Cleanup TTS file after sending
 				unlink(audioPath).catch(() => {});
 			} catch (error) {

@@ -17,13 +17,14 @@ MGS Bot isn't a typical chatbot — it remembers conversations, develops persona
 - **4-tier memory system** — permanent personality, semantic knowledge base with vector embeddings, per-chat episode summaries, and a sensory buffer of recent messages
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
 - **Multi-modal input** — text, voice notes, audio files, photos/images, and YouTube link analysis
-- **Image generation** — generates character images using Gemini with an optional reference image
-- **Voice responses** — text-to-speech replies via ElevenLabs, LemonFox, or Inworld
+- **Image generation** — generates character images using Gemini or fal.ai with an optional reference image
+- **Voice responses** — text-to-speech replies via ElevenLabs, LemonFox, Inworld, or fal.ai
 - **Proactive behavior** — follow-up questions about mentioned plans and periodic check-in messages
 - **User identity tracking** — canonical names with alias support, handles name changes gracefully
-- **Multi-provider chat** — swap between Gemini, OpenRouter, Anthropic, Azure, Alibaba, Fireworks, or OpenAI at runtime
+- **Multi-provider chat** — swap between Gemini, OpenRouter, Anthropic, Azure, Alibaba, Fireworks, OpenAI, or fal.ai at runtime
 - **Sleep schedule** — configurable quiet hours (default: 11:30 PM – 6:00 AM)
 - **Bilingual** — setup wizard and bot personality support English and Spanish
+- **English tutor mode** — natural English practice with the same bot personality, unrestricted image/voice tools, and automatic language hints for STT
 - **Simple assistant mode** — strip all personality features for a basic helpful-assistant experience
 - **Docker support** — single-command deployment with persistent volumes
 
@@ -87,7 +88,7 @@ All configuration is via environment variables. Copy `.env.sample` to `.env` and
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, or `openai` |
+| `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, or `fal` |
 | `GEMINI_MODEL` | `gemini-3-flash-preview` | Gemini model when `CHAT_PROVIDER=gemini` (other Gemini-only paths in code use fixed models; see **Google AI usage** below) |
 | `OPENROUTER_API_KEY` | — | Required if using OpenRouter |
 | `OPENROUTER_MODEL` | `anthropic/claude-3.5-sonnet` | OpenRouter model |
@@ -102,6 +103,8 @@ All configuration is via environment variables. Copy `.env.sample` to `.env` and
 | `FIREWORKS_MODEL` | `accounts/fireworks/models/glm-5` | Fireworks model |
 | `OPENAI_API_KEY` | — | Required if using OpenAI |
 | `OPENAI_MODEL` | `gpt-5.4` | OpenAI model |
+| `FAL_API_KEY` | — | Required if using fal.ai (chat, TTS, STT, or image generation) |
+| `FAL_MODEL` | `google/gemini-2.5-pro` | fal.ai model (via OpenRouter proxy) |
 
 #### Recommended Models
 
@@ -116,6 +119,7 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 /provider anthropic claude-sonnet-4-5-20250929
 /provider gemini
 /provider openrouter meta-llama/llama-4-scout
+/provider fal google/gemini-2.5-pro
 ```
 
 **Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2-preview`. Character image generation uses `gemini-3.1-flash-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview` in `src/ai.ts`.
@@ -133,18 +137,22 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `TTS_PROVIDER` | *(auto)* | TTS provider: `elevenlabs`, `lemonfox`, or `inworld`. Auto-detected from available API keys if unset. |
+| `TTS_PROVIDER` | *(auto)* | TTS provider: `elevenlabs`, `lemonfox`, `inworld`, or `fal`. Auto-detected from available API keys if unset (fal requires explicit selection). |
 | `LEMON_FOX_API_KEY` | — | Enables LemonFox TTS and audio transcription |
 | `ELEVENLABS_API_KEY` | — | Enables ElevenLabs TTS |
 | `ELEVENLABS_VOICE_ID` | — | ElevenLabs voice ID (default: `JBFqnCBsd6RMkjVDRZzb`) |
 | `INWORLD_API_KEY` | — | Enables Inworld TTS |
 | `INWORLD_VOICE_ID` | — | Inworld voice ID (required if using Inworld) |
-| `STT_PROVIDER` | *(auto)* | Set `gemini` to force Gemini for audio transcription instead of LemonFox |
+| `FAL_VOICE` | `Sarah` | ElevenLabs voice name for fal.ai TTS (Aria, Roger, Sarah, Charlotte, Rachel) |
+| `STT_PROVIDER` | *(auto)* | STT provider: `gemini`, `lemonfox` *(auto if key set)*, or `fal` (ElevenLabs Scribe v2 via fal.ai) |
+| `IMAGE_PROVIDER` | `gemini` | Image generation provider: `gemini` or `fal` (nano-banana-pro via fal.ai) |
+| `SHOW_TRANSCRIPTION` | `false` | Show transcription text for voice messages (both sent and received) |
 
 ### Behavior
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `ENABLE_TUTOR_MODE` | `false` | Enable English tutor mode. Removes image/voice frequency limits and adds natural English practice awareness. Env-only (no runtime toggle) to prevent bypassing safety limits. |
 | `SIMPLE_ASSISTANT_MODE` | `false` | Disables personality, media processing, image generation, and memory. Uses a basic "helpful assistant" prompt. |
 | `ENABLE_SLEEP_SCHEDULE` | `true` | Bot sleeps 11:30 PM – 6:00 AM in its configured timezone |
 | `BOT_TIMEZONE` | `America/Santo_Domingo` | IANA timezone for sleep schedule, time awareness, follow-ups, and weather |
@@ -159,8 +167,8 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 ```text
 index.ts                     Entry point: env loading, setup wizard, bot startup
 src/
-  ai.ts                      Gemini API: transcription, image description, YouTube analysis,
-                              memory evaluation, TTS, image generation
+  ai.ts                      Gemini API: transcription (Gemini/LemonFox/fal), image description,
+                              YouTube analysis, memory evaluation
   memory.ts                  4-tier memory read/write + promotion/decay logic
   prompt.ts                  System prompt assembly with context from all memory tiers
   conversation.ts            Conversation processing pipeline (prompt → generate → save → reply)
@@ -179,6 +187,7 @@ src/
   holidays.ts                Holiday calendar (currently Dominican Republic 2026)
   daily-weather.ts           Weather data from Open-Meteo API, cached daily
   chat-logger.ts             Daily conversation log writer
+  tutor.ts                   English tutor mode: state toggle and prompt instructions
   appearance.ts              Base character image locator for image generation
   image-scheduler.ts         Weekly character image generation schedule
   media-handlers.ts          Audio/image download and processing
@@ -194,12 +203,19 @@ src/
     alibaba.ts               Alibaba DashScope provider
     fireworks.ts             Fireworks AI provider
     openai.ts                OpenAI provider
+    fal.ts                   fal.ai provider (OpenRouter proxy)
   tts/
     types.ts                 TTS provider interface
     index.ts                 TTS provider factory and selection
     elevenlabs.ts            ElevenLabs TTS provider
     lemonfox.ts              LemonFox TTS provider
     inworld.ts               Inworld TTS provider
+    fal.ts                   fal.ai TTS provider (ElevenLabs via fal.ai)
+  image/
+    types.ts                 ImageProvider interface
+    index.ts                 Image provider factory and selection
+    gemini.ts                Gemini image generation (character images)
+    fal.ts                   fal.ai image generation (nano-banana-pro)
 ```
 
 ### Memory System
@@ -265,9 +281,12 @@ The bot develops emergent personality traits that evolve over time:
 The bot generates character images on a weekly schedule:
 
 - One random day per week, at a random time between 8 AM and 11 PM (bot timezone)
-- Uses `gemini-3.1-flash-image-preview` with an optional base character image (`memory/base.{png,jpg,jpeg}`)
+- Pluggable provider: Gemini (`IMAGE_PROVIDER=gemini`, default) or fal.ai (`IMAGE_PROVIDER=fal`)
+- Gemini uses `gemini-3.1-flash-image-preview` with a base character image (`memory/base.{png,jpg,jpeg}`)
+- fal.ai uses nano-banana-pro: `/edit` endpoint when a base image exists (character images), base endpoint for standalone generation (e.g., tutor mode illustrations)
 - Schedule tracked per-chat via sensory buffer fields (`lastImageDate`, `imageTargetDate`, `imageTargetTime`)
 - On-demand photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command)
+- In tutor mode, the weekly schedule limit is removed — images generate whenever the bot judges them useful
 
 ### Proactive Features
 
@@ -332,7 +351,7 @@ Set `BOT_TIMEZONE` to any [IANA timezone](https://en.wikipedia.org/wiki/List_of_
 
 ### Character Image
 
-Place a reference image at `memory/base.png` (or `.jpg`/`.jpeg`). The bot uses this as a visual reference when generating character images with Gemini. Without it, image generation works but without a consistent character appearance.
+Place a reference image at `memory/base.png` (or `.jpg`/`.jpeg`). The bot uses this as a visual reference when generating character images. With Gemini, the reference is required. With fal.ai, the reference is optional — without it, the bot generates standalone images (useful in tutor mode for illustrations).
 
 ### Language
 

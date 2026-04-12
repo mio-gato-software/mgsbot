@@ -30,6 +30,7 @@ import {
 import type { MediaAttachment } from "./providers/types.ts";
 import { sendResponse } from "./response-processor.ts";
 import { isTtsAvailable } from "./tts/index.ts";
+import { buildTutorInstructions, isTutorActive } from "./tutor.ts";
 import type {
 	ConversationMessage,
 	MentionType,
@@ -73,6 +74,7 @@ export async function processConversation(
 	isSleepingHour = false,
 	mediaAttachment?: MediaAttachment,
 	isVoiceMessage?: boolean,
+	userImagePath?: string,
 ): Promise<void> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
@@ -177,6 +179,9 @@ export async function processConversation(
 		}
 
 		shouldGenImage = shouldGenerateImageNow(buffer);
+		if (isTutorActive()) {
+			shouldGenImage = true;
+		}
 		systemPrompt = await buildSystemPrompt(
 			episodes,
 			mergedFacts,
@@ -187,8 +192,16 @@ export async function processConversation(
 			isVoiceMessage === true,
 			isTtsAvailable(),
 			permanentFacts,
+			!!userImagePath,
 		);
 	}
+
+	if (isTutorActive()) {
+		systemPrompt += `\n\n${buildTutorInstructions({
+			isVoiceMessage: isVoiceMessage === true,
+		})}`;
+	}
+
 	const messages = buildMessages(buffer, mediaAttachment);
 
 	// Show typing indicator (non-critical, don't crash if it fails)
@@ -205,6 +218,7 @@ export async function processConversation(
 		allowPhotoRequest,
 		buffer,
 		isGroup: isGroupChat(ctx),
+		userImagePath,
 	});
 
 	// Save bot response to sensory buffer (only if non-silenced and non-empty)

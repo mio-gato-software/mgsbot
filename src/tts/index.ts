@@ -1,4 +1,5 @@
 import { ElevenLabsTtsProvider } from "./elevenlabs.ts";
+import { FalTtsProvider } from "./fal.ts";
 import { InworldTtsProvider } from "./inworld.ts";
 import { LemonFoxTtsProvider } from "./lemonfox.ts";
 import type { TtsProvider } from "./types.ts";
@@ -29,6 +30,8 @@ function createTtsProvider(): TtsProvider | null {
 		(!explicit && process.env.LEMON_FOX_API_KEY)
 	) {
 		cachedProvider = new LemonFoxTtsProvider();
+	} else if (explicit === "fal") {
+		cachedProvider = new FalTtsProvider();
 	}
 
 	if (cachedProvider) {
