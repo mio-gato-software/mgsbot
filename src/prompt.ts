@@ -11,12 +11,12 @@ import {
 	getCurrentWeatherContext,
 	getDailyWeatherForImage,
 } from "./daily-weather.ts";
+import { isFullAccessActive } from "./full-access.ts";
 import type { MentionType } from "./handlers.ts";
 import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
 import { getPersonalityInstructions } from "./personality.ts";
 import type { ChatMessage, MediaAttachment } from "./providers/types.ts";
-import { isTutorActive } from "./tutor.ts";
 import type {
 	ConversationMessage,
 	Episode,
@@ -222,7 +222,7 @@ Presta atención a los marcadores de tiempo entre mensajes del historial (ej: "[
 		systemPrompt += `\n\n## Clima actual\n${weatherContext}\n(Usa esta información si el usuario pregunta por el clima o si es relevante para la conversación.)`;
 	}
 
-	if (shouldGenerateImage && !isTutorActive()) {
+	if (shouldGenerateImage && !isFullAccessActive()) {
 		const imageWeather = await getDailyWeatherForImage();
 		const weatherInstruction = imageWeather
 			? `\n\n**Clima actual:** ${weatherContext}. Si tu escena es al aire libre (playa, parque, calle, terraza, piscina, jardín, balcón, ventana con vista exterior), incorpora este clima visualmente en el prompt: cielo, iluminación, lluvia si aplica, etc. No lo menciones en texto, solo muéstralo. Para escenas completamente interiores sin vista al exterior, ignora el clima.`

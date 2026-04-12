@@ -3,12 +3,12 @@ import type { Context } from "grammy";
 import { InputFile } from "grammy";
 import { getBaseImagePath } from "./appearance.ts";
 import { getBotName } from "./config.ts";
+import { isFullAccessActive } from "./full-access.ts";
 import { editImage, generateImage } from "./image/index.ts";
 import { getWeekStart } from "./image-scheduler.ts";
 import { saveSensory } from "./memory.ts";
 import { isSimpleAssistantMode } from "./prompt.ts";
 import { textToSpeech } from "./tts/index.ts";
-import { isTutorActive } from "./tutor.ts";
 import type { SensoryBuffer } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -114,9 +114,9 @@ export async function sendResponse(
 	const canGenerateImage =
 		shouldGenImage || allowPhotoRequest || !!userImagePath;
 
-	// `[IMAGE_SELF: ...]` is a tutor-mode marker for self-in-scene pictures
+	// `[IMAGE_SELF: ...]` is a full-access marker for self-in-scene pictures
 	// (always references the character base for consistency). Plain
-	// `[IMAGE: ...]` in tutor mode is a subject-only picture (no base image),
+	// `[IMAGE: ...]` in full-access mode is a subject-only picture (no base image),
 	// so "send me a picture of a cat" yields just a cat.
 	const selfMatch = canGenerateImage
 		? responseText.match(IMAGE_SELF_MARKER_REGEX)
@@ -142,14 +142,14 @@ export async function sendResponse(
 			.trim();
 		const basePath = getBaseImagePath();
 		const isEdit = !!userImagePath;
-		// In tutor mode, plain [IMAGE: ...] is subject-only — do not seed with
+		// In full-access mode, plain [IMAGE: ...] is subject-only — do not seed with
 		// the character base image. Only [IMAGE_SELF: ...] references the base.
-		const includeBase = isTutorActive() ? isSelfImage : true;
+		const includeBase = isFullAccessActive() ? isSelfImage : true;
 		const referencePath = includeBase ? (basePath ?? undefined) : undefined;
 
-		// In tutor mode, base image is optional. When editing a user's image,
+		// In full-access mode, base image is optional. When editing a user's image,
 		// we don't need the character base either.
-		if (isEdit || basePath || isTutorActive()) {
+		if (isEdit || basePath || isFullAccessActive()) {
 			try {
 				await ctx.replyWithChatAction("upload_photo");
 				if (isDev)

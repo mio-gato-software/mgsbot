@@ -6,6 +6,10 @@ import {
 	checkAndCancelResolvedFollowUps,
 	detectAndStoreFollowUps,
 } from "./follow-ups.ts";
+import {
+	buildFullAccessImageInstructions,
+	isFullAccessActive,
+} from "./full-access.ts";
 import { registerIdentity, resolveCanonicalName } from "./identities.ts";
 import { shouldGenerateImageNow } from "./image-scheduler.ts";
 import {
@@ -179,7 +183,7 @@ export async function processConversation(
 		}
 
 		shouldGenImage = shouldGenerateImageNow(buffer);
-		if (isTutorActive()) {
+		if (isFullAccessActive()) {
 			shouldGenImage = true;
 		}
 		systemPrompt = await buildSystemPrompt(
@@ -194,6 +198,10 @@ export async function processConversation(
 			permanentFacts,
 			!!userImagePath,
 		);
+	}
+
+	if (isFullAccessActive()) {
+		systemPrompt += `\n\n${buildFullAccessImageInstructions()}`;
 	}
 
 	if (isTutorActive()) {

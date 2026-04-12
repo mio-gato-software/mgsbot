@@ -24,7 +24,8 @@ MGS Bot isn't a typical chatbot — it remembers conversations, develops persona
 - **Multi-provider chat** — swap between Gemini, OpenRouter, Anthropic, Azure, Alibaba, Fireworks, OpenAI, or fal.ai at runtime
 - **Sleep schedule** — configurable quiet hours (default: 11:30 PM – 6:00 AM)
 - **Bilingual** — setup wizard and bot personality support English and Spanish
-- **English tutor mode** — natural English practice with the same bot personality, unrestricted image/voice tools, and automatic language hints for STT
+- **English tutor mode** — natural English practice with the same bot personality, plus automatic English hints for STT
+- **Full-access mode** — removes image generation limits and enables on-demand subject/self image markers, independent of tutor mode
 - **Simple assistant mode** — strip all personality features for a basic helpful-assistant experience
 - **Docker support** — single-command deployment with persistent volumes
 
@@ -152,7 +153,8 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `ENABLE_TUTOR_MODE` | `false` | Enable English tutor mode. Removes image/voice frequency limits and adds natural English practice awareness. Env-only (no runtime toggle) to prevent bypassing safety limits. |
+| `ENABLE_TUTOR_MODE` | `false` | Enable English tutor mode. Adds a natural English-practice persona and forces STT (LemonFox/Gemini) to transcribe as English. Does not change image behavior. Env-only (no runtime toggle). |
+| `FULL_ACCESS_MODE` | `false` | Remove image-generation limits: bypasses the weekly schedule, enables the `[IMAGE: ...]` subject-only and `[IMAGE_SELF: ...]` self-in-scene markers on demand, and allows baseless generation (fal.ai). Independent of tutor mode; does not affect language or STT. |
 | `SIMPLE_ASSISTANT_MODE` | `false` | Disables personality, media processing, image generation, and memory. Uses a basic "helpful assistant" prompt. |
 | `ENABLE_SLEEP_SCHEDULE` | `true` | Bot sleeps 11:30 PM – 6:00 AM in its configured timezone |
 | `BOT_TIMEZONE` | `America/Santo_Domingo` | IANA timezone for sleep schedule, time awareness, follow-ups, and weather |
@@ -188,6 +190,7 @@ src/
   daily-weather.ts           Weather data from Open-Meteo API, cached daily
   chat-logger.ts             Daily conversation log writer
   tutor.ts                   English tutor mode: state toggle and prompt instructions
+  full-access.ts             Full-access mode: removes image limits, enables subject/self image markers
   appearance.ts              Base character image locator for image generation
   image-scheduler.ts         Weekly character image generation schedule
   media-handlers.ts          Audio/image download and processing
@@ -283,10 +286,10 @@ The bot generates character images on a weekly schedule:
 - One random day per week, at a random time between 8 AM and 11 PM (bot timezone)
 - Pluggable provider: Gemini (`IMAGE_PROVIDER=gemini`, default) or fal.ai (`IMAGE_PROVIDER=fal`)
 - Gemini uses `gemini-3.1-flash-image-preview` with a base character image (`memory/base.{png,jpg,jpeg}`)
-- fal.ai uses nano-banana-pro: `/edit` endpoint when a base image exists (character images), base endpoint for standalone generation (e.g., tutor mode illustrations)
+- fal.ai uses nano-banana-pro: `/edit` endpoint when a base image exists (character images), base endpoint for standalone generation (e.g., full-access mode illustrations)
 - Schedule tracked per-chat via sensory buffer fields (`lastImageDate`, `imageTargetDate`, `imageTargetTime`)
 - On-demand photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command)
-- In tutor mode, the weekly schedule limit is removed — images generate whenever the bot judges them useful
+- In full-access mode, the weekly schedule limit is removed — images generate whenever the bot judges them useful, with `[IMAGE: ...]` for subject-only and `[IMAGE_SELF: ...]` for self-in-scene
 
 ### Proactive Features
 
@@ -351,7 +354,7 @@ Set `BOT_TIMEZONE` to any [IANA timezone](https://en.wikipedia.org/wiki/List_of_
 
 ### Character Image
 
-Place a reference image at `memory/base.png` (or `.jpg`/`.jpeg`). The bot uses this as a visual reference when generating character images. With Gemini, the reference is required. With fal.ai, the reference is optional — without it, the bot generates standalone images (useful in tutor mode for illustrations).
+Place a reference image at `memory/base.png` (or `.jpg`/`.jpeg`). The bot uses this as a visual reference when generating character images. With Gemini, the reference is required. With fal.ai, the reference is optional — without it, the bot generates standalone images (useful in full-access mode for illustrations).
 
 ### Language
 
