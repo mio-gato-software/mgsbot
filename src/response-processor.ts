@@ -162,7 +162,9 @@ export async function sendResponse(
 	// Send text reply if image wasn't sent (or had no caption)
 	if (!imageSent) {
 		// TTS is disabled in simple assistant mode
-		const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/TTS\]/;
+		// Tolerate a missing slash in the closing tag ([TTS]...[TTS]) since
+		// the model occasionally emits the variant.
+		const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/?TTS\]/;
 		const ttsMatch = isSimpleAssistantMode
 			? null
 			: responseText.match(TTS_REGEX);
