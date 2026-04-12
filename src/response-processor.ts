@@ -15,6 +15,7 @@ const isDev = process.env.NODE_ENV === "development";
 const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
 
 export const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
+export const IMAGE_SELF_MARKER_REGEX = /\[IMAGE_SELF:\s*([^\]]+)\]/;
 export const REACTION_MARKER_REGEX = /\[REACT:\s*([^\]]+)\]/;
 export const SILENCE_MARKER = "[SILENCE]";
 
@@ -112,20 +113,39 @@ export async function sendResponse(
 	// If the user attached an image this turn, always allow the marker (edit intent).
 	const canGenerateImage =
 		shouldGenImage || allowPhotoRequest || !!userImagePath;
-	const imageMatch = canGenerateImage
-		? responseText.match(IMAGE_MARKER_REGEX)
+
+	// `[IMAGE_SELF: ...]` is a tutor-mode marker for self-in-scene pictures
+	// (always references the character base for consistency). Plain
+	// `[IMAGE: ...]` in tutor mode is a subject-only picture (no base image),
+	// so "send me a picture of a cat" yields just a cat.
+	const selfMatch = canGenerateImage
+		? responseText.match(IMAGE_SELF_MARKER_REGEX)
 		: null;
+	const imageMatch = canGenerateImage
+		? (selfMatch ?? responseText.match(IMAGE_MARKER_REGEX))
+		: null;
+	const isSelfImage = !!selfMatch;
 	if (!canGenerateImage) {
-		responseText = responseText.replace(IMAGE_MARKER_REGEX, "").trim();
+		responseText = responseText
+			.replace(IMAGE_SELF_MARKER_REGEX, "")
+			.replace(IMAGE_MARKER_REGEX, "")
+			.trim();
 	}
 	let imageSent = false;
 	let bufferDirty = false;
 
 	if (imageMatch) {
 		const extractedPrompt = imageMatch[1].trim();
-		responseText = responseText.replace(IMAGE_MARKER_REGEX, "").trim();
+		responseText = responseText
+			.replace(IMAGE_SELF_MARKER_REGEX, "")
+			.replace(IMAGE_MARKER_REGEX, "")
+			.trim();
 		const basePath = getBaseImagePath();
 		const isEdit = !!userImagePath;
+		// In tutor mode, plain [IMAGE: ...] is subject-only — do not seed with
+		// the character base image. Only [IMAGE_SELF: ...] references the base.
+		const includeBase = isTutorActive() ? isSelfImage : true;
+		const referencePath = includeBase ? (basePath ?? undefined) : undefined;
 
 		// In tutor mode, base image is optional. When editing a user's image,
 		// we don't need the character base either.
@@ -139,7 +159,7 @@ export async function sendResponse(
 					);
 				const imageBuffer = isEdit
 					? await editImage(extractedPrompt, userImagePath as string)
-					: await generateImage(extractedPrompt, basePath ?? undefined);
+					: await generateImage(extractedPrompt, referencePath);
 
 				const filename = `${getBotName().toLowerCase()}.png`;
 				await ctx.replyWithPhoto(new InputFile(imageBuffer, filename), {
