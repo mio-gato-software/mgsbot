@@ -1,6 +1,7 @@
 import { AlibabaChatProvider } from "./alibaba.ts";
 import { AnthropicChatProvider } from "./anthropic.ts";
 import { AzureChatProvider } from "./azure.ts";
+import { FalChatProvider } from "./fal.ts";
 import { FireworksChatProvider } from "./fireworks.ts";
 import { GeminiChatProvider } from "./gemini.ts";
 import { OpenAIChatProvider } from "./openai.ts";
@@ -38,6 +39,9 @@ export function createChatProvider(): ChatProvider {
 			break;
 		case "openai":
 			cachedProvider = new OpenAIChatProvider();
+			break;
+		case "fal":
+			cachedProvider = new FalChatProvider();
 			break;
 		default:
 			cachedProvider = new GeminiChatProvider();
@@ -87,6 +91,11 @@ export function switchChatProvider(
 			cachedProvider = model
 				? new OpenAIChatProvider(model)
 				: new OpenAIChatProvider();
+			break;
+		case "fal":
+			cachedProvider = model
+				? new FalChatProvider(model)
+				: new FalChatProvider();
 			break;
 		default:
 			throw new Error(`Unknown provider: ${providerName}`);

@@ -1,5 +1,5 @@
 import type { Bot, Context } from "grammy";
-import { analyzeYouTube, describeImage } from "./ai.ts";
+import { analyzeYouTube, classifyEditIntent, describeImage } from "./ai.ts";
 import { getBotHour, getBotMinute } from "./bot-time.ts";
 import { getBotName, isBotConfigured, loadConfig } from "./config.ts";
 import {
@@ -27,6 +27,28 @@ import { processSetupConversation } from "./setup.ts";
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
 const OWNER_USER_ID = Number(process.env.OWNER_USER_ID);
 const isDev = process.env.NODE_ENV === "development";
+const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
+
+/**
+ * Regex fallback for edit intent detection when the LLM classifier is unavailable.
+ */
+const EDIT_INTENT_REGEX =
+	/\b(edit|change|modify|add|remove|make it|turn it|turn this|transform|replace|paint|convert|crop|resize|edita|edítala|edítalo|cambia|cámbiale|modifica|modifícala|modifícalo|ponle|pónle|agrégale|agregale|añádele|añadele|quítale|quitale|hazla|hazlo|haz que|conviértela|conviertela|conviértelo|conviertelo|transforma|pinta|píntala|pintalo|reemplaza|sustituye)\b/i;
+
+/**
+ * Does the caption express intent to edit/modify the image?
+ * When true, we can skip describeImage since the model will likely emit
+ * [IMAGE: ...] and the edit provider uses the raw image directly.
+ *
+ * Uses an LLM classifier for nuance; falls back to a regex if the classifier
+ * fails or is inconclusive.
+ */
+async function hasEditIntent(caption?: string): Promise<boolean> {
+	if (!caption) return false;
+	const classification = await classifyEditIntent(caption);
+	if (classification !== null) return classification;
+	return EDIT_INTENT_REGEX.test(caption);
+}
 
 let botOff = false;
 
@@ -136,6 +158,13 @@ export function registerHandlers(bot: Bot): void {
 				"ogg",
 				"voice",
 			);
+			if (showTranscription) {
+				await ctx
+					.reply(`📝 ${transcription}`, {
+						reply_to_message_id: ctx.message?.message_id,
+					})
+					.catch(() => {});
+			}
 			const userName = getUserDisplayName(ctx);
 			const content = `[Audio from ${userName}]: ${transcription}`;
 			await processConversation(
@@ -169,6 +198,13 @@ export function registerHandlers(bot: Bot): void {
 				ext,
 				"audio",
 			);
+			if (showTranscription) {
+				await ctx
+					.reply(`📝 ${transcription}`, {
+						reply_to_message_id: ctx.message?.message_id,
+					})
+					.catch(() => {});
+			}
 			const userName = getUserDisplayName(ctx);
 			const content = `[Audio from ${userName}]: ${transcription}`;
 			await processConversation(
@@ -197,38 +233,59 @@ export function registerHandlers(bot: Bot): void {
 			const userName = getUserDisplayName(ctx);
 			const provider = createChatProvider();
 
-			if (supportsInlineImages(provider)) {
-				// Pass raw image inline to Gemini — skip describeImage()
-				const imageBuffer = await Bun.file(filePath).arrayBuffer();
-				const data = Buffer.from(imageBuffer).toString("base64");
+			try {
+				if (supportsInlineImages(provider)) {
+					// Pass raw image inline (Gemini can see it)
+					const imageBuffer = await Bun.file(filePath).arrayBuffer();
+					const data = Buffer.from(imageBuffer).toString("base64");
+					const content = caption
+						? `[Image from ${userName}, caption: "${caption}"]`
+						: `[Image from ${userName}]`;
+					await processConversation(
+						ctx,
+						content,
+						userName,
+						mentionType,
+						botOff,
+						isSleepingHour(),
+						{ data, mimeType },
+						undefined,
+						filePath,
+					);
+				} else {
+					// Non-vision provider. Skip describeImage only when the caption
+					// clearly expresses edit intent (the edit provider uses the raw
+					// image directly). Otherwise describe so the bot can comment.
+					const skipDescribe = await hasEditIntent(caption);
+					let content: string;
+					if (skipDescribe) {
+						content = caption
+							? `[Image from ${userName}, caption: "${caption}"]`
+							: `[Image from ${userName}]`;
+					} else {
+						const description = await describeImage(
+							filePath,
+							mimeType,
+							caption,
+						);
+						content = caption
+							? `[Image from ${userName}, caption: "${caption}"]: ${description}`
+							: `[Image from ${userName}]: ${description}`;
+					}
+					await processConversation(
+						ctx,
+						content,
+						userName,
+						mentionType,
+						botOff,
+						isSleepingHour(),
+						undefined,
+						undefined,
+						filePath,
+					);
+				}
+			} finally {
 				await cleanupFile(filePath);
-				const content = caption
-					? `[Image from ${userName}, caption: "${caption}"]`
-					: `[Image from ${userName}]`;
-				await processConversation(
-					ctx,
-					content,
-					userName,
-					mentionType,
-					botOff,
-					isSleepingHour(),
-					{ data, mimeType },
-				);
-			} else {
-				// Non-Gemini: use describeImage() as before
-				const description = await describeImage(filePath, mimeType, caption);
-				await cleanupFile(filePath);
-				const content = caption
-					? `[Image from ${userName}, caption: "${caption}"]: ${description}`
-					: `[Image from ${userName}]: ${description}`;
-				await processConversation(
-					ctx,
-					content,
-					userName,
-					mentionType,
-					botOff,
-					isSleepingHour(),
-				);
 			}
 		} catch (error) {
 			console.error("[photo handler] Error:", error);
@@ -246,6 +303,7 @@ export function registerHandlers(bot: Bot): void {
 		"alibaba",
 		"fireworks",
 		"openai",
+		"fal",
 	] as const;
 
 	bot.command("provider", async (ctx) => {
@@ -510,43 +568,59 @@ export function registerHandlers(bot: Bot): void {
 						: "Unknown";
 
 					const provider = createChatProvider();
-					const replyCaption = replyMsg?.caption;
 
-					if (supportsInlineImages(provider)) {
-						// Pass raw image inline to Gemini — skip describeImage()
-						const data = imageBuffer.toString("base64");
+					try {
+						if (supportsInlineImages(provider)) {
+							// Pass raw image inline (Gemini can see it)
+							const data = imageBuffer.toString("base64");
+							const content = text
+								? `[Image from ${photoSender}]\n\n${userName}'s message: "${text}"`
+								: `[Image from ${photoSender}]`;
+							await processConversation(
+								ctx,
+								content,
+								userName,
+								mentionType,
+								botOff,
+								isSleepingHour(),
+								{ data, mimeType },
+								undefined,
+								filePath,
+							);
+						} else {
+							// Non-vision provider. Skip describeImage only when the
+							// current message expresses edit intent.
+							const skipDescribe = await hasEditIntent(text);
+							let content: string;
+							if (skipDescribe) {
+								content = text
+									? `[Image from ${photoSender}]\n\n${userName}'s message: "${text}"`
+									: `[Image from ${photoSender}]`;
+							} else {
+								const replyCaption = replyMsg?.caption;
+								const description = await describeImage(
+									filePath,
+									mimeType,
+									replyCaption ?? undefined,
+								);
+								content = text
+									? `[Image from ${photoSender}]: ${description}\n\n${userName}'s message: "${text}"`
+									: `[Image from ${photoSender}]: ${description}`;
+							}
+							await processConversation(
+								ctx,
+								content,
+								userName,
+								mentionType,
+								botOff,
+								isSleepingHour(),
+								undefined,
+								undefined,
+								filePath,
+							);
+						}
+					} finally {
 						await cleanupFile(filePath);
-						const content = text
-							? `[Image from ${photoSender}]\n\n${userName}'s message: "${text}"`
-							: `[Image from ${photoSender}]`;
-						await processConversation(
-							ctx,
-							content,
-							userName,
-							mentionType,
-							botOff,
-							isSleepingHour(),
-							{ data, mimeType },
-						);
-					} else {
-						// Non-Gemini: use describeImage() as before
-						const description = await describeImage(
-							filePath,
-							mimeType,
-							replyCaption ?? undefined,
-						);
-						await cleanupFile(filePath);
-						const content = text
-							? `[Image from ${photoSender}]: ${description}\n\n${userName}'s message: "${text}"`
-							: `[Image from ${photoSender}]: ${description}`;
-						await processConversation(
-							ctx,
-							content,
-							userName,
-							mentionType,
-							botOff,
-							isSleepingHour(),
-						);
 					}
 				} catch (error) {
 					console.error("[reply-to-photo handler] Error:", error);

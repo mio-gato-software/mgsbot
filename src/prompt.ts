@@ -16,6 +16,7 @@ import { isHoliday } from "./holidays.ts";
 import { loadPermanent, normalizeName } from "./memory.ts";
 import { getPersonalityInstructions } from "./personality.ts";
 import type { ChatMessage, MediaAttachment } from "./providers/types.ts";
+import { isTutorActive } from "./tutor.ts";
 import type {
 	ConversationMessage,
 	Episode,
@@ -87,6 +88,7 @@ export async function buildSystemPrompt(
 	isVoiceMessage = false,
 	ttsAvailable = false,
 	permanentFacts?: SemanticFact[],
+	userAttachedImage = false,
 ): Promise<string> {
 	// Simple assistant mode: return minimal prompt
 	if (isSimpleAssistantMode) {
@@ -220,7 +222,7 @@ Presta atención a los marcadores de tiempo entre mensajes del historial (ej: "[
 		systemPrompt += `\n\n## Clima actual\n${weatherContext}\n(Usa esta información si el usuario pregunta por el clima o si es relevante para la conversación.)`;
 	}
 
-	if (shouldGenerateImage) {
+	if (shouldGenerateImage && !isTutorActive()) {
 		const imageWeather = await getDailyWeatherForImage();
 		const weatherInstruction = imageWeather
 			? `\n\n**Clima actual:** ${weatherContext}. Si tu escena es al aire libre (playa, parque, calle, terraza, piscina, jardín, balcón, ventana con vista exterior), incorpora este clima visualmente en el prompt: cielo, iluminación, lluvia si aplica, etc. No lo menciones en texto, solo muéstralo. Para escenas completamente interiores sin vista al exterior, ignora el clima.`
@@ -236,6 +238,15 @@ NO incluyas descripción física tuya (se agrega automáticamente). Incluye en e
 Varía las escenas creativamente. NO siempre incluyas café, bebidas ni comida — solo si la actividad lo amerita. Prioriza poses, actividades y ambientes diversos.
 
 Solo escenas de ti misma, nunca de otros. No menciones que estás generando una imagen ni pidas permiso; simplemente inclúyelo naturalmente en tu respuesta.`;
+	}
+
+	if (userAttachedImage) {
+		systemPrompt += `\n\n## Edición de imagen
+El usuario te envió una imagen en este mensaje. Si te está pidiendo que la modifiques, edites o transformes de alguna manera (ej: "ponle un sombrero", "hazla blanco y negro", "cámbiale el fondo", "agrégale X"), responde con un marcador [IMAGE: descripción en inglés de la edición a aplicar]. El sistema tomará la imagen del usuario y aplicará la edición.
+
+El prompt del marcador debe describir SOLO la edición a aplicar (ej: "add a red hat to the person", "convert to black and white", "change the background to a beach"), no toda la imagen resultante. Sé específico y claro.
+
+Si el usuario solo está compartiendo la imagen sin pedir una edición, no uses el marcador — responde normalmente comentando sobre la imagen.`;
 	}
 
 	if (allowPhotoRequest) {
