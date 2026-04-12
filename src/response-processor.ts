@@ -98,6 +98,16 @@ export async function sendResponse(
 		reply_to_message_id: isGroup ? ctx.message?.message_id : undefined,
 	};
 
+	// Extract TTS markers up-front so they never leak into an image caption
+	// when [IMAGE:...] and [TTS]...[/TTS] co-occur. Tolerate a missing slash
+	// in the closing tag since the model occasionally emits that variant.
+	const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/?TTS\]/;
+	const ttsMatch = isSimpleAssistantMode ? null : responseText.match(TTS_REGEX);
+	const ttsText = ttsMatch ? ttsMatch[1].trim() : null;
+	if (ttsText) {
+		responseText = responseText.replace(TTS_REGEX, ttsText).trim();
+	}
+
 	// Check for image marker
 	// If the user attached an image this turn, always allow the marker (edit intent).
 	const canGenerateImage =
@@ -161,25 +171,13 @@ export async function sendResponse(
 
 	// Send text reply if image wasn't sent (or had no caption)
 	if (!imageSent) {
-		// TTS is disabled in simple assistant mode
-		// Tolerate a missing slash in the closing tag ([TTS]...[TTS]) since
-		// the model occasionally emits the variant.
-		const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/?TTS\]/;
-		const ttsMatch = isSimpleAssistantMode
-			? null
-			: responseText.match(TTS_REGEX);
-
 		if (isDev)
 			console.log(
 				"[TTS] Checking for marker:",
-				ttsMatch ? `found "${ttsMatch[1]}"` : "not found",
+				ttsText ? `found "${ttsText}"` : "not found",
 			);
 
-		if (ttsMatch) {
-			const ttsText = ttsMatch[1].trim();
-			// Strip TTS markers from saved text
-			responseText = responseText.replace(TTS_REGEX, ttsText);
-
+		if (ttsText) {
 			try {
 				if (isDev) console.log("[TTS] Generating speech for:", ttsText);
 				const audioPath = await textToSpeech(ttsText);
