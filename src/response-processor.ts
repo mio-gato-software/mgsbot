@@ -7,7 +7,7 @@ import { isFullAccessActive } from "./full-access.ts";
 import { editImage, generateImage } from "./image/index.ts";
 import { getWeekStart } from "./image-scheduler.ts";
 import { saveSensory } from "./memory.ts";
-import { isSimpleAssistantMode } from "./prompt.ts";
+import { isSimpleAssistantMode } from "./prompt/modes.ts";
 import { textToSpeech } from "./tts/index.ts";
 import type { SensoryBuffer } from "./types.ts";
 

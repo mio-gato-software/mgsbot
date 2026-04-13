@@ -6,10 +6,7 @@ import {
 	checkAndCancelResolvedFollowUps,
 	detectAndStoreFollowUps,
 } from "./follow-ups.ts";
-import {
-	buildFullAccessImageInstructions,
-	isFullAccessActive,
-} from "./full-access.ts";
+import { isFullAccessActive } from "./full-access.ts";
 import { registerIdentity, resolveCanonicalName } from "./identities.ts";
 import { shouldGenerateImageNow } from "./image-scheduler.ts";
 import {
@@ -26,15 +23,13 @@ import {
 	loadSensory,
 } from "./memory.ts";
 import { applyPersonalitySignals } from "./personality.ts";
-import {
-	buildMessages,
-	buildSystemPrompt,
-	isSimpleAssistantMode,
-} from "./prompt.ts";
+import { assembleSystemPrompt } from "./prompt/assemble.ts";
+import { buildPromptContext } from "./prompt/context.ts";
+import { isSimpleAssistantMode } from "./prompt/modes.ts";
+import { buildMessages } from "./prompt.ts";
 import type { MediaAttachment } from "./providers/types.ts";
 import { sendResponse } from "./response-processor.ts";
 import { isTtsAvailable } from "./tts/index.ts";
-import { buildTutorInstructions, isTutorActive } from "./tutor.ts";
 import type {
 	ConversationMessage,
 	MentionType,
@@ -129,11 +124,14 @@ export async function processConversation(
 	}
 
 	// Build prompt and messages
-	let systemPrompt: string;
 	let shouldGenImage = false;
+	let promptCtx: Parameters<typeof assembleSystemPrompt>[0];
 
 	if (isSimpleAssistantMode) {
-		systemPrompt = await buildSystemPrompt([], [], false);
+		promptCtx = buildPromptContext({
+			relevantEpisodes: [],
+			relevantFacts: [],
+		});
 	} else {
 		// Start query embedding and name resolution in parallel
 		const queryEmbeddingPromise = getQueryEmbedding(buffer.messages);
@@ -186,30 +184,21 @@ export async function processConversation(
 		if (isFullAccessActive()) {
 			shouldGenImage = true;
 		}
-		systemPrompt = await buildSystemPrompt(
-			episodes,
-			mergedFacts,
-			shouldGenImage,
-			isGroupChat(ctx) ? mentionType : undefined,
-			activeNames,
-			allowPhotoRequest,
-			isVoiceMessage === true,
-			isTtsAvailable(),
+		promptCtx = buildPromptContext({
+			relevantEpisodes: episodes,
+			relevantFacts: mergedFacts,
 			permanentFacts,
-			!!userImagePath,
-		);
+			activeNames,
+			mentionType: isGroupChat(ctx) ? mentionType : undefined,
+			isVoiceMessage,
+			userAttachedImage: !!userImagePath,
+			shouldGenerateImage: shouldGenImage,
+			allowPhotoRequest,
+			ttsAvailable: isTtsAvailable(),
+		});
 	}
 
-	if (isFullAccessActive()) {
-		systemPrompt += `\n\n${buildFullAccessImageInstructions()}`;
-	}
-
-	if (isTutorActive()) {
-		systemPrompt += `\n\n${buildTutorInstructions({
-			isVoiceMessage: isVoiceMessage === true,
-		})}`;
-	}
-
+	const systemPrompt = await assembleSystemPrompt(promptCtx);
 	const messages = buildMessages(buffer, mediaAttachment);
 
 	// Show typing indicator (non-critical, don't crash if it fails)

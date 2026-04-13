@@ -327,7 +327,7 @@ export async function analyzeYouTube(
 	try {
 		const prompt = userQuestion
 			? `The user shared this YouTube video and said: "${userQuestion}". Watch the video and respond to what they said.`
-			: "The user shared this YouTube video. Briefly describe what the video is about in Spanish so you can reference it in conversation.";
+			: "The user shared this YouTube video. Briefly describe what the video is about in the user's language so you can reference it in conversation.";
 
 		const parts: Part[] = [
 			{ fileData: { fileUri: videoUrl } },
@@ -383,64 +383,64 @@ export async function evaluateConversationChunk(
 	let contextSection = "";
 	if (existingFactSummary) {
 		contextSection = `
-HECHOS YA GUARDADOS (NO duplicar):
+FACTS ALREADY SAVED (do NOT duplicate):
 ${existingFactSummary}
 
-IMPORTANTE: Solo agrega información NUEVA que no esté ya cubierta arriba.
+IMPORTANT: Only add NEW information not already covered above.
 
 `;
 	}
 
 	const systemPrompt =
-		"Eres un asistente que extrae información importante de conversaciones. Responde SOLO con JSON válido, sin texto adicional.";
+		"You are an assistant that extracts important information from conversations. Respond ONLY with valid JSON, no additional text.";
 
-	const userMessage = `Analiza esta conversación y extrae:
+	const userMessage = `Analyze this conversation and extract:
 
-1. **Resumen del episodio**: Una oración breve describiendo de qué se trató la conversación.
-2. **Importancia**: 1-5 (5 = muy importante).
-3. **Hechos sobre las PERSONAS**: Extrae SOLO datos sobre las personas que participan en la conversación. NO guardes conocimiento general, datos enciclopédicos, ni información sobre temas que se discutieron (ej: si hablan de Corea del Sur, NO guardes datos sobre Corea; si hablan de una película, NO guardes la trama).
-   Lo que SÍ guardar:
-   - Datos personales: nombre, edad, trabajo, profesión, ubicación, familia
-   - Gustos, preferencias, opiniones y posturas personales
-   - Planes, metas, eventos personales futuros
-   - Relaciones entre las personas del chat
-   - Hábitos, rutinas, experiencias personales que comparten
-   - Intereses o temas que les apasionan (ej: "A Juan le interesa la demografía", NO "La población de Corea bajará")
-   Lo que NO guardar:
-   - Datos del mundo, noticias, estadísticas, información enciclopédica
-   - Contenido de videos, artículos o enlaces compartidos
-   - Información general que se puede buscar en internet
-   Categorías:
-   - category "person": dato sobre una persona específica (incluye "subject" con el NOMBRE COMPLETO tal como aparece en los mensajes, ej: "Juan Pérez", NO solo "Juan")
-   - category "group": dinámica grupal o regla de interacción entre los participantes
-   - category "rule": regla o límite establecido en la relación
-   - category "event": evento PERSONAL futuro o plan de un participante (NO eventos mundiales)
-4. **Permanencia**: Si un hecho es un dato biográfico FUNDAMENTAL e INMUTABLE de una persona, márcalo como "permanent": true.
-   Ejemplos de hechos permanentes:
-   - Lugar de nacimiento ("Nací en Neyba")
-   - Miembros de familia y sus nombres ("Mi hija se llama Elianny", "Mi esposa se llama Anny")
-   - Fecha de matrimonio, nacimiento de hijos ("Me casé en 2006")
-   - País de origen, nacionalidad
-   - Nombre completo real
-   Ejemplos de hechos que NO son permanentes:
-   - Trabajo actual (puede cambiar)
-   - Gustos y preferencias (pueden cambiar)
-   - Planes futuros
-   - Estado de ánimo, opiniones
-   Sé MUY selectivo: solo datos que NUNCA cambiarán en la vida de la persona.
-5. **Señales de personalidad**: ¿La conversación revela algo sobre cómo el bot está evolucionando emocionalmente? Solo si hay señales claras.
-Solo puedes usar estos rasgos EXACTOS (no inventes otros):
+1. **Episode summary**: A brief sentence describing what the conversation was about.
+2. **Importance**: 1-5 (5 = very important).
+3. **Facts about the PEOPLE**: Extract ONLY data about the people who participate in the conversation. Do NOT save general knowledge, encyclopedic data, or information about topics that were discussed (e.g., if they talk about South Korea, do NOT save facts about Korea; if they talk about a movie, do NOT save the plot).
+   What TO save:
+   - Personal data: name, age, job, profession, location, family
+   - Personal likes, preferences, opinions, and stances
+   - Personal plans, goals, future events
+   - Relationships between the people in the chat
+   - Habits, routines, personal experiences they share
+   - Interests or topics they're passionate about (e.g., "Juan is interested in demographics", NOT "Korea's population will drop")
+   What NOT to save:
+   - World data, news, statistics, encyclopedic information
+   - Content of videos, articles, or shared links
+   - General information you can look up online
+   Categories:
+   - category "person": fact about a specific person (include "subject" with the FULL NAME as it appears in the messages, e.g., "Juan Pérez", NOT just "Juan")
+   - category "group": group dynamic or rule of interaction between participants
+   - category "rule": rule or boundary established in the relationship
+   - category "event": future PERSONAL event or plan of a participant (NOT world events)
+4. **Permanence**: If a fact is a FUNDAMENTAL and IMMUTABLE biographical datum about a person, mark it as "permanent": true.
+   Examples of permanent facts:
+   - Place of birth ("Born in Neyba")
+   - Family members and their names ("My daughter is Elianny", "My wife is Anny")
+   - Marriage date, birth of children ("I got married in 2006")
+   - Country of origin, nationality
+   - Real full name
+   Examples of facts that are NOT permanent:
+   - Current job (can change)
+   - Likes and preferences (can change)
+   - Future plans
+   - Mood, opinions
+   Be VERY selective: only data that will NEVER change in the person's life.
+5. **Personality signals**: Does the conversation reveal something about how the bot is evolving emotionally? Only if the signals are clear.
+You can ONLY use these EXACT trait names (do not invent others):
 ${getTraitDefinitionsForPrompt()}
 
-Si la conversación no muestra señales claras, deja traitChanges vacío.
-Cada delta debe estar entre -0.15 y +0.15.
+If the conversation shows no clear signals, leave traitChanges empty.
+Each delta must be between -0.15 and +0.15.
 ${contextSection}
-Responde SOLO JSON:
-{"summary": "resumen breve", "importance": 1-5, "facts": [{"content": "hecho sobre la PERSONA", "category": "person|group|rule|event", "subject": "nombre (solo si person)", "context": "por qué importa", "importance": 1-5, "permanent": false}], "personalitySignals": {"traitChanges": [{"trait": "calidez", "delta": 0.1, "reason": "razón del cambio"}]}}
+Respond ONLY with JSON:
+{"summary": "brief summary", "importance": 1-5, "facts": [{"content": "fact about the PERSON", "category": "person|group|rule|event", "subject": "name (only if person)", "context": "why it matters", "importance": 1-5, "permanent": false}], "personalitySignals": {"traitChanges": [{"trait": "warmth", "delta": 0.1, "reason": "reason for the change"}]}}
 
-Si no hay nada personal relevante: {"summary": "conversación casual", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
+If there's nothing personally relevant: {"summary": "casual conversation", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
 
-Conversación:
+Conversation:
 ${recentMessages}`;
 
 	const text = await generateResponse(systemPrompt, [
@@ -450,16 +450,17 @@ ${recentMessages}`;
 	try {
 		const jsonMatch = text.match(/\{[\s\S]*\}/);
 		if (!jsonMatch)
-			return { summary: "conversación casual", importance: 1, facts: [] };
+			return { summary: "casual conversation", importance: 1, facts: [] };
 		const parsed = JSON.parse(jsonMatch[0]) as PromotionResult;
 		return validatePromotionResult(parsed);
 	} catch {
-		return { summary: "conversación casual", importance: 1, facts: [] };
+		return { summary: "casual conversation", importance: 1, facts: [] };
 	}
 }
 
 // --- Follow-up extraction ---
 
+// Spanish heuristic: matches user-language content (users typically write in Spanish).
 const FOLLOW_UP_INTENT_PATTERNS = [
 	/\b(voy a|iré a|vamos a|tengo que|me toca|tengo una?)\b/i,
 	/\b(esta noche|mañana|esta tarde|hoy|el lunes|el martes|el miércoles|el jueves|el viernes|el sábado|el domingo|este fin de semana)\b/i,
@@ -492,24 +493,24 @@ export async function extractFollowUps(
 	if (!hasFollowUpIntent(latestMessage)) return [];
 
 	const systemPrompt =
-		"Eres un asistente que detecta planes o eventos futuros en conversaciones. Responde SOLO con JSON válido, sin texto adicional.";
+		"You are an assistant that detects future plans or events in conversations. Respond ONLY with valid JSON, no additional text.";
 
-	const userMessage = `Analiza estos mensajes y extrae planes o eventos futuros mencionados por el usuario.
+	const userMessage = `Analyze these messages and extract future plans or events mentioned by the user.
 
-Fecha y hora actual en República Dominicana: ${currentDateDR}
+Current date and time in the Dominican Republic: ${currentDateDR}
 
-Para cada plan detectado, extrae:
-- "event": descripción corta del evento (ej: "ir al cine", "cita con el doctor")
-- "when": fecha y hora estimada del evento en formato ISO 8601 (usa la fecha actual para resolver tiempos relativos como "esta noche", "mañana")
-- "followUpDelayHours": horas después del evento para hacer seguimiento (normalmente 1-3 horas después)
-- "question": pregunta casual y natural para hacer seguimiento (como haría una amiga, ej: "no me dijiste cómo te fue en el cine!")
+For each plan detected, extract:
+- "event": short description of the event (e.g., "go to the movies", "doctor's appointment")
+- "when": estimated date and time of the event in ISO 8601 format (use the current date to resolve relative times like "tonight", "tomorrow")
+- "followUpDelayHours": hours after the event to follow up (typically 1-3 hours after)
+- "question": casual, natural follow-up question in the user's language (the way a friend would ask, e.g., "you never told me how the movie was!")
 
-Responde SOLO JSON:
+Respond ONLY with JSON:
 {"followUps": [{"event": "...", "when": "...", "followUpDelayHours": 2, "question": "..."}]}
 
-Si no hay planes futuros: {"followUps": []}
+If there are no future plans: {"followUps": []}
 
-Mensajes:
+Messages:
 ${recentMessages}`;
 
 	try {
@@ -553,7 +554,7 @@ function validatePromotionResult(raw: PromotionResult): PromotionResult {
 	const summary =
 		typeof raw.summary === "string" && raw.summary.trim()
 			? raw.summary.trim()
-			: "conversación casual";
+			: "casual conversation";
 
 	const importance =
 		typeof raw.importance === "number"

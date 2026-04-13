@@ -164,7 +164,7 @@ export async function checkAndCancelResolvedFollowUps(
 
 async function generateFollowUpMessage(followUp: FollowUp): Promise<string> {
 	const systemPrompt =
-		"Eres una amiga casual. Genera una variación natural y breve de la pregunta dada. No expliques nada, solo responde con la pregunta variada.";
+		"You are a casual friend. Generate a natural, brief variation of the given question, in the same language as the question. Don't explain anything — respond only with the varied question.";
 	const messages: ConversationMessage[] = [
 		{ role: "user", content: followUp.followUpQuestion },
 	];

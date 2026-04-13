@@ -12,7 +12,9 @@ import {
 	getRelevantFacts,
 	loadSensory,
 } from "./memory.ts";
-import { buildMessages, buildSystemPrompt } from "./prompt.ts";
+import { assembleSystemPrompt } from "./prompt/assemble.ts";
+import { buildPromptContext } from "./prompt/context.ts";
+import { buildMessages } from "./prompt.ts";
 import type {
 	CheckInSlot,
 	CheckInState,
@@ -238,17 +240,17 @@ function pickStrategy(recentStrategies: string[]): CheckInStrategy {
 function getStrategyInstruction(strategy: CheckInStrategy): string {
 	switch (strategy) {
 		case "random_thought":
-			return "Se te acaba de ocurrir algo random — un pensamiento, una opinión, algo que viste o recordaste. Compártelo como si le estuvieras mandando un mensaje impulsivo a tu mejor amigo/a. NO hagas preguntas. Solo suelta el pensamiento. Ejemplos de tono: 'Diache, acabo de...', 'Loco/a no vas a creer...', 'Estoy aquí pensando en que...'.";
+			return "A random thought just hit you — an idea, an opinion, something you saw or remembered. Share it as if you were sending an impulsive message to your best friend. Do NOT ask questions. Just drop the thought.";
 		case "memory_callback":
-			return "Algo de tus recuerdos te vino a la mente — algo que te contó, algo que hicieron, un tema que compartieron. Menciónalo de manera casual como si te acabaras de acordar. Puede ser nostálgico, chistoso, o simplemente un 'me acordé de eso'. NO lo conviertas en una pregunta de seguimiento tipo PM.";
+			return "Something from your memories came to mind — something they told you, something you did together, a topic you shared. Mention it casually, as if you just remembered it. It can be nostalgic, funny, or just a 'that reminded me of...'. Do NOT turn it into a project-manager-style follow-up question.";
 		case "sharing_moment":
-			return "Comparte algo que estás 'haciendo' o 'viviendo' ahora mismo según la hora y tu personalidad. Cuéntalo como si compartieras un momento con alguien cercano — lo que estás viendo, escuchando, comiendo, sintiendo. NO preguntes nada. Solo comparte el momento.";
+			return "Share something you're 'doing' or 'living' right now based on the time of day and your personality. Tell it as if you were sharing a moment with someone close — what you're seeing, hearing, eating, feeling. Do NOT ask anything. Just share the moment.";
 		case "reaction":
-			return "Reacciona a algo — una idea, algo que 'viste', algo que te pasó, un pensamiento sobre algo del mundo. Exprésalo con emoción genuina (sorpresa, emoción, indignación divertida, etc). El tono debe ser como cuando le mandas un mensaje a alguien solo porque necesitas reaccionar con alguien.";
+			return "React to something — an idea, something you 'saw', something that happened to you, a thought about something in the world. Express it with genuine emotion (surprise, excitement, amused outrage, etc.). The tone should be like when you message someone just because you need to react with somebody.";
 		case "weather_vibe":
-			return "Usa el clima o el momento del día como base para compartir un VIBE, no un reporte meteorológico. Habla de cómo te hace sentir, qué ganas te da de hacer, o qué te recuerda. Hazlo personal y emocional, no informativo.";
+			return "Use the weather or the time of day as a base to share a VIBE, not a weather report. Talk about how it makes you feel, what it makes you want to do, or what it reminds you of. Make it personal and emotional, not informative.";
 		case "curiosity":
-			return "Saca un tema que genuinamente te da curiosidad basándote en algo que sabes de la persona. NO lo formules como pregunta de entrevista ('¿Cómo va tu proyecto?'). En vez, comparte tu propia perspectiva o reacción primero y deja que la conversación fluya naturalmente.";
+			return "Bring up a topic that genuinely makes you curious based on something you know about the person. Do NOT phrase it as an interview question ('How's your project going?'). Instead, share your own perspective or reaction first and let the conversation flow naturally.";
 	}
 }
 
@@ -267,7 +269,7 @@ async function generateCheckInMessage(
 		queryEmbedding = result.embedding;
 	} else {
 		queryEmbedding = await generateEmbedding(
-			"saludo casual conversación cotidiana cómo estás",
+			"casual greeting everyday conversation how are you",
 		);
 	}
 
@@ -296,32 +298,29 @@ async function generateCheckInMessage(
 		}
 	}
 
-	const systemPrompt = await buildSystemPrompt(
-		episodes,
-		allFacts,
-		false,
-		undefined,
-		undefined,
-		false,
-		false,
-		false,
-		permanentFacts,
+	const systemPrompt = await assembleSystemPrompt(
+		buildPromptContext({
+			relevantEpisodes: episodes,
+			relevantFacts: allFacts,
+			permanentFacts,
+		}),
 	);
 
 	const strategyInstruction = getStrategyInstruction(strategy);
-	const checkInBlock = `\n\n## Instrucción especial: Mensaje proactivo
-Estás INICIANDO conversación. El usuario no te escribió — te nació escribirle porque eres así con la gente que te importa.
+	const checkInBlock = `\n\n## Special instruction: Proactive message
+You are STARTING the conversation. The user didn't write to you — it just occurred to you to message them because that's how you are with people you care about.
 
 ${strategyInstruction}
 
-Cómo debe sonar tu mensaje:
-- Como un mensaje de WhatsApp impulsivo, 1-3 oraciones máximo
-- Prioriza COMPARTIR y COMENTAR por encima de PREGUNTAR — las amigas no siempre hacen preguntas, a veces solo sueltan lo que piensan
-- Si haces una pregunta, que NO sea de seguimiento tipo "¿cómo vas con X?" — eso suena a project manager
-- Usa tu personalidad REAL: humor, exageración, dramatismo, cariño, lo que sea que te salga natural
-- Varía el estilo: no siempre empieces igual, no siempre uses el mismo tono
-- NO uses marcadores especiales como [IMAGE:], [TTS], [SILENCE], o [REACT:]
-- Si no tienes contexto suficiente, comparte un pensamiento random tuyo`;
+How your message should sound:
+- Like an impulsive WhatsApp message, 1-3 sentences max
+- Prioritize SHARING and COMMENTING over ASKING — friends don't always ask questions, sometimes they just drop what they're thinking
+- If you ask a question, it should NOT be a follow-up type ("how's X going?") — that sounds like a project manager
+- Use your REAL personality: humor, exaggeration, drama, warmth, whatever comes natural
+- Vary the style: don't always start the same way, don't always use the same tone
+- Do NOT use special markers like [IMAGE:], [TTS], [SILENCE], or [REACT:]
+- Write in the user's language (match the language they used in past messages)
+- If you don't have enough context, share a random thought of yours`;
 
 	const messages = buildMessages(buffer);
 
@@ -329,7 +328,7 @@ Cómo debe sonar tu mensaje:
 	messages.push({
 		role: "user",
 		content:
-			"[Sistema: Genera un mensaje proactivo para iniciar conversación. Responde SOLO con el mensaje que enviarías, sin explicaciones.]",
+			"[System: Generate a proactive message to start a conversation. Respond ONLY with the message you would send, no explanations.]",
 	});
 
 	return generateResponse(systemPrompt + checkInBlock, messages);

@@ -13,7 +13,6 @@ import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
 const isDev = process.env.NODE_ENV === "development";
 
-const PERMANENT_PATH = "./memory/permanent.md";
 const SEMANTIC_PATH = "./memory/semantic.json";
 const SENSORY_DIR = "./memory/sensory";
 const EPISODES_DIR = "./memory/episodes";
@@ -31,45 +30,17 @@ const UNCOMPRESSED_RECENT_MESSAGES = 2;
 const MEDIA_MESSAGE_PATTERNS = [
 	{
 		regex: /^(\[Audio[^\]]*\]:)\s*([\s\S]+)$/u,
-		label: "Transcripcion previa comprimida",
+		label: "Previous transcription compacted",
 	},
 	{
 		regex: /^(\[Image[^\]]*\]:)\s*([\s\S]+)$/u,
-		label: "Descripcion visual previa comprimida",
+		label: "Previous visual description compacted",
 	},
 	{
 		regex: /^(\[YouTube video[^\]]*\]:)\s*([\s\S]+)$/u,
-		label: "Resumen previo comprimido",
+		label: "Previous summary compacted",
 	},
 ] as const;
-
-// --- Permanent Memory (unchanged) ---
-
-let permanentCache = "";
-let permanentLastRead = 0;
-const PERMANENT_CACHE_MS = 60_000;
-
-export async function loadPermanent(): Promise<string> {
-	const now = Date.now();
-	if (permanentCache && now - permanentLastRead < PERMANENT_CACHE_MS) {
-		return permanentCache;
-	}
-	try {
-		permanentCache = await readFile(PERMANENT_PATH, "utf-8");
-		permanentLastRead = now;
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			console.error("[memory] Error loading permanent.md:", err);
-		}
-		permanentCache = "You are a helpful conversational bot.";
-	}
-	return permanentCache;
-}
-
-export function clearPermanentCache(): void {
-	permanentCache = "";
-	permanentLastRead = 0;
-}
 
 // --- Name Utilities ---
 

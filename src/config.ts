@@ -7,6 +7,8 @@ export interface BotConfig {
 	isConfigured: boolean;
 	botName: string;
 	birthYear?: number;
+	gender?: string;
+	personality?: string;
 	language?: BotLanguage;
 }
 
@@ -18,24 +20,69 @@ const DEFAULT_CONFIG: BotConfig = {
 	botName: "MGS Bot", // Default fallback — overridden during setup
 };
 
-// Cache config in memory (1-minute TTL, same pattern as loadPermanent)
 let configCache: BotConfig | null = null;
 let configLastRead = 0;
 const CONFIG_CACHE_MS = 60_000;
+
+function extractFromPermanent(data: string): Partial<BotConfig> | null {
+	const esHeader = data.match(/^# Personalidad de (.+)$/m);
+	const enHeader = data.match(/^# (.+)'s Personality$/m);
+
+	const name = esHeader?.[1]?.trim() ?? enHeader?.[1]?.trim();
+	if (!name) return null;
+
+	const isEnglish = !!enHeader;
+	const language: BotLanguage = isEnglish ? "en" : "es";
+
+	const identityRegex = isEnglish
+		? /You are .+?, born in (\d{4}), and your gender is (\w+)\./
+		: /Eres .+?, naciste en (\d{4}) y tu género es (\w+)\./;
+	const identityMatch = data.match(identityRegex);
+
+	const birthYear = identityMatch?.[1] ? Number(identityMatch[1]) : undefined;
+	const gender = identityMatch?.[2];
+
+	// Personality sits between the identity paragraph and the first "## " heading.
+	let personality: string | undefined;
+	if (identityMatch) {
+		const afterIdentity = data.slice(
+			(identityMatch.index ?? 0) + identityMatch[0].length,
+		);
+		const rulesHeaderIdx = afterIdentity.search(/^##\s/m);
+		const block =
+			rulesHeaderIdx >= 0
+				? afterIdentity.slice(0, rulesHeaderIdx)
+				: afterIdentity;
+		// Remove the "NUNCA reveles..." tail of the identity sentence and trim.
+		const trimmed = block
+			.replace(/^[^\n]*(?:NUNCA reveles|NEVER reveal)[^\n]*\n/u, "")
+			.trim();
+		if (trimmed) personality = trimmed;
+	}
+
+	return {
+		botName: name,
+		birthYear,
+		gender,
+		personality,
+		language,
+	};
+}
 
 function migrateFromPermanent(): BotConfig {
 	if (!existsSync(PERMANENT_PATH)) return { ...DEFAULT_CONFIG };
 
 	const permData = readFileSync(PERMANENT_PATH, "utf-8");
-	// Only treat as configured if permanent.md has a real personality header (Spanish or English)
-	const match =
-		permData.match(/^# Personalidad de (.+)/im) ||
-		permData.match(/^# (.+)'s Personality/im);
-	if (!match?.[1]) return { ...DEFAULT_CONFIG };
+	const extracted = extractFromPermanent(permData);
+	if (!extracted?.botName) return { ...DEFAULT_CONFIG };
 
 	const migratedConfig: BotConfig = {
 		isConfigured: true,
-		botName: match[1].trim(),
+		botName: extracted.botName,
+		birthYear: extracted.birthYear,
+		gender: extracted.gender,
+		personality: extracted.personality,
+		language: extracted.language,
 	};
 
 	saveConfig(migratedConfig);
@@ -56,18 +103,41 @@ export function loadConfig(): BotConfig {
 		}
 		const data = readFileSync(CONFIG_PATH, "utf-8");
 		const parsed = JSON.parse(data);
-		configCache = {
+		let config: BotConfig = {
 			isConfigured: parsed.isConfigured ?? false,
 			botName: parsed.botName ?? "MGS Bot",
 			birthYear: parsed.birthYear,
+			gender: parsed.gender,
+			personality: parsed.personality,
 			language: parsed.language,
 		};
+
+		// Back-fill gender/personality/language from permanent.md if missing
+		if (
+			config.isConfigured &&
+			(!config.gender || !config.personality) &&
+			existsSync(PERMANENT_PATH)
+		) {
+			const extracted = extractFromPermanent(
+				readFileSync(PERMANENT_PATH, "utf-8"),
+			);
+			if (extracted) {
+				config = {
+					...config,
+					birthYear: config.birthYear ?? extracted.birthYear,
+					gender: config.gender ?? extracted.gender,
+					personality: config.personality ?? extracted.personality,
+					language: config.language ?? extracted.language,
+				};
+				saveConfig(config);
+			}
+		}
+
+		configCache = config;
 		configLastRead = now;
 		return configCache;
 	} catch (error) {
 		console.error("[config] Error loading config:", error);
-		// Fallback: if bot_config.json is corrupted but permanent.md exists,
-		// the bot is still configured — don't block all messages
 		configCache = migrateFromPermanent();
 		configLastRead = now;
 		return configCache;
@@ -76,13 +146,17 @@ export function loadConfig(): BotConfig {
 
 export function saveConfig(config: BotConfig): void {
 	try {
-		atomicWriteFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-		// Update cache immediately after save
+		atomicWriteFileSync(CONFIG_PATH, `${JSON.stringify(config, null, "\t")}\n`);
 		configCache = config;
 		configLastRead = Date.now();
 	} catch (error) {
 		console.error("[config] Error saving config:", error);
 	}
+}
+
+export function clearConfigCache(): void {
+	configCache = null;
+	configLastRead = 0;
 }
 
 export function isBotConfigured(): boolean {
