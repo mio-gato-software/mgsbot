@@ -16,35 +16,34 @@ export function botNow(date?: Date | number): dayjs.Dayjs {
 }
 
 /**
- * Format current date/time in Spanish for the system prompt.
- * To change the bot's date locale, update the day/month names below.
- * Example: "domingo, 1 de marzo de 2026, 9:48 a.m."
+ * Format current date/time in English for the system prompt.
+ * Example: "Sunday, March 1, 2026, 9:48 a.m."
  */
 export function formatDateTime(date?: Date | number): string {
 	const d = botNow(date);
 
 	const days = [
-		"domingo",
-		"lunes",
-		"martes",
-		"miércoles",
-		"jueves",
-		"viernes",
-		"sábado",
+		"Sunday",
+		"Monday",
+		"Tuesday",
+		"Wednesday",
+		"Thursday",
+		"Friday",
+		"Saturday",
 	];
 	const months = [
-		"enero",
-		"febrero",
-		"marzo",
-		"abril",
-		"mayo",
-		"junio",
-		"julio",
-		"agosto",
-		"septiembre",
-		"octubre",
-		"noviembre",
-		"diciembre",
+		"January",
+		"February",
+		"March",
+		"April",
+		"May",
+		"June",
+		"July",
+		"August",
+		"September",
+		"October",
+		"November",
+		"December",
 	];
 
 	const dayName = days[d.day()];
@@ -55,10 +54,10 @@ export function formatDateTime(date?: Date | number): string {
 	const minute = d.minute();
 
 	const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-	const ampm = hour < 12 ? "a.\u00a0m." : "p.\u00a0m.";
+	const ampm = hour < 12 ? "a.m." : "p.m.";
 	const minuteStr = String(minute).padStart(2, "0");
 
-	return `${dayName}, ${dayNum} de ${monthName} de ${year}, ${h12}:${minuteStr} ${ampm}`;
+	return `${dayName}, ${monthName} ${dayNum}, ${year}, ${h12}:${minuteStr} ${ampm}`;
 }
 
 /**
@@ -98,6 +97,6 @@ export function formatTime(date?: Date | number): string {
 	const hour = d.hour();
 	const minute = d.minute();
 	const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-	const ampm = hour < 12 ? "a.\u00a0m." : "p.\u00a0m.";
+	const ampm = hour < 12 ? "a.m." : "p.m.";
 	return `${h12}:${String(minute).padStart(2, "0")} ${ampm}`;
 }

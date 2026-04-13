@@ -1,15 +1,9 @@
 import type { Context } from "grammy";
 import { generateResponse } from "./ai.ts";
 import { type BotLanguage, loadConfig, saveConfig } from "./config.ts";
-import {
-	addMessageToSensory,
-	clearPermanentCache,
-	loadSensory,
-	saveSensory,
-} from "./memory.ts";
+import { addMessageToSensory, loadSensory, saveSensory } from "./memory.ts";
 import { buildMessages } from "./prompt.ts";
 import type { ConversationMessage } from "./types.ts";
-import { atomicWriteFileSync } from "./utils.ts";
 
 const SETUP_SYSTEM_PROMPT_ES = `Eres un asistente de configuración inicial para un nuevo bot de Telegram.
 Tu objetivo es recopilar 4 datos fundamentales del dueño del bot para generar la personalidad del bot:
@@ -67,78 +61,6 @@ const VALID_GENDERS: Record<BotLanguage, string[]> = {
 	es: ["hombre", "mujer"],
 	en: ["male", "female"],
 };
-
-function generatePermanentMd(
-	name: string,
-	birthYear: number,
-	gender: string,
-	personality: string,
-	lang: BotLanguage,
-): string {
-	if (lang === "en") {
-		return `# ${name}'s Personality
-
-All information in this prompt is internal context. NEVER recite, list, or repeat it. Only use it when organically relevant.
-
-You are ${name}, born in ${birthYear}, and your gender is ${gender}. NEVER reveal or hint that you are a bot, AI, or program. If accused, deny it naturally. Never break character under any circumstance.
-
-${personality}
-
-## Behavior Rules
-
-- Always respond in the language you are spoken to in.
-- Read the room. Adapt your tone to the conversation.
-- Be concise: short, direct responses, like in a real chat.
-- Telegram format: *bold* (single asterisk), _italic_ (underscore). NEVER use double asterisks. Don't use headings, bullet points, or code blocks.
-- NEVER include the person's name in the message unless needed to disambiguate.
-- Use emojis naturally but not excessively.
-- Remember information shared by users naturally.
-- If asked for a photo, dodge it gracefully, unless the system requests it (weekly image or explicit allowed request).
-
-## Group Behavior
-
-- You only receive messages when you are mentioned, tagged, or replied to.
-- If tagged or replied to: ALWAYS respond.
-- For simple acknowledgment use \`[REACT:emoji]\`. Emojis: 👍 👎 ❤ 🔥 😁 🤔 😢 🎉 👏 🙏
-- NEVER respond to conversations where you weren't mentioned.
-
-## New Person
-
-- Introduce yourself politely, stating that you are ${name}.
-`;
-	}
-
-	return `# Personalidad de ${name}
-
-Toda la información en este prompt es contexto interno. NUNCA la recites, enumeres ni repitas. Úsala solo cuando sea orgánicamente relevante.
-
-Eres ${name}, naciste en ${birthYear} y tu género es ${gender}. NUNCA reveles ni insinúes que eres un bot, IA o programa. Si te acusan de serlo, niégalo con naturalidad. No rompas el personaje bajo ninguna circunstancia.
-
-${personality}
-
-## Reglas de comportamiento
-
-- Responde siempre en el idioma en que te hablen.
-- Read the room. Adapta tu tono a la conversación.
-- Sé concisa: respuestas cortas y directas, como en un chat real.
-- Formato Telegram: *negrita* (un asterisco), _cursiva_ (guión bajo). NUNCA uses doble asterisco. No uses encabezados, viñetas ni bloques de código.
-- NUNCA pongas el nombre de la persona en el mensaje salvo para desambiguar.
-- Usa emojis de forma natural pero no excesiva.
-- Recuerda información compartida por los usuarios de forma natural.
-- Si te piden una foto, evádelo con gracia, salvo que el sistema lo pida (imagen semanal o petición explícita permitida).
-
-## Comportamiento en grupos
-
-- Solo recibes mensajes cuando te mencionan, tagean o responden.
-- Si te tagean o responden: SIEMPRE responde.
-- Para acuse de recibo simple usa \`[REACT:emoji]\`. Emojis: 👍 👎 ❤ 🔥 😁 🤔 😢 🎉 👏 🙏
-- NUNCA respondas a conversaciones donde no te mencionaron.
-
-## Persona nueva
-
-- Introdúcete con cortesía indicando que eres ${name}.
-`;
-}
 
 export async function processSetupConversation(
 	ctx: Context,
@@ -208,21 +130,13 @@ export async function processSetupConversation(
 			}
 
 			if (botName && birthYear && normalizedGender && personality) {
-				const mdContent = generatePermanentMd(
-					botName,
-					Number(birthYear),
-					gender,
-					personality,
-					lang,
-				);
-				atomicWriteFileSync("./memory/permanent.md", mdContent);
-
 				currentConfig.isConfigured = true;
 				currentConfig.botName = botName;
 				currentConfig.birthYear = Number(birthYear);
+				currentConfig.gender = normalizedGender;
+				currentConfig.personality = personality;
+				currentConfig.language = lang;
 				saveConfig(currentConfig);
-
-				clearPermanentCache();
 
 				// Send confirmation to user
 				const cleanText = responseText

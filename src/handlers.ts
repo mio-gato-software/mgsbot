@@ -15,7 +15,7 @@ import {
 	extractYouTubeUrl,
 } from "./media-handlers.ts";
 import { decayConfidence, loadSensory, saveSensory } from "./memory.ts";
-import { isSimpleAssistantMode } from "./prompt.ts";
+import { isSimpleAssistantMode } from "./prompt/modes.ts";
 import {
 	createChatProvider,
 	getChatProviderInfo,

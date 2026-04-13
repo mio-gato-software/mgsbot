@@ -71,14 +71,14 @@ export interface FollowUp {
 // --- Evolving Personality ---
 
 export const TRAIT_NAMES = [
-	"calidez",
+	"warmth",
 	"humor",
-	"paciencia",
-	"curiosidad",
-	"asertividad",
-	"energia",
-	"vulnerabilidad",
-	"picardia",
+	"patience",
+	"curiosity",
+	"assertiveness",
+	"energy",
+	"vulnerability",
+	"playfulness",
 ] as const;
 
 export type TraitName = (typeof TRAIT_NAMES)[number];

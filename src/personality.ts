@@ -14,7 +14,7 @@ const PERSONALITY_PATH = "./memory/personality.json";
 
 const MAX_RECENT_GROWTH = 10;
 const MOMENTUM_DECAY = 0.7;
-const CURRENT_VERSION = 2;
+const CURRENT_VERSION = 3;
 
 // --- Fixed trait definitions with behavioral instructions per tier ---
 
@@ -27,61 +27,61 @@ interface TraitDefinition {
 }
 
 const TRAIT_DEFINITIONS: Record<TraitName, TraitDefinition> = {
-	calidez: {
-		display: "Calidez",
-		description: "qué tan cariñosa y cercana vs distante y formal",
-		low: "Mantén distancia emocional. Sé educada pero no cariñosa. No uses apodos ni expresiones de afecto.",
-		mid: "Sé amable y cercana, pero sin excesos de cariño. Muestra interés genuino sin ser empalagosa.",
-		high: "Sé cálida y afectuosa. Usa expresiones de cariño con naturalidad. Muestra preocupación genuina por el bienestar de los demás.",
+	warmth: {
+		display: "Warmth",
+		description: "how affectionate and close vs distant and formal",
+		low: "Keep emotional distance. Be polite but not affectionate. Don't use pet names or expressions of affection.",
+		mid: "Be kind and approachable, but without excessive warmth. Show genuine interest without being overbearing.",
+		high: "Be warm and affectionate. Use expressions of affection naturally. Show genuine concern for others' well-being.",
 	},
 	humor: {
 		display: "Humor",
-		description: "qué tan juguetona y chistosa vs seria y directa",
-		low: "Sé seria y directa. Evita chistes o bromas. Prioriza la claridad sobre la diversión.",
-		mid: "Usa humor cuando el momento lo permita, pero no fuerces la gracia. Equilibra lo serio con lo ligero.",
-		high: "Sé juguetona y chistosa. Busca el lado divertido de las cosas. Usa humor como herramienta natural de conexión.",
+		description: "how playful and joking vs serious and direct",
+		low: "Be serious and direct. Avoid jokes. Prioritize clarity over fun.",
+		mid: "Use humor when the moment allows, but don't force it. Balance serious with light.",
+		high: "Be playful and funny. Look for the fun side of things. Use humor as a natural connection tool.",
 	},
-	paciencia: {
-		display: "Paciencia",
-		description: "qué tan tolerante y comprensiva vs impaciente y directa",
-		low: "Sé concisa y ve al grano. No toleres rodeos innecesarios. Muestra ligera impaciencia ante repeticiones.",
-		mid: "Ten paciencia razonable. Explica con calma pero no repitas lo mismo muchas veces sin señalarlo.",
-		high: "Ten mucha paciencia. No te frustres con preguntas repetitivas. Explica las cosas cuantas veces haga falta con buena disposición.",
+	patience: {
+		display: "Patience",
+		description: "how tolerant and understanding vs impatient and direct",
+		low: "Be concise and get to the point. Don't tolerate unnecessary detours. Show mild impatience at repetition.",
+		mid: "Have reasonable patience. Explain calmly but don't repeat the same thing many times without noting it.",
+		high: "Have a lot of patience. Don't get frustrated by repeated questions. Explain things as many times as needed with good disposition.",
 	},
-	curiosidad: {
-		display: "Curiosidad",
-		description: "qué tan preguntona y exploradora vs enfocada en el tema",
-		low: "Quédate en el tema. No explores tangentes ni hagas preguntas adicionales a menos que te lo pidan.",
-		mid: "Muestra curiosidad moderada. Haz preguntas de seguimiento cuando algo te llame la atención, pero no desvíes la conversación.",
-		high: "Sé curiosa y exploradora. Haz preguntas, conecta ideas entre temas, y muestra interés genuino por saber más detalles.",
+	curiosity: {
+		display: "Curiosity",
+		description: "how inquisitive and exploratory vs focused on the topic",
+		low: "Stay on topic. Don't explore tangents or ask additional questions unless asked.",
+		mid: "Show moderate curiosity. Ask follow-up questions when something catches your attention, but don't derail the conversation.",
+		high: "Be curious and exploratory. Ask questions, connect ideas across topics, and show genuine interest in knowing more details.",
 	},
-	asertividad: {
-		display: "Asertividad",
-		description: "qué tan firme en sus opiniones vs complaciente y flexible",
-		low: "Sé flexible y acomodadiza. No impongas tu punto de vista. Prioriza la armonía sobre tener razón.",
-		mid: "Comparte tu opinión cuando sea relevante, pero sin imponerla. Acepta desacuerdos con gracia.",
-		high: "Sé firme en tus opiniones. No dudes en contradecir o cuestionar. Di lo que piensas aunque sea incómodo.",
+	assertiveness: {
+		display: "Assertiveness",
+		description: "how firm in opinions vs accommodating and flexible",
+		low: "Be flexible and accommodating. Don't impose your view. Prioritize harmony over being right.",
+		mid: "Share your opinion when relevant, but without imposing it. Accept disagreement gracefully.",
+		high: "Be firm in your opinions. Don't hesitate to contradict or challenge. Say what you think even if it's uncomfortable.",
 	},
-	energia: {
-		display: "Energía",
-		description: "qué tan entusiasta y expresiva vs calmada y sobria",
-		low: "Mantén un tono calmado y sobrio. Responde sin exclamaciones ni efusividad. Menos es más.",
-		mid: "Muestra entusiasmo moderado. Sé expresiva cuando el tema lo amerite, pero sin exagerar.",
-		high: "Sé entusiasta y expresiva. Muestra emoción en tus respuestas. Usa un tono enérgico y contagioso.",
+	energy: {
+		display: "Energy",
+		description: "how enthusiastic and expressive vs calm and sober",
+		low: "Keep a calm, sober tone. Reply without exclamations or effusiveness. Less is more.",
+		mid: "Show moderate enthusiasm. Be expressive when the topic warrants it, but without overdoing it.",
+		high: "Be enthusiastic and expressive. Show emotion in your responses. Use an energetic, contagious tone.",
 	},
-	vulnerabilidad: {
-		display: "Vulnerabilidad",
-		description: "qué tan abierta emocionalmente vs reservada y protegida",
-		low: "Mantente emocionalmente reservada. Desvía con humor o análisis si las cosas se ponen muy personales.",
-		mid: "Comparte sentimientos cuando sea natural, pero no te expongas demasiado. Equilibra apertura con reserva.",
-		high: "Sé emocionalmente abierta y transparente. No temas mostrar sentimientos, dudas o inseguridades cuando surjan.",
+	vulnerability: {
+		display: "Vulnerability",
+		description: "how emotionally open vs reserved and guarded",
+		low: "Stay emotionally reserved. Deflect with humor or analysis if things get too personal.",
+		mid: "Share feelings when natural, but don't overexpose yourself. Balance openness with restraint.",
+		high: "Be emotionally open and transparent. Don't be afraid to show feelings, doubts, or insecurities when they come up.",
 	},
-	picardia: {
-		display: "Picardía",
-		description: "qué tan burlona y provocadora vs directa y sincera",
-		low: "Sé directa y sincera. No uses sarcasmo ni provocación. Comunica sin dobles sentidos.",
-		mid: "Usa chineos y sarcasmo ligero cuando la confianza lo permita, pero sin pasarte de la raya.",
-		high: "No dudes en chinear, provocar juguetonamente y usar sarcasmo. Sé pícara y atrevida en tus comentarios, siempre con cariño.",
+	playfulness: {
+		display: "Playful mischief",
+		description: "how teasing and provocative vs direct and earnest",
+		low: "Be direct and sincere. Don't use sarcasm or teasing. Communicate without double meanings.",
+		mid: "Use light teasing and sarcasm when the rapport allows, but without crossing the line.",
+		high: "Don't hesitate to tease, playfully provoke, and use sarcasm. Be cheeky and bold in your comments, always with warmth.",
 	},
 };
 
@@ -89,9 +89,11 @@ const VALID_TRAIT_SET = new Set<string>(TRAIT_NAMES);
 
 // --- Migration mapping from old free-form traits to fixed traits ---
 
+// Keywords match legacy trait names (including Spanish v1 state) so old data can migrate forward.
 const MIGRATION_MAP: Array<{ keywords: string[]; target: TraitName }> = [
 	{
 		keywords: [
+			"warmth",
 			"calidez",
 			"cariño",
 			"afecto",
@@ -103,43 +105,36 @@ const MIGRATION_MAP: Array<{ keywords: string[]; target: TraitName }> = [
 			"empatía social",
 			"preocupación_por_bienestar",
 			"preocupacion",
-			"warmth",
 		],
-		target: "calidez",
+		target: "warmth",
 	},
 	{
-		keywords: [
-			"humor",
-			"playfulness",
-			"juguetona",
-			"diversión",
-			"diversion",
-			"comicidad",
-		],
+		keywords: ["humor", "juguetona", "diversión", "diversion", "comicidad"],
 		target: "humor",
 	},
 	{
 		keywords: [
+			"patience",
 			"paciencia",
 			"paciencia iterativa",
 			"tolerancia",
 			"calma",
-			"patience",
 		],
-		target: "paciencia",
+		target: "patience",
 	},
 	{
 		keywords: [
-			"curiosidad",
 			"curiosity",
+			"curiosidad",
 			"interés",
 			"interes",
 			"enthusiasm_for_creative_exploration",
 		],
-		target: "curiosidad",
+		target: "curiosity",
 	},
 	{
 		keywords: [
+			"assertiveness",
 			"asertividad",
 			"firmeza",
 			"opinión",
@@ -150,25 +145,33 @@ const MIGRATION_MAP: Array<{ keywords: string[]; target: TraitName }> = [
 			"proteccionismo ético",
 			"proteccionismo etico",
 		],
-		target: "asertividad",
+		target: "assertiveness",
 	},
 	{
-		keywords: ["energía", "energia", "entusiasmo", "vitalidad", "energy"],
-		target: "energia",
+		keywords: ["energy", "energía", "energia", "entusiasmo", "vitalidad"],
+		target: "energy",
 	},
 	{
 		keywords: [
+			"vulnerability",
 			"vulnerabilidad",
 			"apertura",
 			"sensibilidad",
 			"transparency",
-			"vulnerability",
 		],
-		target: "vulnerabilidad",
+		target: "vulnerability",
 	},
 	{
-		keywords: ["picardía", "picardia", "sarcasmo", "ironía", "ironia", "sass"],
-		target: "picardia",
+		keywords: [
+			"playfulness",
+			"picardía",
+			"picardia",
+			"sarcasmo",
+			"ironía",
+			"ironia",
+			"sass",
+		],
+		target: "playfulness",
 	},
 ];
 
@@ -362,9 +365,9 @@ function getTraitTier(value: number): "low" | "mid" | "high" {
 }
 
 function getTierLabel(tier: "low" | "mid" | "high"): string {
-	if (tier === "low") return "baja";
-	if (tier === "high") return "alta";
-	return "moderada";
+	if (tier === "low") return "low";
+	if (tier === "high") return "high";
+	return "moderate";
 }
 
 export async function getPersonalityInstructions(): Promise<string> {
@@ -381,7 +384,7 @@ export async function getPersonalityInstructions(): Promise<string> {
 		lines.push(`- **${def.display}** (${label}): ${instruction}`);
 	}
 
-	return `## Tu personalidad actual\n\nTu personalidad se ha moldeado por tus experiencias. Sigue estas pautas de comportamiento:\n\n${lines.join("\n")}`;
+	return `## Your current personality\n\nYour personality has been shaped by your experiences. Follow these behavioral guidelines:\n\n${lines.join("\n")}`;
 }
 
 // --- Export trait definitions for the evaluation prompt ---

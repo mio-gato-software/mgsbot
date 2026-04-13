@@ -3,7 +3,7 @@ import { BOT_TZ, getBotHour, getDateString } from "./bot-time.ts";
 interface DailyWeather {
 	date: string; // "2026-02-03" (Dominican timezone)
 	period: string; // "morning" | "afternoon" | "night"
-	description: string; // Spanish: "Despejado"
+	description: string; // English: "clear and sunny"
 	temperature: number;
 	humidity: number;
 	windSpeed: number;
@@ -30,38 +30,7 @@ function getCurrentPeriod(): "morning" | "afternoon" | "night" {
 	return "morning";
 }
 
-const WMO_DESCRIPTIONS_ES: Record<number, string> = {
-	0: "Despejado",
-	1: "Mayormente despejado",
-	2: "Parcialmente nublado",
-	3: "Nublado",
-	45: "Niebla",
-	48: "Niebla con escarcha",
-	51: "Llovizna ligera",
-	53: "Llovizna moderada",
-	55: "Llovizna intensa",
-	56: "Llovizna helada ligera",
-	57: "Llovizna helada intensa",
-	61: "Lluvia ligera",
-	63: "Lluvia moderada",
-	65: "Lluvia intensa",
-	66: "Lluvia helada ligera",
-	67: "Lluvia helada intensa",
-	71: "Nieve ligera",
-	73: "Nieve moderada",
-	75: "Nieve intensa",
-	77: "Granizo fino",
-	80: "Chubascos ligeros",
-	81: "Chubascos moderados",
-	82: "Chubascos intensos",
-	85: "Chubascos de nieve ligeros",
-	86: "Chubascos de nieve intensos",
-	95: "Tormenta eléctrica",
-	96: "Tormenta con granizo ligero",
-	99: "Tormenta con granizo intenso",
-};
-
-const WMO_DESCRIPTIONS_EN: Record<number, string> = {
+const WMO_DESCRIPTIONS: Record<number, string> = {
 	0: "clear and sunny",
 	1: "mostly clear",
 	2: "partly cloudy",
@@ -155,7 +124,7 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 		const weather: DailyWeather = {
 			date: getTodayDate(),
 			period: getCurrentPeriod(),
-			description: WMO_DESCRIPTIONS_ES[current.weather_code] ?? "Desconocido",
+			description: WMO_DESCRIPTIONS[current.weather_code] ?? "unknown",
 			temperature: current.temperature_2m,
 			humidity: current.relative_humidity_2m,
 			windSpeed: current.wind_speed_10m,
@@ -191,34 +160,17 @@ async function getWeather(): Promise<DailyWeather | null> {
 	return fetchWeather();
 }
 
-/**
- * Get current weather context in Spanish for system prompt injection.
- * Returns a string like "Clima actual en Santo Domingo: Despejado, 28°C, humedad 65%, viento 12 km/h"
- * or null on failure.
- */
 export async function getCurrentWeatherContext(): Promise<string | null> {
 	const weather = await getWeather();
 	if (!weather) return null;
 
-	return `Clima actual en Santo Domingo: ${weather.description}, ${Math.round(weather.temperature)}°C, humedad ${Math.round(weather.humidity)}%, viento ${Math.round(weather.windSpeed)} km/h`;
+	return `Current weather in Santo Domingo: ${weather.description}, ${Math.round(weather.temperature)}°C, ${Math.round(weather.humidity)}% humidity, wind ${Math.round(weather.windSpeed)} km/h`;
 }
 
-/**
- * Get daily weather for image generation prompts.
- * Returns English description like "clear and sunny, warm (28C)" or null on failure.
- */
 export async function getDailyWeatherForImage(): Promise<string | null> {
 	const weather = await getWeather();
 	if (!weather) return null;
 
-	// Find English description from the weather code
-	// We need to reverse-lookup the code from the Spanish description
-	const code = Number(
-		Object.entries(WMO_DESCRIPTIONS_ES).find(
-			([, desc]) => desc === weather.description,
-		)?.[0],
-	);
-	const englishDesc = WMO_DESCRIPTIONS_EN[code] ?? "clear";
 	const tempContext = temperatureContext(weather.temperature);
-	return `${englishDesc}, ${tempContext} (${Math.round(weather.temperature)}C)`;
+	return `${weather.description}, ${tempContext} (${Math.round(weather.temperature)}C)`;
 }
