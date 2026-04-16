@@ -68,7 +68,7 @@ export class GeminiSttProvider implements SttProvider {
 					createPartFromUri(uploaded.uri ?? "", uploaded.mimeType ?? ""),
 					isTutorActive()
 						? "Transcribe this audio exactly as spoken. The speaker is practicing English, so the audio is most likely in English. Return ONLY the transcription, nothing else."
-						: "Transcribe this audio exactly as spoken, in the original language. Return ONLY the transcription, nothing else.",
+						: "Transcribe this audio exactly as spoken, preserving the original language. The speaker is most likely speaking Spanish, but may occasionally switch to English (code-switching is allowed within a single utterance). Do NOT translate — if they speak Spanish, output Spanish; if they speak English, output English. Return ONLY the transcription, nothing else.",
 				]),
 			}),
 		);

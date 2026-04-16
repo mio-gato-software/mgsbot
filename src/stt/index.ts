@@ -27,15 +27,15 @@ function createSttProvider(): SttProvider | null {
 	const hasGoogle = !!process.env.GOOGLE_API_KEY;
 
 	// Ordered candidates: explicit choice first (if its key is present), then
-	// the original fallback chain (fal → lemonfox → gemini).
+	// the fallback chain (gemini → fal → lemonfox).
 	const order: Array<"fal" | "lemonfox" | "gemini"> = [];
 	if (explicit === "fal" && hasFal) order.push("fal");
 	else if (explicit === "lemonfox" && hasLemonFox) order.push("lemonfox");
 	else if (explicit === "gemini" && hasGoogle) order.push("gemini");
 
+	if (hasGoogle && !order.includes("gemini")) order.push("gemini");
 	if (hasFal && !order.includes("fal")) order.push("fal");
 	if (hasLemonFox && !order.includes("lemonfox")) order.push("lemonfox");
-	if (hasGoogle && !order.includes("gemini")) order.push("gemini");
 
 	for (const candidate of order) {
 		if (candidate === "fal") {

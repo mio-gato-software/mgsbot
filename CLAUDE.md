@@ -180,7 +180,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `LEMON_FOX_API_KEY`: For TTS voice responses (if `TTS_PROVIDER=lemonfox`) and audio transcription (STT)
 - `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`: For ElevenLabs TTS voice responses (default voice ID if not set)
 - `TTS_PROVIDER`: `elevenlabs` or `lemonfox` (auto-detected based on available API keys, ElevenLabs takes priority)
-- `STT_PROVIDER`: Set `gemini` to force Gemini for audio transcription instead of LemonFox (default: uses LemonFox when `LEMON_FOX_API_KEY` is set)
+- `STT_PROVIDER`: `gemini` (default), `fal`, or `lemonfox`. When unset, falls back in order: gemini → fal → lemonfox (first with a key wins)
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
 - `ENABLE_FOLLOW_UPS`: Set `true` to enable proactive follow-ups in DMs
 - `ENABLE_CHECK_INS`: Set `true` to enable proactive check-in messages in DMs (~2/week)
