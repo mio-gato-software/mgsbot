@@ -1,15 +1,24 @@
-import { isFullAccessActive } from "../full-access.ts";
-import { isTutorActive } from "../tutor.ts";
 import type { PromptContext, PromptModeFlags } from "./types.ts";
 
 export const isSimpleAssistantMode =
 	process.env.SIMPLE_ASSISTANT_MODE === "true";
 
+const fullAccessActive = process.env.FULL_ACCESS_MODE === "true";
+const tutorActive = process.env.ENABLE_TUTOR_MODE === "true";
+
+export function isFullAccessActive(): boolean {
+	return fullAccessActive;
+}
+
+export function isTutorActive(): boolean {
+	return tutorActive;
+}
+
 export function resolveModeFlags(): PromptModeFlags {
 	return {
 		simpleAssistant: isSimpleAssistantMode,
-		fullAccess: isFullAccessActive(),
-		tutor: isTutorActive(),
+		fullAccess: fullAccessActive,
+		tutor: tutorActive,
 	};
 }
 

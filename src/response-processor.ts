@@ -3,11 +3,10 @@ import type { Context } from "grammy";
 import { InputFile } from "grammy";
 import { getBaseImagePath } from "./appearance.ts";
 import { getBotName } from "./config.ts";
-import { isFullAccessActive } from "./full-access.ts";
 import { editImage, generateImage } from "./image/index.ts";
 import { getWeekStart } from "./image-scheduler.ts";
-import { saveSensory } from "./memory.ts";
-import { isSimpleAssistantMode } from "./prompt/modes.ts";
+import { saveSensory } from "./memory/index.ts";
+import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
 import { textToSpeech } from "./tts/index.ts";
 import type { SensoryBuffer } from "./types.ts";
 

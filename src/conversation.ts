@@ -1,12 +1,12 @@
 import type { Context } from "grammy";
-import { evaluateConversationChunk, generateResponse } from "./ai.ts";
+import { generateResponse } from "./ai/core.ts";
+import { evaluateConversationChunk } from "./ai/evaluation.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { generateEmbedding } from "./embeddings.ts";
 import {
 	checkAndCancelResolvedFollowUps,
 	detectAndStoreFollowUps,
 } from "./follow-ups.ts";
-import { isFullAccessActive } from "./full-access.ts";
 import { registerIdentity, resolveCanonicalName } from "./identities.ts";
 import { shouldGenerateImageNow } from "./image-scheduler.ts";
 import {
@@ -21,12 +21,13 @@ import {
 	hasSignificantContent,
 	loadSemanticStore,
 	loadSensory,
-} from "./memory.ts";
+	withChatLock,
+} from "./memory/index.ts";
 import { applyPersonalitySignals } from "./personality.ts";
 import { assembleSystemPrompt } from "./prompt/assemble.ts";
 import { buildPromptContext } from "./prompt/context.ts";
-import { isSimpleAssistantMode } from "./prompt/modes.ts";
-import { buildMessages } from "./prompt.ts";
+import { buildMessages } from "./prompt/history.ts";
+import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
 import type { MediaAttachment } from "./providers/types.ts";
 import { sendResponse } from "./response-processor.ts";
 import { isTtsAvailable } from "./tts/index.ts";
@@ -93,17 +94,23 @@ export async function processConversation(
 		await registerIdentity(userId, userName, username);
 	}
 
-	// Load sensory buffer
-	const buffer = await loadSensory(chatId);
-	const allowPhotoRequest = buffer.allowPhotoRequest === true;
-	const userMessage: ConversationMessage = {
-		role: "user",
-		name: userName,
-		userId,
-		content: userContent,
-		timestamp: Date.now(),
-	};
-	const overflow = await addMessageToSensory(buffer, userMessage);
+	// Load sensory buffer and append the user turn atomically per chat.
+	const { buffer, overflow, allowPhotoRequest } = await withChatLock(
+		chatId,
+		async () => {
+			const buf = await loadSensory(chatId);
+			const allow = buf.allowPhotoRequest === true;
+			const userMessage: ConversationMessage = {
+				role: "user",
+				name: userName,
+				userId,
+				content: userContent,
+				timestamp: Date.now(),
+			};
+			const ov = await addMessageToSensory(buf, userMessage);
+			return { buffer: buf, overflow: ov, allowPhotoRequest: allow };
+		},
+	);
 	logUserMessage(userName, userContent).catch(console.error);
 
 	// Promote overflow to memory in background
@@ -225,7 +232,13 @@ export async function processConversation(
 			content: result.cleanedText,
 			timestamp: Date.now(),
 		};
-		const botOverflow = await addMessageToSensory(buffer, botMessage);
+		// Serialize per chat: a concurrent user turn arriving right now must not
+		// race with this append. Reload the buffer under the lock so we don't
+		// clobber its state with the stale in-memory copy.
+		const botOverflow = await withChatLock(chatId, async () => {
+			const fresh = await loadSensory(chatId);
+			return addMessageToSensory(fresh, botMessage);
+		});
 		logBotMessage(result.cleanedText).catch(console.error);
 
 		// Promote bot overflow too

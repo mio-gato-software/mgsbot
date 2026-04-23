@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { normalizeName } from "./memory.ts";
+import { normalizeName } from "./memory/queries.ts";
 import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
 const IDENTITIES_PATH = "./memory/identities.json";
