@@ -1,29 +1,9 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
+import { loadEnvIntoProcess } from "./src/utils.ts";
 
 // --- Load .env manually (compiled binaries may not auto-load it) ---
 
-function loadEnvFile(): void {
-	if (!existsSync("./.env")) return;
-	const content = readFileSync("./.env", "utf-8");
-	for (const line of content.split("\n")) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith("#")) continue;
-		const eqIdx = trimmed.indexOf("=");
-		if (eqIdx === -1) continue;
-		const key = trimmed.slice(0, eqIdx).trim();
-		let value = trimmed.slice(eqIdx + 1).trim();
-		// Strip surrounding quotes (single or double)
-		if (
-			(value.startsWith('"') && value.endsWith('"')) ||
-			(value.startsWith("'") && value.endsWith("'"))
-		) {
-			value = value.slice(1, -1);
-		}
-		process.env[key] = value;
-	}
-}
-
-loadEnvFile();
+loadEnvIntoProcess();
 
 // --- Normalize env var aliases ---
 
@@ -40,7 +20,7 @@ const needsSetup =
 if (needsSetup) {
 	const { runSetupWizard } = await import("./src/wizard.ts");
 	await runSetupWizard();
-	loadEnvFile();
+	loadEnvIntoProcess();
 }
 
 // --- Bot imports (after env vars are confirmed present) ---
@@ -54,7 +34,7 @@ const { isBotOff, isSleepingHour, registerHandlers } = await import(
 	"./src/handlers.ts"
 );
 const { initIdentities } = await import("./src/identities.ts");
-const { initMemoryDirs } = await import("./src/memory.ts");
+const { initMemoryDirs } = await import("./src/memory/index.ts");
 const { initPersonality } = await import("./src/personality.ts");
 
 // --- Startup env validation ---

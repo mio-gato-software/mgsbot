@@ -3,7 +3,7 @@ import {
 	createUserContent,
 	GoogleGenAI,
 } from "@google/genai";
-import { isTutorActive } from "../tutor.ts";
+import { isTutorActive } from "../prompt/modes.ts";
 import { withRetry } from "../utils.ts";
 import type { SttProvider } from "./types.ts";
 

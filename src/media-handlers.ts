@@ -1,6 +1,7 @@
 import { unlink } from "node:fs/promises";
 import type { Context } from "grammy";
-import { transcribeAudio } from "./ai.ts";
+import { transcribeAudio } from "./stt/index.ts";
+import { safeMediaExtension } from "./utils.ts";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -119,7 +120,8 @@ export async function downloadImage(
 		);
 	}
 
-	const ext = file.file_path?.split(".").pop() ?? "jpg";
+	const rawExt = file.file_path?.split(".").pop();
+	const ext = safeMediaExtension(rawExt, "jpg");
 	const mimeType = ext === "png" ? "image/png" : "image/jpeg";
 	const filePath = `./audios/photo_${ctx.message?.message_id}.${ext}`;
 	const buffer = Buffer.from(await response.arrayBuffer());

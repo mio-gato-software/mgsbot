@@ -1,4 +1,4 @@
-import { normalizeName } from "../../memory.ts";
+import { normalizeName } from "../../memory/queries.ts";
 import type { SemanticFact } from "../../types.ts";
 import type { PromptContext, PromptSection } from "../types.ts";
 

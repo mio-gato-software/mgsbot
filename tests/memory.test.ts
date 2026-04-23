@@ -4,7 +4,7 @@ import {
 	computeTextScore,
 	hasSignificantContent,
 	normalizeName,
-} from "../src/memory.ts";
+} from "../src/memory/queries.ts";
 import type { ConversationMessage } from "../src/types.ts";
 
 describe("cosineSimilarity", () => {

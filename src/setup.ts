@@ -1,8 +1,13 @@
 import type { Context } from "grammy";
-import { generateResponse } from "./ai.ts";
+import { generateResponse } from "./ai/core.ts";
 import { type BotLanguage, loadConfig, saveConfig } from "./config.ts";
-import { addMessageToSensory, loadSensory, saveSensory } from "./memory.ts";
-import { buildMessages } from "./prompt.ts";
+import {
+	addMessageToSensory,
+	loadSensory,
+	saveSensory,
+	withChatLock,
+} from "./memory/index.ts";
+import { buildMessages } from "./prompt/history.ts";
 import type { ConversationMessage } from "./types.ts";
 
 const SETUP_SYSTEM_PROMPT_ES = `Eres un asistente de configuración inicial para un nuevo bot de Telegram.
@@ -75,16 +80,18 @@ export async function processSetupConversation(
 	const lang: BotLanguage = currentConfig.language ?? "es";
 
 	// Load sensory buffer to keep track of the setup conversation
-	const buffer = await loadSensory(chatId);
-
-	const userMessage: ConversationMessage = {
-		role: "user",
-		name: userName,
-		userId,
-		content: userContent,
-		timestamp: Date.now(),
-	};
-	await addMessageToSensory(buffer, userMessage);
+	const buffer = await withChatLock(chatId, async () => {
+		const buf = await loadSensory(chatId);
+		const userMessage: ConversationMessage = {
+			role: "user",
+			name: userName,
+			userId,
+			content: userContent,
+			timestamp: Date.now(),
+		};
+		await addMessageToSensory(buf, userMessage);
+		return buf;
+	});
 
 	const messages = buildMessages(buffer);
 
@@ -102,7 +109,10 @@ export async function processSetupConversation(
 		content: responseText,
 		timestamp: Date.now(),
 	};
-	await addMessageToSensory(buffer, botMessage);
+	await withChatLock(chatId, async () => {
+		const fresh = await loadSensory(chatId);
+		await addMessageToSensory(fresh, botMessage);
+	});
 
 	// Check if JSON was generated
 	const jsonMatch = responseText.match(
@@ -158,8 +168,11 @@ export async function processSetupConversation(
 				await ctx.reply(confirmMsg);
 
 				// Clear the setup conversation to start fresh
-				buffer.messages = [];
-				await saveSensory(buffer);
+				await withChatLock(chatId, async () => {
+					const fresh = await loadSensory(chatId);
+					fresh.messages = [];
+					await saveSensory(fresh);
+				});
 				return;
 			}
 		} catch (error) {

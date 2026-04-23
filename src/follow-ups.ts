@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { Api } from "grammy";
-import { extractFollowUps, generateResponse } from "./ai.ts";
+import { generateResponse } from "./ai/core.ts";
+import { extractFollowUps } from "./ai/evaluation.ts";
 import {
 	botNow,
 	formatDateTime,
@@ -11,7 +12,8 @@ import {
 	addMessageToSensory,
 	computeTextScore,
 	loadSensory,
-} from "./memory.ts";
+	withChatLock,
+} from "./memory/index.ts";
 import type { ConversationMessage, FollowUp } from "./types.ts";
 import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
@@ -258,7 +260,10 @@ export async function checkAndSendFollowUps(
 			content: message,
 			timestamp: Date.now(),
 		};
-		await addMessageToSensory(buffer, botMessage);
+		await withChatLock(followUp.chatId, async () => {
+			const fresh = await loadSensory(followUp.chatId);
+			await addMessageToSensory(fresh, botMessage);
+		});
 	} catch (error) {
 		console.error("[follow-ups] Error sending follow-up:", error);
 		if (followUp.attempts >= MAX_ATTEMPTS) {

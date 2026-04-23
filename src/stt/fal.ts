@@ -1,4 +1,4 @@
-import { isTutorActive } from "../tutor.ts";
+import { isTutorActive } from "../prompt/modes.ts";
 import type { SttProvider } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";

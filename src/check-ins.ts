@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import type { Api } from "grammy";
-import { generateResponse } from "./ai.ts";
+import { generateResponse } from "./ai/core.ts";
 import { botNow, getBotHour, getBotMinute } from "./bot-time.ts";
 import { generateEmbedding } from "./embeddings.ts";
 import {
@@ -11,10 +11,11 @@ import {
 	getRelevantEpisodes,
 	getRelevantFacts,
 	loadSensory,
-} from "./memory.ts";
+	withChatLock,
+} from "./memory/index.ts";
 import { assembleSystemPrompt } from "./prompt/assemble.ts";
 import { buildPromptContext } from "./prompt/context.ts";
-import { buildMessages } from "./prompt.ts";
+import { buildMessages } from "./prompt/history.ts";
 import type {
 	CheckInSlot,
 	CheckInState,
@@ -452,7 +453,10 @@ export async function checkAndSendCheckIns(
 				content: message,
 				timestamp: Date.now(),
 			};
-			await addMessageToSensory(buffer, botMessage);
+			await withChatLock(chatId, async () => {
+				const fresh = await loadSensory(chatId);
+				await addMessageToSensory(fresh, botMessage);
+			});
 		} catch (error) {
 			console.error("[check-ins] Error sending check-in:", error);
 			pendingSlot.status = "skipped";

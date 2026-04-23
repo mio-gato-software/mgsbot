@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { type BotLanguage, loadConfig, saveConfig } from "./config.ts";
+import { parseEnvFile } from "./utils.ts";
 
 interface WizardData {
 	botToken: string;
@@ -50,30 +51,8 @@ function validateInputs(data: WizardData): ValidationResult {
 	return { valid: Object.keys(errors).length === 0, errors };
 }
 
-function loadExistingEnv(): Record<string, string> {
-	if (!existsSync("./.env")) return {};
-	const content = readFileSync("./.env", "utf-8");
-	const env: Record<string, string> = {};
-	for (const line of content.split("\n")) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith("#")) continue;
-		const eqIdx = trimmed.indexOf("=");
-		if (eqIdx === -1) continue;
-		const key = trimmed.slice(0, eqIdx).trim();
-		let value = trimmed.slice(eqIdx + 1).trim();
-		if (
-			(value.startsWith('"') && value.endsWith('"')) ||
-			(value.startsWith("'") && value.endsWith("'"))
-		) {
-			value = value.slice(1, -1);
-		}
-		env[key] = value;
-	}
-	return env;
-}
-
 function writeEnvFile(data: WizardData): void {
-	const existing = loadExistingEnv();
+	const existing = parseEnvFile();
 
 	// Wizard-managed keys
 	existing.BOT_TOKEN = data.botToken.trim();
