@@ -7,20 +7,14 @@ import {
 	saveSensory,
 	withChatLock,
 } from "./memory/index.ts";
+import {
+	CHAT_PROVIDER_NAMES,
+	formatProviderCommandStatus,
+	isChatProviderName,
+} from "./provider-options.ts";
 import { getChatProviderInfo, switchChatProvider } from "./providers/index.ts";
 
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
-
-const VALID_PROVIDERS = [
-	"gemini",
-	"openrouter",
-	"anthropic",
-	"azure",
-	"alibaba",
-	"fireworks",
-	"openai",
-	"fal",
-] as const;
 
 export function registerCommands(bot: Bot): void {
 	// /provider — switch chat provider (DM only, owner only)
@@ -39,17 +33,13 @@ export function registerCommands(bot: Bot): void {
 
 		if (!providerArg) {
 			const info = getChatProviderInfo();
-			await ctx.reply(
-				`Proveedor: ${info.provider}\nModelo: ${info.model}\n\nProveedores: ${VALID_PROVIDERS.join(", ")}`,
-			);
+			await ctx.reply(formatProviderCommandStatus(info));
 			return;
 		}
 
-		if (
-			!VALID_PROVIDERS.includes(providerArg as (typeof VALID_PROVIDERS)[number])
-		) {
+		if (!isChatProviderName(providerArg)) {
 			await ctx.reply(
-				`Uso:\n/provider — ver proveedor actual\n/provider <proveedor> [modelo]\n\nEjemplos:\n/provider gemini\n/provider openrouter meta-llama/llama-4-scout\n\nProveedores: ${VALID_PROVIDERS.join(", ")}`,
+				`Uso:\n/provider — ver proveedor actual\n/provider <proveedor> [modelo]\n\nEjemplos:\n/provider gemini\n/provider openrouter meta-llama/llama-4-scout\n/provider fal google/gemini-2.5-pro\n\nProveedores: ${CHAT_PROVIDER_NAMES.join(", ")}`,
 			);
 			return;
 		}

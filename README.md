@@ -77,6 +77,17 @@ Memory, audio files, and logs persist via volume mounts. The bot auto-creates al
 
 All configuration is via environment variables. Copy `.env.sample` to `.env` and fill in the values.
 
+There are four independent provider axes:
+
+| Axis | Env var | Controls | Default / fallback | Shared keys |
+| --- | --- | --- | --- | --- |
+| Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` | Provider-specific chat key |
+| Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | `gemini` -> `fal` -> `lemonfox` by available keys | `GOOGLE_API_KEY`, `FAL_API_KEY`, or `LEMON_FOX_API_KEY` |
+| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` by available keys; `fal` only when explicit | `ELEVENLABS_API_KEY`, `INWORLD_API_KEY`, `LEMON_FOX_API_KEY`, or `FAL_API_KEY` |
+| Images | `IMAGE_PROVIDER` | Character image generation/editing | `gemini` | `GOOGLE_API_KEY` or `FAL_API_KEY` |
+
+`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis.
+
 ### Required
 
 | Variable | Description |
@@ -104,7 +115,7 @@ All configuration is via environment variables. Copy `.env.sample` to `.env` and
 | `FIREWORKS_MODEL` | `accounts/fireworks/models/glm-5` | Fireworks model |
 | `OPENAI_API_KEY` | — | Required if using OpenAI |
 | `OPENAI_MODEL` | `gpt-5.4` | OpenAI model |
-| `FAL_API_KEY` | — | Required if using fal.ai (chat, TTS, STT, or image generation) |
+| `FAL_API_KEY` | — | Required if using fal.ai for chat, TTS, STT, or image generation |
 | `FAL_MODEL` | `google/gemini-2.5-pro` | fal.ai model (via OpenRouter proxy) |
 
 #### Recommended Models
@@ -123,7 +134,9 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 /provider fal google/gemini-2.5-pro
 ```
 
-**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2-preview`. Character image generation uses `gemini-3.1-flash-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview` in `src/ai.ts`.
+**Provider combinations:** You can mix providers across axes. For example, `CHAT_PROVIDER=anthropic`, `STT_PROVIDER=gemini`, `TTS_PROVIDER=elevenlabs`, and `IMAGE_PROVIDER=fal` is valid as long as the matching keys are set. A single `FAL_API_KEY` can satisfy fal.ai chat, STT, TTS, and images. A single `GOOGLE_API_KEY` powers Gemini chat plus the Google-only support paths.
+
+**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2-preview`. Character image generation uses `gemini-3-pro-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview`.
 
 ### Access Control
 

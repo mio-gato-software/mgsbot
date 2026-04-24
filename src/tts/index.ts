@@ -1,3 +1,4 @@
+import { resolveTtsProviderName } from "../provider-options.ts";
 import { ElevenLabsTtsProvider } from "./elevenlabs.ts";
 import { FalTtsProvider } from "./fal.ts";
 import { InworldTtsProvider } from "./inworld.ts";
@@ -13,24 +14,15 @@ function createTtsProvider(): TtsProvider | null {
 	if (resolved) return cachedProvider;
 	resolved = true;
 
-	const explicit = process.env.TTS_PROVIDER?.toLowerCase();
+	const providerName = resolveTtsProviderName();
 
-	if (
-		explicit === "elevenlabs" ||
-		(!explicit && process.env.ELEVENLABS_API_KEY)
-	) {
+	if (providerName === "elevenlabs") {
 		cachedProvider = new ElevenLabsTtsProvider();
-	} else if (
-		explicit === "inworld" ||
-		(!explicit && process.env.INWORLD_API_KEY)
-	) {
+	} else if (providerName === "inworld") {
 		cachedProvider = new InworldTtsProvider();
-	} else if (
-		explicit === "lemonfox" ||
-		(!explicit && process.env.LEMON_FOX_API_KEY)
-	) {
+	} else if (providerName === "lemonfox") {
 		cachedProvider = new LemonFoxTtsProvider();
-	} else if (explicit === "fal") {
+	} else if (providerName === "fal") {
 		cachedProvider = new FalTtsProvider();
 	}
 
