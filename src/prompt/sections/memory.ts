@@ -15,6 +15,12 @@ function formatTimeAgo(timestamp: number): string {
 	return `${Math.round(diffDays / 7)} weeks ago`;
 }
 
+function formatFactAge(fact: SemanticFact): string {
+	const reference = fact.lastConfirmed ?? fact.createdAt;
+	if (!reference) return "";
+	return ` _(heard ${formatTimeAgo(reference)})_`;
+}
+
 function groupBySubject(
 	facts: SemanticFact[],
 ): Array<{ displayName: string; facts: SemanticFact[] }> {
@@ -102,11 +108,11 @@ export const memoryPersons: PromptSection = {
 		if (filtered.length === 0) return null;
 
 		let section =
-			"## What you know about the members\nThis information is CONTEXT, not a script. Only mention a fact if it comes up NATURALLY in the conversation. NEVER force a mention. If the topic has no connection to what you know, don't bring it up.";
+			"## What you know about the members\nThis information is CONTEXT, not a script. Each fact is annotated with when you heard it — treat older items skeptically (a plan or activity from days ago is likely no longer current). Only mention a fact if it comes up NATURALLY in the conversation. NEVER force a mention. If the topic has no connection to what you know, don't bring it up.";
 		for (const { displayName, facts } of groupBySubject(filtered)) {
 			section += `\n### ${displayName}`;
 			for (const fact of facts) {
-				section += `\n  - ${fact.content}`;
+				section += `\n  - ${fact.content}${formatFactAge(fact)}`;
 			}
 		}
 		return section;
@@ -120,7 +126,9 @@ export const memoryGeneralFacts: PromptSection = {
 			(f) => f.category !== "person",
 		);
 		if (generalFacts.length === 0) return null;
-		const text = generalFacts.map((f) => `- ${f.content}`).join("\n");
-		return `## General facts\nOnly mention these facts if they're relevant to the current conversation topic.\n${text}`;
+		const text = generalFacts
+			.map((f) => `- ${f.content}${formatFactAge(f)}`)
+			.join("\n");
+		return `## General facts\nEach fact is annotated with when you heard it — older items may be stale. Only mention these facts if they're relevant to the current conversation topic.\n${text}`;
 	},
 };
