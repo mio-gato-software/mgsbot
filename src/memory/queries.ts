@@ -36,6 +36,12 @@ export function computeTextScore(query: string, candidate: string): number {
 const SIGNIFICANT_PATTERNS = [
 	// Personal declarations (Spanish)
 	/\b(soy|trabajo en|me gusta|tengo|vivo en|estudio|naci)\b/i,
+	// Activity / movement / state — short phrases like "voy de viaje", "estoy en casa",
+	// "salí pa' la calle". These describe what the user is doing right now, which the
+	// episode summary needs to capture even if no durable fact gets extracted.
+	/\b(voy|vamos|fui|fuimos|sal[ií]|estoy|estamos|ando|andamos|llegu[eé]|llegamos|vine|vinimos|regres[eé]|regresamos|me voy|nos vamos|estar[eé]|estaremos|viaje|viajando|carretera|guagua|carro|guiando|manejando|conduciendo|trabajando|reuni[oó]n|cita)\b/i,
+	// Future plans / intent
+	/\b(voy a|vamos a|tengo que|tenemos que|pienso|planeo|planeamos|quiero|queremos|me toca|nos toca|para ma[ñn]ana|esta noche|el (lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo))\b/i,
 	// Dates and events
 	/\b\d{1,2}\s*de\s*(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/i,
 	// Memory references
@@ -44,9 +50,11 @@ const SIGNIFICANT_PATTERNS = [
 	/\b(se llama|mi (hijo|hija|esposo|esposa|novio|novia|amigo|amiga|hermano|hermana|padre|madre|jefe)|soy)\s+[A-Z]/,
 	// Numbers that could be ages, dates, amounts
 	/\b\d{2,4}\s*(años|año)\b/i,
+	// Durations like "4 horas", "2 dias", "una semana"
+	/\b\d{1,3}\s*(hora|horas|d[ií]a|d[ií]as|semana|semanas|mes|meses)\b/i,
 ];
 
-const MIN_SIGNIFICANT_LENGTH = 120;
+const MIN_SIGNIFICANT_LENGTH = 60;
 
 export function hasSignificantContent(
 	messages: ConversationMessage[],

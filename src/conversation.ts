@@ -115,7 +115,12 @@ export async function processConversation(
 
 	// Promote overflow to memory in background
 	if (overflow) {
-		promoteToMemory(chatId, overflow).catch(console.error);
+		promoteToMemory(chatId, overflow).catch((err) => {
+			console.error(
+				`[promote] Failed for chat ${chatId} (user overflow):`,
+				err,
+			);
+		});
 	}
 
 	// Follow-up detection and cancellation (DMs only, background)
@@ -243,7 +248,12 @@ export async function processConversation(
 
 		// Promote bot overflow too
 		if (botOverflow) {
-			promoteToMemory(chatId, botOverflow).catch(console.error);
+			promoteToMemory(chatId, botOverflow).catch((err) => {
+				console.error(
+					`[promote] Failed for chat ${chatId} (bot overflow):`,
+					err,
+				);
+			});
 		}
 	}
 }
@@ -283,6 +293,19 @@ export async function promoteToMemory(
 		console.log(
 			`[promote] Summary: "${result.summary}", importance: ${result.importance}, facts: ${result.facts.length}`,
 		);
+
+	// Downstream gate: skip if the LLM judged the chunk uninteresting. The heuristic
+	// pre-filter is intentionally loose so transient activity mentions don't get
+	// silently dropped — but if even the LLM finds nothing worth keeping, don't
+	// pollute episodes with "casual conversation" placeholders.
+	const isTrivial =
+		result.importance <= 1 &&
+		result.facts.length === 0 &&
+		!result.personalitySignals?.traitChanges?.length;
+	if (isTrivial) {
+		if (isDev) console.log("[promote] Skipped: LLM judged chunk trivial");
+		return;
+	}
 
 	// Generate episode embedding, resolve participants, and fact embeddings in parallel
 	const rawParticipants = [

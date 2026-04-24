@@ -102,11 +102,13 @@ IMPORTANT: Only add NEW information not already covered above.
    - World data, news, statistics, encyclopedic information
    - Content of videos, articles, or shared links
    - General information you can look up online
+   - **Ephemeral / in-progress state** (e.g., "is on a 4-hour trip right now", "is at the gym", "is in a meeting", "just woke up", "is eating lunch", "is driving home"). These are momentary statuses that expire within hours and become misleading once stored as facts. They belong in the episode summary (which is dated), NOT in facts.
+   - Short-lived plans whose timeframe has likely already passed by the time you might recall this fact (e.g., "going out for fried chicken tonight"). Capture them in the summary, not as facts.
    Categories:
-   - category "person": fact about a specific person (include "subject" with the FULL NAME as it appears in the messages, e.g., "Juan Pérez", NOT just "Juan")
+   - category "person": durable trait/preference/relationship of a specific person (include "subject" with the FULL NAME as it appears in the messages, e.g., "Juan Pérez", NOT just "Juan"). NOT for what they're doing right now.
    - category "group": group dynamic or rule of interaction between participants
    - category "rule": rule or boundary established in the relationship
-   - category "event": future PERSONAL event or plan of a participant (NOT world events)
+   - category "event": future PERSONAL event or plan worth remembering for days/weeks (NOT today's lunch, NOT a trip happening right now). For an event, "content" must include the date/timeframe so the fact is interpretable later.
 4. **Permanence**: If a fact is a FUNDAMENTAL and IMMUTABLE biographical datum about a person, mark it as "permanent": true.
    Examples of permanent facts:
    - Place of birth ("Born in Neyba")
