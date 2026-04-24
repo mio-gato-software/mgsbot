@@ -1,3 +1,8 @@
+import {
+	type ChatProviderName,
+	isChatProviderName,
+	resolveChatProviderName,
+} from "../provider-options.ts";
 import { AlibabaChatProvider } from "./alibaba.ts";
 import { AnthropicChatProvider } from "./anthropic.ts";
 import { AzureChatProvider } from "./azure.ts";
@@ -17,89 +22,53 @@ export function createChatProvider(): ChatProvider {
 		return cachedProvider;
 	}
 
-	const providerName = (process.env.CHAT_PROVIDER || "gemini")
-		.trim()
-		.toLowerCase();
+	const providerName = resolveChatProviderName();
 
-	switch (providerName) {
-		case "openrouter":
-			cachedProvider = new OpenRouterChatProvider();
-			break;
-		case "anthropic":
-			cachedProvider = new AnthropicChatProvider();
-			break;
-		case "azure":
-			cachedProvider = new AzureChatProvider();
-			break;
-		case "alibaba":
-			cachedProvider = new AlibabaChatProvider();
-			break;
-		case "fireworks":
-			cachedProvider = new FireworksChatProvider();
-			break;
-		case "openai":
-			cachedProvider = new OpenAIChatProvider();
-			break;
-		case "fal":
-			cachedProvider = new FalChatProvider();
-			break;
-		default:
-			cachedProvider = new GeminiChatProvider();
-			break;
-	}
+	cachedProvider = buildChatProvider(providerName);
 
 	console.log(`[chat] Using provider: ${cachedProvider.name}`);
 	return cachedProvider;
+}
+
+function buildChatProvider(
+	providerName: ChatProviderName,
+	model?: string,
+): ChatProvider {
+	switch (providerName) {
+		case "openrouter":
+			return model
+				? new OpenRouterChatProvider(model)
+				: new OpenRouterChatProvider();
+		case "anthropic":
+			return model
+				? new AnthropicChatProvider(model)
+				: new AnthropicChatProvider();
+		case "azure":
+			return model ? new AzureChatProvider(model) : new AzureChatProvider();
+		case "alibaba":
+			return model ? new AlibabaChatProvider(model) : new AlibabaChatProvider();
+		case "fireworks":
+			return model
+				? new FireworksChatProvider(model)
+				: new FireworksChatProvider();
+		case "openai":
+			return model ? new OpenAIChatProvider(model) : new OpenAIChatProvider();
+		case "fal":
+			return model ? new FalChatProvider(model) : new FalChatProvider();
+		case "gemini":
+			return model ? new GeminiChatProvider(model) : new GeminiChatProvider();
+	}
 }
 
 export function switchChatProvider(
 	providerName: string,
 	model?: string,
 ): ChatProvider {
-	switch (providerName) {
-		case "openrouter":
-			cachedProvider = model
-				? new OpenRouterChatProvider(model)
-				: new OpenRouterChatProvider();
-			break;
-		case "gemini":
-			cachedProvider = model
-				? new GeminiChatProvider(model)
-				: new GeminiChatProvider();
-			break;
-		case "anthropic":
-			cachedProvider = model
-				? new AnthropicChatProvider(model)
-				: new AnthropicChatProvider();
-			break;
-		case "azure":
-			cachedProvider = model
-				? new AzureChatProvider(model)
-				: new AzureChatProvider();
-			break;
-		case "alibaba":
-			cachedProvider = model
-				? new AlibabaChatProvider(model)
-				: new AlibabaChatProvider();
-			break;
-		case "fireworks":
-			cachedProvider = model
-				? new FireworksChatProvider(model)
-				: new FireworksChatProvider();
-			break;
-		case "openai":
-			cachedProvider = model
-				? new OpenAIChatProvider(model)
-				: new OpenAIChatProvider();
-			break;
-		case "fal":
-			cachedProvider = model
-				? new FalChatProvider(model)
-				: new FalChatProvider();
-			break;
-		default:
-			throw new Error(`Unknown provider: ${providerName}`);
+	const normalized = providerName.trim().toLowerCase();
+	if (!isChatProviderName(normalized)) {
+		throw new Error(`Unknown provider: ${providerName}`);
 	}
+	cachedProvider = buildChatProvider(normalized, model);
 
 	console.log(
 		`[chat] Switched to provider: ${cachedProvider.name}, model: ${cachedProvider.model}`,

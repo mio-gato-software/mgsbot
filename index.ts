@@ -1,4 +1,8 @@
 import { existsSync, mkdirSync } from "node:fs";
+import {
+	formatProviderStartupSummary,
+	validateProviderConfiguration,
+} from "./src/provider-options.ts";
 import { loadEnvIntoProcess } from "./src/utils.ts";
 
 // --- Load .env manually (compiled binaries may not auto-load it) ---
@@ -55,15 +59,19 @@ if (!process.env.OWNER_USER_ID) {
 	console.warn("[startup] OWNER_USER_ID not set — bot will ignore all DMs");
 }
 
-if (!process.env.LEMON_FOX_API_KEY && !process.env.ELEVENLABS_API_KEY) {
-	console.warn(
-		"[startup] No TTS API key set (LEMON_FOX_API_KEY or ELEVENLABS_API_KEY) — TTS will be unavailable",
+const providerValidation = validateProviderConfiguration();
+if (providerValidation.errors.length > 0) {
+	throw new Error(
+		`Provider configuration error:\n${providerValidation.errors
+			.map((error) => `- ${error}`)
+			.join("\n")}`,
 	);
-} else {
-	const ttsProvider =
-		process.env.TTS_PROVIDER ||
-		(process.env.ELEVENLABS_API_KEY ? "elevenlabs" : "lemonfox");
-	console.log(`[startup] TTS provider: ${ttsProvider}`);
+}
+for (const warning of providerValidation.warnings) {
+	console.warn(`[startup] ${warning}`);
+}
+for (const line of formatProviderStartupSummary()) {
+	console.log(line);
 }
 
 const bot = new Bot(token);

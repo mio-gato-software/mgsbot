@@ -1,3 +1,4 @@
+import { resolveSttProviderOrder } from "../provider-options.ts";
 import { FalSttProvider } from "./fal.ts";
 import { GeminiSttProvider } from "./gemini.ts";
 import { LemonFoxSttProvider } from "./lemonfox.ts";
@@ -21,21 +22,7 @@ function createSttProvider(): SttProvider | null {
 	if (resolved) return cachedProvider;
 	resolved = true;
 
-	const explicit = process.env.STT_PROVIDER?.toLowerCase();
-	const hasFal = !!process.env.FAL_API_KEY;
-	const hasLemonFox = !!process.env.LEMON_FOX_API_KEY;
-	const hasGoogle = !!process.env.GOOGLE_API_KEY;
-
-	// Ordered candidates: explicit choice first (if its key is present), then
-	// the fallback chain (gemini → fal → lemonfox).
-	const order: Array<"fal" | "lemonfox" | "gemini"> = [];
-	if (explicit === "fal" && hasFal) order.push("fal");
-	else if (explicit === "lemonfox" && hasLemonFox) order.push("lemonfox");
-	else if (explicit === "gemini" && hasGoogle) order.push("gemini");
-
-	if (hasGoogle && !order.includes("gemini")) order.push("gemini");
-	if (hasFal && !order.includes("fal")) order.push("fal");
-	if (hasLemonFox && !order.includes("lemonfox")) order.push("lemonfox");
+	const order = resolveSttProviderOrder();
 
 	for (const candidate of order) {
 		if (candidate === "fal") {

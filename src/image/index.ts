@@ -1,3 +1,4 @@
+import { resolveImageProviderName } from "../provider-options.ts";
 import { FalImageProvider } from "./fal.ts";
 import { GeminiImageProvider } from "./gemini.ts";
 import type { ImageProvider } from "./types.ts";
@@ -9,15 +10,13 @@ let cachedProvider: ImageProvider | null = null;
 function createImageProvider(): ImageProvider {
 	if (cachedProvider) return cachedProvider;
 
-	const providerName = (process.env.IMAGE_PROVIDER || "gemini")
-		.trim()
-		.toLowerCase();
+	const providerName = resolveImageProviderName();
 
 	switch (providerName) {
 		case "fal":
 			cachedProvider = new FalImageProvider();
 			break;
-		default:
+		case "gemini":
 			cachedProvider = new GeminiImageProvider();
 			break;
 	}
