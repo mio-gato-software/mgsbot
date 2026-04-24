@@ -25,7 +25,8 @@
 		"@google/genai": "^1.48.0",
 		"dayjs": "^1.11.20",
 		"grammy": "^1.42.0",
-		"openai": "^6.33.0"
+		"openai": "^6.33.0",
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.10",

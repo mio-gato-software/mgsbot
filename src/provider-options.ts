@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 type EnvMap = NodeJS.ProcessEnv;
 
 interface ProviderOption<Name extends string> {
@@ -147,6 +149,13 @@ export type TtsProviderName = (typeof TTS_PROVIDERS)[number]["name"];
 export type SttProviderName = (typeof STT_PROVIDERS)[number]["name"];
 export type ImageProviderName = (typeof IMAGE_PROVIDERS)[number]["name"];
 
+interface ProviderEnv extends EnvMap {
+	CHAT_PROVIDER?: ChatProviderName;
+	STT_PROVIDER?: SttProviderName;
+	TTS_PROVIDER?: TtsProviderName;
+	IMAGE_PROVIDER?: ImageProviderName;
+}
+
 export const CHAT_PROVIDER_NAMES = CHAT_PROVIDERS.map(
 	(provider) => provider.name,
 );
@@ -160,30 +169,83 @@ export const IMAGE_PROVIDER_NAMES = IMAGE_PROVIDERS.map(
 	(provider) => provider.name,
 );
 
-function isProviderName<Name extends string>(
-	value: string,
-	options: readonly ProviderOption<Name>[],
-): value is Name {
-	return options.some((provider) => provider.name === value);
+const blankToUndefined = (value: unknown): unknown => {
+	if (typeof value !== "string") return value;
+	const trimmed = value.trim();
+	return trimmed === "" ? undefined : trimmed;
+};
+
+const optionalString = z.preprocess(blankToUndefined, z.string().optional());
+const optionalProviderString = (schema: z.ZodEnum) =>
+	z.preprocess((value) => {
+		const normalized = blankToUndefined(value);
+		return typeof normalized === "string"
+			? normalized.toLowerCase()
+			: normalized;
+	}, schema.optional());
+
+const ProviderEnvSchema = z.object({
+	CHAT_PROVIDER: optionalProviderString(
+		z.enum([
+			"gemini",
+			"openrouter",
+			"anthropic",
+			"azure",
+			"alibaba",
+			"fireworks",
+			"openai",
+			"fal",
+		]),
+	),
+	STT_PROVIDER: optionalProviderString(z.enum(["gemini", "fal", "lemonfox"])),
+	TTS_PROVIDER: optionalProviderString(
+		z.enum(["elevenlabs", "inworld", "lemonfox", "fal"]),
+	),
+	IMAGE_PROVIDER: optionalProviderString(z.enum(["gemini", "fal"])),
+	GOOGLE_API_KEY: optionalString,
+	OPENROUTER_API_KEY: optionalString,
+	ANTHROPIC_API_KEY: optionalString,
+	AZURE_API_KEY: optionalString,
+	AZURE_ENDPOINT: optionalString,
+	DASHSCOPE_API_KEY: optionalString,
+	FIREWORKS_API_KEY: optionalString,
+	OPENAI_API_KEY: optionalString,
+	FAL_API_KEY: optionalString,
+	ELEVENLABS_API_KEY: optionalString,
+	LEMON_FOX_API_KEY: optionalString,
+	INWORLD_API_KEY: optionalString,
+	INWORLD_VOICE_ID: optionalString,
+});
+
+function parseProviderEnv(env: EnvMap): ProviderEnv {
+	const result = safeParseProviderEnv(env);
+	if (!result.success) {
+		throw new Error(result.error.issues.map(formatZodIssue).join("\n"));
+	}
+	return result.data as ProviderEnv;
 }
 
-function normalizeProviderValue(value: string | undefined): string | null {
-	const normalized = value?.trim().toLowerCase();
-	return normalized ? normalized : null;
+function safeParseProviderEnv(env: EnvMap) {
+	return ProviderEnvSchema.safeParse(env);
 }
 
 function hasRequiredEnv(
 	provider: ProviderOption<string>,
-	env: EnvMap,
+	env: ProviderEnv,
 ): boolean {
 	return provider.requiredEnv.every((name) => !!env[name]);
 }
 
 function missingRequiredEnv(
 	provider: ProviderOption<string>,
-	env: EnvMap,
+	env: ProviderEnv,
 ): string[] {
 	return provider.requiredEnv.filter((name) => !env[name]);
+}
+
+function formatZodIssue(issue: z.core.$ZodIssue): string {
+	const key = issue.path.join(".") || "environment";
+	return `${key}: ${issue.message}`;
 }
 
 function getOption<Name extends string>(
@@ -193,6 +255,13 @@ function getOption<Name extends string>(
 	const provider = options.find((option) => option.name === name);
 	if (!provider) throw new Error(`Unknown provider metadata: ${name}`);
 	return provider;
+}
+
+function isProviderName<Name extends string>(
+	value: string,
+	options: readonly ProviderOption<Name>[],
+): value is Name {
+	return options.some((provider) => provider.name === value);
 }
 
 export function isChatProviderName(value: string): value is ChatProviderName {
@@ -214,74 +283,50 @@ export function isImageProviderName(value: string): value is ImageProviderName {
 export function resolveChatProviderName(
 	env: EnvMap = process.env,
 ): ChatProviderName {
-	const raw = normalizeProviderValue(env.CHAT_PROVIDER) ?? "gemini";
-	if (!isChatProviderName(raw)) {
-		throw new Error(
-			`Invalid CHAT_PROVIDER="${raw}". Valid values: ${CHAT_PROVIDER_NAMES.join(", ")}`,
-		);
-	}
-	return raw;
+	return parseProviderEnv(env).CHAT_PROVIDER ?? "gemini";
 }
 
 export function resolveImageProviderName(
 	env: EnvMap = process.env,
 ): ImageProviderName {
-	const raw = normalizeProviderValue(env.IMAGE_PROVIDER) ?? "gemini";
-	if (!isImageProviderName(raw)) {
-		throw new Error(
-			`Invalid IMAGE_PROVIDER="${raw}". Valid values: ${IMAGE_PROVIDER_NAMES.join(", ")}`,
-		);
-	}
-	return raw;
+	return parseProviderEnv(env).IMAGE_PROVIDER ?? "gemini";
 }
 
 export function resolveExplicitTtsProviderName(
 	env: EnvMap = process.env,
 ): TtsProviderName | null {
-	const raw = normalizeProviderValue(env.TTS_PROVIDER);
-	if (!raw) return null;
-	if (!isTtsProviderName(raw)) {
-		throw new Error(
-			`Invalid TTS_PROVIDER="${raw}". Valid values: ${TTS_PROVIDER_NAMES.join(", ")}`,
-		);
-	}
-	return raw;
+	return parseProviderEnv(env).TTS_PROVIDER ?? null;
 }
 
 export function resolveTtsProviderName(
 	env: EnvMap = process.env,
 ): TtsProviderName | null {
-	const explicit = resolveExplicitTtsProviderName(env);
+	const parsed = parseProviderEnv(env);
+	const explicit = parsed.TTS_PROVIDER;
 	if (explicit) return explicit;
-	if (env.ELEVENLABS_API_KEY) return "elevenlabs";
-	if (env.INWORLD_API_KEY && env.INWORLD_VOICE_ID) return "inworld";
-	if (env.LEMON_FOX_API_KEY) return "lemonfox";
+	if (parsed.ELEVENLABS_API_KEY) return "elevenlabs";
+	if (parsed.INWORLD_API_KEY && parsed.INWORLD_VOICE_ID) return "inworld";
+	if (parsed.LEMON_FOX_API_KEY) return "lemonfox";
 	return null;
 }
 
 export function resolveExplicitSttProviderName(
 	env: EnvMap = process.env,
 ): SttProviderName | null {
-	const raw = normalizeProviderValue(env.STT_PROVIDER);
-	if (!raw) return null;
-	if (!isSttProviderName(raw)) {
-		throw new Error(
-			`Invalid STT_PROVIDER="${raw}". Valid values: ${STT_PROVIDER_NAMES.join(", ")}`,
-		);
-	}
-	return raw;
+	return parseProviderEnv(env).STT_PROVIDER ?? null;
 }
 
 export function resolveSttProviderOrder(
 	env: EnvMap = process.env,
 ): SttProviderName[] {
-	const explicit = resolveExplicitSttProviderName(env);
+	const parsed = parseProviderEnv(env);
+	const explicit = parsed.STT_PROVIDER;
 	if (explicit) return [explicit];
 
 	const order: SttProviderName[] = [];
-	if (env.GOOGLE_API_KEY) order.push("gemini");
-	if (env.FAL_API_KEY) order.push("fal");
-	if (env.LEMON_FOX_API_KEY) order.push("lemonfox");
+	if (parsed.GOOGLE_API_KEY) order.push("gemini");
+	if (parsed.FAL_API_KEY) order.push("fal");
+	if (parsed.LEMON_FOX_API_KEY) order.push("lemonfox");
 	return order;
 }
 
@@ -291,39 +336,24 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 } {
 	const errors: string[] = [];
 	const warnings: string[] = [];
+	const parsed = safeParseProviderEnv(env);
 
-	let chatProvider: ChatProviderName | null = null;
-	let imageProvider: ImageProviderName | null = null;
-	let ttsProvider: TtsProviderName | null = null;
-	let sttOrder: SttProviderName[] = [];
-
-	try {
-		chatProvider = resolveChatProviderName(env);
-	} catch (error) {
-		errors.push(String(error instanceof Error ? error.message : error));
+	if (!parsed.success) {
+		return {
+			errors: parsed.error.issues.map(formatZodIssue),
+			warnings,
+		};
 	}
 
-	try {
-		imageProvider = resolveImageProviderName(env);
-	} catch (error) {
-		errors.push(String(error instanceof Error ? error.message : error));
-	}
-
-	try {
-		ttsProvider = resolveTtsProviderName(env);
-	} catch (error) {
-		errors.push(String(error instanceof Error ? error.message : error));
-	}
-
-	try {
-		sttOrder = resolveSttProviderOrder(env);
-	} catch (error) {
-		errors.push(String(error instanceof Error ? error.message : error));
-	}
+	const providerEnv = parsed.data as ProviderEnv;
+	const chatProvider = providerEnv.CHAT_PROVIDER ?? "gemini";
+	const imageProvider = providerEnv.IMAGE_PROVIDER ?? "gemini";
+	const ttsProvider = resolveTtsProviderName(providerEnv);
+	const sttOrder = resolveSttProviderOrder(providerEnv);
 
 	if (chatProvider) {
 		const provider = getOption(chatProvider, CHAT_PROVIDERS);
-		const missing = missingRequiredEnv(provider, env);
+		const missing = missingRequiredEnv(provider, providerEnv);
 		if (missing.length > 0) {
 			errors.push(
 				`${provider.label} chat requires ${missing.join(", ")} when CHAT_PROVIDER=${provider.name}.`,
@@ -333,7 +363,7 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 
 	if (imageProvider) {
 		const provider = getOption(imageProvider, IMAGE_PROVIDERS);
-		const missing = missingRequiredEnv(provider, env);
+		const missing = missingRequiredEnv(provider, providerEnv);
 		if (missing.length > 0) {
 			errors.push(
 				`${provider.label} images require ${missing.join(", ")} when IMAGE_PROVIDER=${provider.name}.`,
@@ -343,7 +373,7 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 
 	if (ttsProvider) {
 		const provider = getOption(ttsProvider, TTS_PROVIDERS);
-		const missing = missingRequiredEnv(provider, env);
+		const missing = missingRequiredEnv(provider, providerEnv);
 		if (missing.length > 0) {
 			errors.push(
 				`${provider.label} TTS requires ${missing.join(", ")} when TTS_PROVIDER=${provider.name}.`,
@@ -358,17 +388,17 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 	if (sttOrder.length > 0) {
 		const firstUnavailable = sttOrder
 			.map((name) => getOption(name, STT_PROVIDERS))
-			.find((provider) => !hasRequiredEnv(provider, env));
+			.find((provider) => !hasRequiredEnv(provider, providerEnv));
 		if (firstUnavailable) {
 			errors.push(
-				`${firstUnavailable.label} STT requires ${missingRequiredEnv(firstUnavailable, env).join(", ")} when STT_PROVIDER=${firstUnavailable.name}.`,
+				`${firstUnavailable.label} STT requires ${missingRequiredEnv(firstUnavailable, providerEnv).join(", ")} when STT_PROVIDER=${firstUnavailable.name}.`,
 			);
 		}
 	} else {
 		warnings.push("No STT provider configured; voice transcription will fail.");
 	}
 
-	if (env.INWORLD_API_KEY && !env.INWORLD_VOICE_ID) {
+	if (providerEnv.INWORLD_API_KEY && !providerEnv.INWORLD_VOICE_ID) {
 		warnings.push(
 			"INWORLD_API_KEY is set without INWORLD_VOICE_ID, so Inworld TTS will not auto-select.",
 		);
