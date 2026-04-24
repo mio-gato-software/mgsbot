@@ -18,7 +18,6 @@ import {
 	getQueryEmbedding,
 	getRelevantEpisodes,
 	getRelevantFacts,
-	hasSignificantContent,
 	loadSemanticStore,
 	loadSensory,
 	withChatLock,
@@ -262,12 +261,6 @@ export async function promoteToMemory(
 	chatId: number,
 	overflow: ConversationMessage[],
 ): Promise<void> {
-	// Heuristic pre-filter: skip trivial conversation
-	if (!hasSignificantContent(overflow)) {
-		if (isDev) console.log("[promote] Skipped: no significant content");
-		return;
-	}
-
 	const recentText = overflow
 		.map(
 			(m) => `${m.role === "user" ? (m.name ?? "User") : "Bot"}: ${m.content}`,

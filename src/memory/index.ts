@@ -14,7 +14,6 @@ export { withChatLock } from "./locks.ts";
 export {
 	computeTextScore,
 	getQueryEmbedding,
-	hasSignificantContent,
 	normalizeName,
 } from "./queries.ts";
 export {

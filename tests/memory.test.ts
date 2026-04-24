@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { cosineSimilarity } from "../src/embeddings.ts";
-import {
-	computeTextScore,
-	hasSignificantContent,
-	normalizeName,
-} from "../src/memory/queries.ts";
-import type { ConversationMessage } from "../src/types.ts";
+import { computeTextScore, normalizeName } from "../src/memory/queries.ts";
 
 describe("cosineSimilarity", () => {
 	test("identical vectors return 1", () => {
@@ -87,44 +82,5 @@ describe("normalizeName", () => {
 
 	test("already normalized stays the same", () => {
 		expect(normalizeName("john")).toBe("john");
-	});
-});
-
-describe("hasSignificantContent", () => {
-	function msg(content: string): ConversationMessage {
-		return { role: "user", content, timestamp: Date.now() };
-	}
-
-	test("short greetings are not significant", () => {
-		expect(hasSignificantContent([msg("hola"), msg("que tal")])).toBe(false);
-	});
-
-	test("long messages are significant", () => {
-		const longText = "a".repeat(121);
-		expect(hasSignificantContent([msg(longText)])).toBe(true);
-	});
-
-	test("messages with personal declarations are significant", () => {
-		expect(hasSignificantContent([msg("Yo soy ingeniero")])).toBe(true);
-	});
-
-	test("messages with dates are significant", () => {
-		expect(
-			hasSignificantContent([msg("Mi cumpleaños es el 15 de marzo")]),
-		).toBe(true);
-	});
-
-	test("messages with memory references are significant", () => {
-		expect(hasSignificantContent([msg("¿Recuerdas lo que te dije?")])).toBe(
-			true,
-		);
-	});
-
-	test("messages with family names are significant", () => {
-		expect(hasSignificantContent([msg("mi hijo se llama Carlos")])).toBe(true);
-	});
-
-	test("empty array is not significant", () => {
-		expect(hasSignificantContent([])).toBe(false);
 	});
 });
