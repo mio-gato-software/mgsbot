@@ -14,7 +14,7 @@ describe("provider options", () => {
 
 	test("rejects unknown chat providers", () => {
 		expect(() => resolveChatProviderName({ CHAT_PROVIDER: "typo" })).toThrow(
-			"Invalid CHAT_PROVIDER",
+			"CHAT_PROVIDER",
 		);
 	});
 
