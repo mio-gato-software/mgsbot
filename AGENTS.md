@@ -1,6 +1,6 @@
-# AGENTS.md
+# Repository Agent Guide
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents working with this repository.
 
 ## Project Overview
 
@@ -83,7 +83,18 @@ logs/
 
 ### Chat Provider System
 
-`generateResponse()` delegates to a pluggable chat provider selected by `CHAT_PROVIDER` env var. The provider is a cached singleton implementing the `ChatProvider` interface. Available providers: `gemini` (default), `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`. The provider can be switched at runtime via the `/provider` Telegram command (DM only, owner only).
+`generateResponse()` delegates to a pluggable chat provider selected by `CHAT_PROVIDER` env var. The provider is a cached singleton implementing the `ChatProvider` interface. Available chat providers: `gemini` (default), `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, and `fal`. The provider can be switched at runtime via the `/provider` Telegram command (DM only, owner only).
+
+There are four independent provider axes:
+
+| Axis | Env var | Controls | Default / fallback |
+| --- | --- | --- | --- |
+| Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` |
+| Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | `gemini` -> `fal` -> `lemonfox` by available keys |
+| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` by available keys; `fal` only when explicit |
+| Images | `IMAGE_PROVIDER` | Character image generation/editing | `gemini` |
+
+`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis.
 
 ### Memory System
 
@@ -168,19 +179,23 @@ Bot sleeps 11:30 PM – 6:00 AM DR time by default. Controlled by `ENABLE_SLEEP_
 Requires a `.env` file (see `.env.sample`). Key variables:
 
 - `BOT_TOKEN` (required): Telegram bot token
-- `CHAT_PROVIDER`: `gemini` (default), `openrouter`, `anthropic`, `azure`, `alibaba`, or `fireworks`
+- `CHAT_PROVIDER`: `gemini` (default), `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, or `fal`
 - `GOOGLE_API_KEY`: Always required — used for embeddings, image analysis, YouTube analysis, and image generation regardless of chat provider (also used for audio transcription when `STT_PROVIDER=gemini`)
 - `GEMINI_MODEL`: Gemini chat model (default: `gemini-3-flash-preview`)
-- `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/Codex-3.5-sonnet`)
-- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `Codex-sonnet-4-5-20250929`)
+- `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/claude-3.5-sonnet`)
+- `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `claude-sonnet-4-5-20250929`)
 - `AZURE_API_KEY` / `AZURE_ENDPOINT` / `AZURE_MODEL`: Required if using Azure (default model: `Kimi-K2.5`)
 - `DASHSCOPE_API_KEY` / `DASHSCOPE_MODEL`: Required if using Alibaba (default model: `qwen3.5-plus`)
 - `FIREWORKS_API_KEY` / `FIREWORKS_MODEL`: Required if using Fireworks (default model: `accounts/fireworks/models/glm-5`)
+- `OPENAI_API_KEY` / `OPENAI_MODEL`: Required if using OpenAI (default model: `gpt-5.4`)
+- `FAL_API_KEY` / `FAL_MODEL`: Required if using fal.ai chat (default model: `google/gemini-2.5-pro`)
 - `ALLOWED_GROUP_ID` / `OWNER_USER_ID`: Access control
 - `LEMON_FOX_API_KEY`: For TTS voice responses (if `TTS_PROVIDER=lemonfox`) and audio transcription (STT)
 - `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`: For ElevenLabs TTS voice responses (default voice ID if not set)
-- `TTS_PROVIDER`: `elevenlabs` or `lemonfox` (auto-detected based on available API keys, ElevenLabs takes priority)
-- `STT_PROVIDER`: `gemini` (default), `fal`, or `lemonfox`. When unset, falls back in order: gemini → fal → lemonfox (first with a key wins)
+- `INWORLD_API_KEY` / `INWORLD_VOICE_ID`: For Inworld TTS voice responses
+- `TTS_PROVIDER`: `elevenlabs`, `inworld`, `lemonfox`, or `fal`. When unset, auto-detects in order: elevenlabs -> inworld -> lemonfox; fal requires explicit selection
+- `STT_PROVIDER`: `gemini`, `fal`, or `lemonfox`. When unset, falls back in order: gemini -> fal -> lemonfox (first with a key wins)
+- `IMAGE_PROVIDER`: `gemini` (default) or `fal`
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
 - `ENABLE_FOLLOW_UPS`: Set `true` to enable proactive follow-ups in DMs
 - `ENABLE_CHECK_INS`: Set `true` to enable proactive check-in messages in DMs (~2/week)
