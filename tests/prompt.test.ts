@@ -8,23 +8,33 @@ import {
 	imageWeekly,
 } from "../src/prompt/sections/image.ts";
 import {
+	memoryChapters,
 	memoryEpisodes,
 	memoryGeneralFacts,
 	memoryPermanentOther,
 	memoryPermanentPersons,
 	memoryPersons,
+	memoryRelationship,
 } from "../src/prompt/sections/memory.ts";
 import { rulesBehavior } from "../src/prompt/sections/rules.ts";
 import { voiceTts, voiceTutor } from "../src/prompt/sections/voice.ts";
 import type { PromptContext } from "../src/prompt/types.ts";
-import type { Episode, SemanticFact } from "../src/types.ts";
+import type {
+	Episode,
+	MemoryChapter,
+	RelationshipMemory,
+	SemanticFact,
+} from "../src/types.ts";
 
 function makeCtx(overrides: Partial<PromptContext> = {}): PromptContext {
 	return {
 		relevantEpisodes: [],
 		relevantFacts: [],
 		permanentFacts: undefined,
+		relationshipMemory: undefined,
+		recentChapters: undefined,
 		activeNames: undefined,
+		mentionedNames: undefined,
 		mentionType: undefined,
 		isVoiceMessage: false,
 		userAttachedImage: false,
@@ -59,6 +69,37 @@ function makeEpisode(overrides: Partial<Episode> = {}): Episode {
 		timestamp: Date.now() - 3600_000,
 		importance: 3,
 		embedding: [],
+		...overrides,
+	};
+}
+
+function makeRelationship(
+	overrides: Partial<RelationshipMemory> = {},
+): RelationshipMemory {
+	return {
+		chatId: 1,
+		summary: "They have a warm, playful rhythm with direct conversations.",
+		tone: "warm and playful",
+		notableDynamics: ["They joke while still being sincere"],
+		openThreads: ["Creative projects come up often"],
+		updatedAt: Date.now(),
+		interactionCount: 4,
+		...overrides,
+	};
+}
+
+function makeChapter(overrides: Partial<MemoryChapter> = {}): MemoryChapter {
+	return {
+		id: "chapter_1_2026-04",
+		chatId: 1,
+		month: "2026-04",
+		title: "A creative month",
+		summary:
+			"They talked about memory, personality, and making the bot feel continuous.",
+		participants: ["Juan"],
+		importance: 4,
+		episodeIds: ["ep_1"],
+		updatedAt: Date.now(),
 		...overrides,
 	};
 }
@@ -102,6 +143,8 @@ describe("pipeline structure", () => {
 			"rules.newPerson",
 			"header.datetime",
 			"personality.traits",
+			"memory.relationship",
+			"memory.chapters",
 			"memory.episodes",
 			"memory.permanentFacts.persons",
 			"memory.permanentFacts.other",
@@ -171,6 +214,37 @@ describe("section: memory.episodes", () => {
 		);
 		expect(out).toContain("## Recent memories");
 		expect(out).toContain("Casual conversation");
+	});
+});
+
+describe("section: memory.relationship", () => {
+	test("renders relationship memory when present", async () => {
+		const out =
+			(await memoryRelationship.render(
+				makeCtx({ relationshipMemory: makeRelationship() }),
+			)) ?? "";
+		expect(out).toContain("## Relationship memory");
+		expect(out).toContain("warm and playful");
+		expect(out).toContain("Creative projects");
+	});
+
+	test("returns null without relationship memory", async () => {
+		expect(await memoryRelationship.render(makeCtx())).toBeNull();
+	});
+});
+
+describe("section: memory.chapters", () => {
+	test("renders recent chapters when present", async () => {
+		const out =
+			(await memoryChapters.render(
+				makeCtx({ recentChapters: [makeChapter()] }),
+			)) ?? "";
+		expect(out).toContain("## Long-term chapters");
+		expect(out).toContain("A creative month");
+	});
+
+	test("returns null without chapters", async () => {
+		expect(await memoryChapters.render(makeCtx())).toBeNull();
 	});
 });
 
