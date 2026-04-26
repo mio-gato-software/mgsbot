@@ -8,6 +8,7 @@ export interface PromptContextInput {
 	relevantFacts: SemanticFact[];
 	permanentFacts?: SemanticFact[];
 	activeNames?: string[];
+	mentionedNames?: string[];
 	mentionType?: MentionType;
 	isVoiceMessage?: boolean;
 	userAttachedImage?: boolean;
@@ -22,6 +23,7 @@ export function buildPromptContext(input: PromptContextInput): PromptContext {
 		relevantFacts: input.relevantFacts,
 		permanentFacts: input.permanentFacts,
 		activeNames: input.activeNames,
+		mentionedNames: input.mentionedNames,
 		mentionType: input.mentionType,
 		isVoiceMessage: input.isVoiceMessage === true,
 		userAttachedImage: input.userAttachedImage === true,

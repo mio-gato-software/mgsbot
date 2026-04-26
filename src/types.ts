@@ -36,6 +36,8 @@ export interface Episode {
 	timestamp: number;
 	importance: number; // 1-5
 	embedding: number[]; // 768-dim vector
+	embeddingModel?: string;
+	embeddingDim?: number;
 }
 
 export interface WorkingMemory {
@@ -50,10 +52,17 @@ export interface SemanticFact {
 	subject?: string; // person name (if category="person")
 	context?: string; // why it matters
 	embedding: number[]; // 768-dim vector
+	embeddingModel?: string;
+	embeddingDim?: number;
 	importance: number; // 1-5
 	confidence: number; // 0-1, decays if not reconfirmed
 	createdAt: number;
 	lastConfirmed: number;
+	lastDecayedAt?: number;
+	scope?: "global" | "chat" | "person";
+	sourceChatId?: number;
+	validUntil?: number;
+	supersedes?: string[];
 	permanent?: boolean; // never decays, always included in prompt
 }
 

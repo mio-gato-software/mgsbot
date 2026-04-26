@@ -2,11 +2,16 @@ import { readFile } from "node:fs/promises";
 import { cosineSimilarity } from "../embeddings.ts";
 import type { Episode, WorkingMemory } from "../types.ts";
 import { atomicWriteFile, isFileNotFound } from "../utils.ts";
+import { withEpisodeLock } from "./locks.ts";
 import { computeTextScore } from "./queries.ts";
 
 export const EPISODES_DIR = "./memory/episodes";
 
 const MAX_EPISODES_PER_CHAT = 20;
+
+function getEmbeddingDim(episode: Episode): number {
+	return episode.embeddingDim ?? episode.embedding.length;
+}
 
 function episodesPath(chatId: number): string {
 	return `${EPISODES_DIR}/${chatId}.json`;
@@ -34,21 +39,23 @@ export async function addEpisode(
 	chatId: number,
 	episode: Episode,
 ): Promise<void> {
-	const wm = await loadWorkingMemory(chatId);
-	wm.episodes.push(episode);
+	await withEpisodeLock(chatId, async () => {
+		const wm = await loadWorkingMemory(chatId);
+		wm.episodes.push(episode);
 
-	// Prune to max episodes by composite score (importance x recency)
-	if (wm.episodes.length > MAX_EPISODES_PER_CHAT) {
-		const now = Date.now();
-		wm.episodes.sort((a, b) => {
-			const recencyA = 1 / (1 + (now - a.timestamp) / 86_400_000);
-			const recencyB = 1 / (1 + (now - b.timestamp) / 86_400_000);
-			return b.importance * recencyB - a.importance * recencyA;
-		});
-		wm.episodes = wm.episodes.slice(0, MAX_EPISODES_PER_CHAT);
-	}
+		// Prune to max episodes by composite score (importance x recency)
+		if (wm.episodes.length > MAX_EPISODES_PER_CHAT) {
+			const now = Date.now();
+			wm.episodes.sort((a, b) => {
+				const recencyA = 1 / (1 + (now - a.timestamp) / 86_400_000);
+				const recencyB = 1 / (1 + (now - b.timestamp) / 86_400_000);
+				return b.importance * recencyB - a.importance * recencyA;
+			});
+			wm.episodes = wm.episodes.slice(0, MAX_EPISODES_PER_CHAT);
+		}
 
-	await saveWorkingMemory(wm);
+		await saveWorkingMemory(wm);
+	});
 }
 
 export async function getRelevantEpisodes(
@@ -63,7 +70,10 @@ export async function getRelevantEpisodes(
 	const now = Date.now();
 
 	const scored = wm.episodes.map((episode) => {
-		const similarity = cosineSimilarity(queryEmbedding, episode.embedding);
+		const similarity =
+			queryEmbedding.length === getEmbeddingDim(episode)
+				? cosineSimilarity(queryEmbedding, episode.embedding)
+				: 0;
 		const keywordScore = queryText
 			? computeTextScore(queryText, episode.summary)
 			: 0;

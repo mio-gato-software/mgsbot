@@ -223,6 +223,20 @@ describe("section: memory.persons", () => {
 		expect(out).not.toContain("María");
 	});
 
+	test("includes facts for mentionedNames even when they are not active", async () => {
+		const ctx = makeCtx({
+			relevantFacts: [
+				makeFact({ id: "f1", subject: "Juan" }),
+				makeFact({ id: "f2", subject: "María", content: "Lives in Madrid" }),
+			],
+			activeNames: ["Juan"],
+			mentionedNames: ["María"],
+		});
+		const out = (await memoryPersons.render(ctx)) ?? "";
+		expect(out).toContain("Juan");
+		expect(out).toContain("María");
+	});
+
 	test("returns null when filter removes all facts", async () => {
 		const ctx = makeCtx({
 			relevantFacts: [makeFact({ subject: "Juan" })],

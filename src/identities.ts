@@ -145,3 +145,33 @@ export async function getAllAliasesForCanonical(
 
 	return [normalized];
 }
+
+export async function findMentionedCanonicalNames(
+	text: string,
+): Promise<string[]> {
+	const store = await loadIdentities();
+	const normalizedText = ` ${normalizeName(text).replace(/[^\p{L}\p{N}_@]+/gu, " ")} `;
+	const mentioned = new Set<string>();
+
+	for (const identity of Object.values(store)) {
+		const namesToCheck = [
+			identity.canonicalName,
+			identity.username,
+			identity.username ? `@${identity.username}` : undefined,
+			...identity.aliases,
+		].filter((name): name is string => !!name);
+
+		for (const name of namesToCheck) {
+			const normalized = normalizeName(name)
+				.replace(/[^\p{L}\p{N}_@]+/gu, " ")
+				.trim();
+			if (normalized.length < 3) continue;
+			if (normalizedText.includes(` ${normalized} `)) {
+				mentioned.add(identity.canonicalName);
+				break;
+			}
+		}
+	}
+
+	return [...mentioned];
+}

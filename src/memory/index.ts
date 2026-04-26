@@ -10,7 +10,7 @@ export {
 	loadWorkingMemory,
 	saveWorkingMemory,
 } from "./episodes.ts";
-export { withChatLock } from "./locks.ts";
+export { withChatLock, withEpisodeLock, withSemanticLock } from "./locks.ts";
 export {
 	computeTextScore,
 	getQueryEmbedding,
@@ -21,6 +21,7 @@ export {
 	decayConfidence,
 	getFactsForSubjects,
 	getPermanentFacts,
+	getRelevantExistingFactsForDedup,
 	getRelevantFacts,
 	loadSemanticStore,
 	saveSemanticStore,
