@@ -39,6 +39,8 @@
 		"profile:init": "bun run index.ts --init-profile",
 		"profile:show": "bun run index.ts --show-profile",
 		"profile:sync": "bun run index.ts --sync-profile",
+		"rules:init": "bun run index.ts --init-rules",
+		"rules:show": "bun run index.ts --show-rules",
 		"test": "bun test",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
