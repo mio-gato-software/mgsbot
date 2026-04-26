@@ -8,13 +8,13 @@
 
 A conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities. Built with [grammY](https://grammy.dev), [Google Gemini](https://ai.google.dev), and [Bun](https://bun.sh).
 
-MGS Bot isn't a typical chatbot — it remembers conversations, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, and YouTube links out of the box.
+MGS Bot isn't a typical chatbot — it remembers conversations across several layers, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, and YouTube links out of the box, while still supporting a simpler assistant mode when you do not want the personality system.
 
 > **Note:** This project is not currently accepting contributions. Feel free to fork it for your own use.
 
 ## Features
 
-- **4-tier memory system** — permanent personality, semantic knowledge base with vector embeddings, per-chat episode summaries, and a sensory buffer of recent messages
+- **Layered memory system** — manual profile/rules, relationship summaries, monthly chapters, semantic facts, episode summaries, and recent sensory context
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
 - **Multi-modal input** — text, voice notes, audio files, photos/images, and YouTube link analysis
 - **Image generation** — generates character images using Gemini or fal.ai with an optional reference image
@@ -22,6 +22,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations, develops persona
 - **Proactive behavior** — follow-up questions about mentioned plans and periodic check-in messages
 - **User identity tracking** — canonical names with alias support, handles name changes gracefully
 - **Multi-provider chat** — swap between Gemini, OpenRouter, Anthropic, Azure, Alibaba, Fireworks, OpenAI, DeepSeek, or fal.ai at runtime
+- **Headless VPS configuration** — manage personality and conversational rules from JSON files using the compiled executable
 - **Sleep schedule** — configurable quiet hours (default: 11:30 PM – 6:00 AM)
 - **Bilingual** — setup wizard and bot personality support English and Spanish
 - **English tutor mode** — natural English practice with the same bot personality, plus automatic English hints for STT
@@ -224,35 +225,55 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 ## Architecture
 
 ```text
-index.ts                     Entry point: env loading, setup wizard, bot startup
+index.ts                     Entry point: env loading, CLI helpers, setup wizard, bot startup
 src/
-  ai.ts                      Gemini API: transcription (Gemini/LemonFox/fal), image description,
-                              YouTube analysis, memory evaluation
-  memory.ts                  4-tier memory read/write + promotion/decay logic
-  prompt.ts                  System prompt assembly with context from all memory tiers
-  conversation.ts            Conversation processing pipeline (prompt → generate → save → reply)
-  response-processor.ts      Response marker processing and reply formatting
-  handlers.ts                grammY handlers: voice, audio, photo, text, YouTube, /provider,
-                              security middleware (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
+  conversation.ts            Main turn pipeline: sensory append, retrieval, prompt, generation,
+                              response sending, and background memory evaluation
+  handlers.ts                grammY update handlers and access control
+  commands.ts                Telegram commands: /provider, /allowphotorequest, /help, /on,
+                              /off, /optimize
+  response-processor.ts      Response marker handling, image/TTS sending, reply formatting
+  media-handlers.ts          Telegram media download and preprocessing
+  bot-state.ts               Runtime on/off state
+  bot-time.ts                Centralized timezone utilities (dayjs)
+  config.ts                  Bot profile/config state, permanent.md migration, headless profile
+  bot-rules.ts               Optional headless behavior/style/group rule configuration
+  setup.ts                   In-Telegram personality setup conversation
+  wizard.ts                  Browser-based .env setup wizard
+  provider-options.ts        Provider metadata, env validation, runtime status formatting
   embeddings.ts              Vector embeddings (gemini-embedding-2-preview) with disk-persisted LRU cache
   personality.ts             Emergent personality: trait growth, decay, momentum, AI description
   identities.ts              User identity tracking: canonical names, aliases, name changes
   check-ins.ts               Proactive check-in scheduling and delivery
   follow-ups.ts              Follow-up detection, scheduling, and delivery
-  config.ts                  Bot configuration state (name, birth year, setup status)
-  setup.ts                   In-Telegram personality setup conversation (4-step)
-  wizard.ts                  Browser-based setup wizard (env + API keys)
-  bot-time.ts                Centralized timezone utilities (dayjs)
   holidays.ts                Holiday calendar (currently Dominican Republic 2026)
   daily-weather.ts           Weather data from Open-Meteo API, cached daily
   chat-logger.ts             Daily conversation log writer
-  tutor.ts                   English tutor mode: state toggle and prompt instructions
-  full-access.ts             Full-access mode: removes image limits, enables subject/self image markers
   appearance.ts              Base character image locator for image generation
   image-scheduler.ts         Weekly character image generation schedule
-  media-handlers.ts          Audio/image download and processing
   utils.ts                   Atomic file writes
   types.ts                   TypeScript interfaces for all data structures
+  ai/
+    core.ts                  Chat generation delegation to the active provider
+    vision.ts                Image and YouTube analysis helpers
+    evaluation.ts            Memory extraction, personality signals, relationship/chapter updates
+    classifiers.ts           Lightweight AI classifiers used by proactive features
+  memory/
+    index.ts                 Memory facade and directory initialization
+    sensory.ts               Recent-message buffer and overflow promotion trigger
+    episodes.ts              Per-chat episodic summaries and relevance search
+    semantic.ts              Global semantic facts, confidence decay, dedup/supersession
+    relationships.ts         Per-chat relationship state
+    chapters.ts              Monthly narrative chapter summaries
+    queries.ts               Embedding/text scoring helpers
+    locks.ts                 Per-store async locks for safe file writes
+  prompt/
+    assemble.ts              Prompt assembly from ordered sections
+    context.ts               Prompt context builder and memory/rules loading
+    history.ts               Chat history construction
+    modes.ts                 Simple assistant, tutor, and full-access mode flags
+    pipeline.ts              Ordered prompt section registry
+    sections/                Header, rules, memory, identity, activity, image, voice sections
   providers/
     types.ts                 ChatProvider interface and ChatMessage type
     index.ts                 Provider factory and runtime switching
@@ -265,6 +286,12 @@ src/
     openai.ts                OpenAI provider
     deepseek.ts              DeepSeek provider
     fal.ts                   fal.ai provider (OpenRouter proxy)
+  stt/
+    types.ts                 Speech-to-text provider interface
+    index.ts                 STT provider order and fallback handling
+    gemini.ts                Gemini transcription provider
+    fal.ts                   fal.ai transcription provider
+    lemonfox.ts              LemonFox transcription provider
   tts/
     types.ts                 TTS provider interface
     index.ts                 TTS provider factory and selection
@@ -279,9 +306,17 @@ src/
     fal.ts                   fal.ai image generation (nano-banana-pro)
 ```
 
+### Project Analysis
+
+MGS Bot is organized around a retrieval-augmented conversation loop rather than a single prompt file. Each turn writes the incoming message to the sensory buffer, retrieves identity/person/relationship/chapter/semantic context, assembles an ordered system prompt, delegates generation to the active chat provider, then processes explicit response markers for silence, reactions, images, and voice notes. Longer-term memory work happens in the background so the chat path stays responsive.
+
+The strongest architectural choice is the separation of concerns across provider axes and memory layers. Chat, STT, TTS, and image generation can be mixed independently, while the prompt pipeline decides what context is worth showing the model. This keeps cost under control by limiting retrieved facts and episodes instead of replaying raw history.
+
+The main operational tradeoff is that the bot is file-backed. That makes the compiled executable easy to deploy on a VPS and keeps the project simple, but the runtime relies on lock helpers and atomic writes to avoid corrupting JSON stores. The current design is a good fit for a personal bot or small group. If it grows into a multi-user hosted service, the natural next step would be moving memory stores and scheduled jobs into a database-backed layer.
+
 ### Memory System
 
-The bot uses a layered memory architecture inspired by human cognition:
+The bot uses a layered memory architecture inspired by human cognition. The top layers are manually configured identity and behavior; the lower layers are learned from conversation:
 
 ```text
 ┌─────────────────────────────────────────────────┐
@@ -301,9 +336,9 @@ The bot uses a layered memory architecture inspired by human cognition:
 │  Per-chat narrative month summaries stored in   │
 │  memory/chapters/<chat_id>.json.                │
 ├─────────────────────────────────────────────────┤
-│  Semantic Store (memory/semantic.json)           │
+│  Semantic Store (memory/semantic.json)          │
 │  Global knowledge base of atomic facts with     │
-│  vector embeddings (gemini-embedding-2-preview). │
+│  vector embeddings (gemini-embedding-2-preview).│
 │  Categories: person, group, rule, event.        │
 │  Confidence decays 0.02/day (min 0.1).          │
 │  Deduplication via cosine similarity at 0.85.   │
@@ -340,12 +375,13 @@ The bot develops emergent personality traits that evolve over time:
 2. If not configured by `memory/bot_profile.json` or `bot_config.json`, enter the interactive personality setup
 3. Load sensory buffer; register/update user identity
 4. In groups: detect mention type (reply / @tag / name / none) — only respond when mentioned
-5. Assemble system prompt: bot profile + evolving personality + relationship/chapter memory + relevant semantic facts + relevant episodes + sensory messages + time/activity context
+5. Assemble system prompt: bot profile + custom bot rules + evolving personality + relationship/chapter memory + relevant semantic facts + relevant episodes + sensory messages + time/activity context
 6. Call the active chat provider, save the exchange, reply with Markdown (falls back to plain text)
 7. Special response markers:
    - `[SILENCE]` — no response
    - `[REACT:emoji]` — react with an emoji instead of replying
-   - `[IMAGE: prompt]` — generate and send a character image
+   - `[IMAGE: prompt]` — generate and send a character image, or a subject-only image in full-access mode
+   - `[IMAGE_SELF: prompt]` — generate the bot character in a scene in full-access mode
    - `[TTS]text[/TTS]` — send a voice note via the configured TTS provider
 8. Background: memory evaluation extracts semantic facts, personality signals, and follow-up opportunities
 
@@ -355,7 +391,7 @@ The bot generates character images on a weekly schedule:
 
 - One random day per week, at a random time between 8 AM and 11 PM (bot timezone)
 - Pluggable provider: Gemini (`IMAGE_PROVIDER=gemini`, default) or fal.ai (`IMAGE_PROVIDER=fal`)
-- Gemini uses `gemini-3.1-flash-image-preview` with a base character image (`memory/base.{png,jpg,jpeg}`)
+- Gemini uses `gemini-3-pro-image-preview` with a base character image (`memory/base.{png,jpg,jpeg}`)
 - fal.ai uses nano-banana-pro: `/edit` endpoint when a base image exists (character images), base endpoint for standalone generation (e.g., full-access mode illustrations)
 - Schedule tracked per-chat via sensory buffer fields (`lastImageDate`, `imageTargetDate`, `imageTargetTime`)
 - On-demand photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command)
@@ -385,7 +421,7 @@ bun run build        # Compile to standalone binary
 bun run build:linux  # Cross-compile for Linux x64
 ```
 
-Tests live in `tests/` and cover handlers, memory, and utility logic.
+Tests live in `tests/` and cover provider validation, prompt sections, response markers, handlers, memory, file-lock behavior, configuration parsing, and utility logic.
 
 ### Telegram Commands
 
@@ -407,6 +443,24 @@ bun run scripts/merge-person-facts.ts  # Deduplicate person facts across name va
 ```
 
 ## Customization
+
+### Headless Profile and Rules
+
+For VPS deployments where only the compiled executable is available, use JSON files under `memory/`:
+
+- `memory/bot_profile.json` controls the bot's manual identity/personality: name, birth year, gender, language, and personality description.
+- `memory/bot_rules.json` adds optional conversational rules: custom instructions, style rules, relationship rules, group rules, and new-person rules.
+
+Create or inspect them with:
+
+```bash
+./mgsbot --init-profile
+./mgsbot --show-profile
+./mgsbot --init-rules
+./mgsbot --show-rules
+```
+
+The rules file augments the prompt. It does not override code-level behavior such as access control, provider selection, marker parsing, memory limits, or security checks.
 
 ### Holidays
 
@@ -434,7 +488,7 @@ The bot's conversational language is configured during setup and stored in `memo
 
 - **Runtime:** [Bun](https://bun.sh)
 - **Bot framework:** [grammY](https://grammy.dev)
-- **AI:** [Google GenAI](https://ai.google.dev) — default chat: `gemini-3-flash-preview`; character images: `gemini-3.1-flash-image-preview`; embeddings: `gemini-embedding-2-preview`
+- **AI:** [Google GenAI](https://ai.google.dev) — default chat: `gemini-3-flash-preview`; character images: `gemini-3-pro-image-preview`; embeddings: `gemini-embedding-2-preview`
 - **Language:** TypeScript (strict mode)
 - **Linter/Formatter:** [Biome](https://biomejs.dev) — tabs, double quotes, auto-organized imports
 
