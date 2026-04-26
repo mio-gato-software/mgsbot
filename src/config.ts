@@ -14,6 +14,7 @@ export interface BotConfig {
 
 const CONFIG_PATH = "./memory/bot_config.json";
 const PERMANENT_PATH = "./memory/permanent.md";
+export const BOT_PROFILE_PATH = "./memory/bot_profile.json";
 
 const DEFAULT_CONFIG: BotConfig = {
 	isConfigured: false,
@@ -23,6 +24,115 @@ const DEFAULT_CONFIG: BotConfig = {
 let configCache: BotConfig | null = null;
 let configLastRead = 0;
 const CONFIG_CACHE_MS = 60_000;
+
+function normalizeLanguage(value: unknown): BotLanguage | undefined {
+	return value === "en" || value === "es" ? value : undefined;
+}
+
+export function parseManualProfile(raw: unknown): BotConfig | null {
+	const parsed = raw as Partial<BotConfig> | null;
+	if (!parsed || typeof parsed !== "object") return null;
+
+	const botName =
+		typeof parsed.botName === "string" && parsed.botName.trim()
+			? parsed.botName.trim()
+			: undefined;
+	const birthYear =
+		typeof parsed.birthYear === "number" && Number.isFinite(parsed.birthYear)
+			? parsed.birthYear
+			: undefined;
+	const gender =
+		typeof parsed.gender === "string" && parsed.gender.trim()
+			? parsed.gender.trim().toLowerCase()
+			: undefined;
+	const personality =
+		typeof parsed.personality === "string" && parsed.personality.trim()
+			? parsed.personality.trim()
+			: undefined;
+	const language = normalizeLanguage(parsed.language);
+
+	if (!botName || !birthYear || !gender || !personality) {
+		return null;
+	}
+
+	return {
+		isConfigured: true,
+		botName,
+		birthYear,
+		gender,
+		personality,
+		language: language ?? "es",
+	};
+}
+
+function loadManualProfile(): BotConfig | null {
+	if (!existsSync(BOT_PROFILE_PATH)) return null;
+	try {
+		const data = readFileSync(BOT_PROFILE_PATH, "utf-8");
+		const profile = parseManualProfile(JSON.parse(data));
+		if (!profile) {
+			console.error(
+				`[config] ${BOT_PROFILE_PATH} exists but is missing required fields. Required: botName, birthYear, gender, personality.`,
+			);
+			return null;
+		}
+		return profile;
+	} catch (error) {
+		console.error(`[config] Error loading ${BOT_PROFILE_PATH}:`, error);
+		return null;
+	}
+}
+
+export function buildProfileTemplate(
+	config: BotConfig = loadConfig(),
+): BotConfig {
+	return {
+		isConfigured: true,
+		botName: config.botName || "MGS Bot",
+		birthYear: config.birthYear ?? 1995,
+		gender: config.gender ?? (config.language === "en" ? "female" : "mujer"),
+		personality:
+			config.personality ??
+			(config.language === "en"
+				? "Warm, curious, playful, and emotionally present. Speaks naturally, remembers personal context without forcing it, and adapts to the user's language and tone."
+				: "Cálida, curiosa, juguetona y emocionalmente presente. Habla de forma natural, recuerda el contexto personal sin forzarlo y se adapta al idioma y tono del usuario."),
+		language: config.language ?? "es",
+	};
+}
+
+export function writeProfileTemplate(overwrite = false): boolean {
+	if (existsSync(BOT_PROFILE_PATH) && !overwrite) return false;
+	const template = buildProfileTemplate();
+	atomicWriteFileSync(
+		BOT_PROFILE_PATH,
+		`${JSON.stringify(template, null, "\t")}\n`,
+	);
+	return true;
+}
+
+export function syncManualProfileToConfig(): BotConfig | null {
+	const profile = loadManualProfile();
+	if (!profile) return null;
+	saveConfig(profile);
+	return profile;
+}
+
+export function formatProfileStatus(): string {
+	const manualProfile = loadManualProfile();
+	const config = loadConfig();
+	const source = manualProfile ? BOT_PROFILE_PATH : CONFIG_PATH;
+	return [
+		`Profile source: ${source}`,
+		`Configured: ${config.isConfigured ? "yes" : "no"}`,
+		`Name: ${config.botName}`,
+		`Birth year: ${config.birthYear ?? "(missing)"}`,
+		`Gender: ${config.gender ?? "(missing)"}`,
+		`Language: ${config.language ?? "es"}`,
+		"",
+		"Personality:",
+		config.personality?.trim() || "(missing)",
+	].join("\n");
+}
 
 function extractFromPermanent(data: string): Partial<BotConfig> | null {
 	const esHeader = data.match(/^# Personalidad de (.+)$/m);
@@ -96,6 +206,13 @@ export function loadConfig(): BotConfig {
 	}
 
 	try {
+		const manualProfile = loadManualProfile();
+		if (manualProfile) {
+			configCache = manualProfile;
+			configLastRead = now;
+			return configCache;
+		}
+
 		if (!existsSync(CONFIG_PATH)) {
 			configCache = migrateFromPermanent();
 			configLastRead = now;
