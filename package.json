@@ -36,6 +36,9 @@
 	"scripts": {
 		"start": "bun run index.ts",
 		"dev": "bun --watch run index.ts",
+		"profile:init": "bun run index.ts --init-profile",
+		"profile:show": "bun run index.ts --show-profile",
+		"profile:sync": "bun run index.ts --sync-profile",
 		"test": "bun test",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
