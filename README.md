@@ -83,12 +83,24 @@ Useful executable commands:
 ./mgsbot --init-profile --force
 ```
 
+You can also customize conversational rules without source code:
+
+```bash
+./mgsbot --init-rules
+nano memory/bot_rules.json
+./mgsbot --show-rules
+```
+
+`memory/bot_rules.json` is optional. It can add custom behavior, style, relationship, group, and new-person rules. It cannot override technical/security behavior such as access control, provider configuration, or marker syntax.
+
 The same helpers are available during development:
 
 ```bash
 bun run profile:init
 bun run profile:show
 bun run profile:sync
+bun run rules:init
+bun run rules:show
 ```
 
 ### Docker
@@ -276,6 +288,10 @@ The bot uses a layered memory architecture inspired by human cognition:
 │  Bot Profile (memory/bot_profile.json optional) │
 │  Manual personality override for headless VPS   │
 │  deployments. Falls back to bot_config.json.    │
+├─────────────────────────────────────────────────┤
+│  Bot Rules (memory/bot_rules.json optional)     │
+│  Manual conversational behavior/style rules for │
+│  headless VPS deployments.                      │
 ├─────────────────────────────────────────────────┤
 │  Relationship Memory                            │
 │  Per-chat relational summary and open threads   │

@@ -33,6 +33,7 @@ function makeCtx(overrides: Partial<PromptContext> = {}): PromptContext {
 		permanentFacts: undefined,
 		relationshipMemory: undefined,
 		recentChapters: undefined,
+		botRules: {},
 		activeNames: undefined,
 		mentionedNames: undefined,
 		mentionType: undefined,
@@ -174,6 +175,22 @@ describe("section: rules.behavior", () => {
 	test("includes photo bullet in normal mode", async () => {
 		const out = (await rulesBehavior.render(makeCtx())) ?? "";
 		expect(out).toContain("If asked for a photo");
+	});
+
+	test("can include custom behavior rules from prompt context", async () => {
+		const out =
+			(await rulesBehavior.render(
+				makeCtx({
+					botRules: {
+						customInstructions: ["Use less exclamation"],
+						styleRules: ["Avoid corporate tone"],
+						relationshipRules: ["Use memories subtly"],
+					},
+				}),
+			)) ?? "";
+		expect(out).toContain("Use less exclamation");
+		expect(out).toContain("Avoid corporate tone");
+		expect(out).toContain("Use memories subtly");
 	});
 
 	test("omits photo bullet in full-access mode", async () => {

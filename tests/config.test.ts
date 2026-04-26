@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { parseBotRules } from "../src/bot-rules.ts";
 import { parseManualProfile } from "../src/config.ts";
 
 describe("manual bot profile", () => {
@@ -41,5 +42,37 @@ describe("manual bot profile", () => {
 		});
 
 		expect(profile?.language).toBe("es");
+	});
+});
+
+describe("manual bot rules", () => {
+	test("keeps supported rule lists", () => {
+		const rules = parseBotRules({
+			customInstructions: ["Be direct", "", "  Stay warm  "],
+			styleRules: ["No corporate tone"],
+			relationshipRules: ["Use memories subtly"],
+			groupRules: ["Stay brief in groups"],
+			newPersonRules: ["Welcome people gently"],
+			unknownRules: ["ignored"],
+		});
+
+		expect(rules).toEqual({
+			customInstructions: ["Be direct", "Stay warm"],
+			styleRules: ["No corporate tone"],
+			relationshipRules: ["Use memories subtly"],
+			groupRules: ["Stay brief in groups"],
+			newPersonRules: ["Welcome people gently"],
+		});
+	});
+
+	test("ignores malformed rule values", () => {
+		expect(
+			parseBotRules({
+				customInstructions: "Be direct",
+				styleRules: [1, null, "Valid"],
+			}),
+		).toEqual({
+			styleRules: ["Valid"],
+		});
 	});
 });
