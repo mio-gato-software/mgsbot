@@ -20,8 +20,10 @@ if (!process.env.CHAT_PROVIDER && process.env.PROVIDER) {
 
 const showHelp = process.argv.includes("--help") || process.argv.includes("-h");
 const initProfile = process.argv.includes("--init-profile");
+const initRules = process.argv.includes("--init-rules");
 const forceProfile = process.argv.includes("--force");
 const showProfile = process.argv.includes("--show-profile");
+const showRules = process.argv.includes("--show-rules");
 const syncProfile = process.argv.includes("--sync-profile");
 
 if (showHelp) {
@@ -34,6 +36,9 @@ Usage:
   ./mgsbot --init-profile --force  Overwrite memory/bot_profile.json with a fresh template
   ./mgsbot --show-profile        Print the active bot personality profile
   ./mgsbot --sync-profile        Copy memory/bot_profile.json into memory/bot_config.json
+  ./mgsbot --init-rules          Create memory/bot_rules.json for editable behavior rules
+  ./mgsbot --init-rules --force  Overwrite memory/bot_rules.json with a fresh template
+  ./mgsbot --show-rules          Print custom behavior rules
 
 Headless personality setup:
   1. Run ./mgsbot --init-profile
@@ -44,13 +49,15 @@ If memory/bot_profile.json exists and is valid, it is used as the active persona
 	process.exit(0);
 }
 
-if (initProfile || showProfile || syncProfile) {
+if (initProfile || showProfile || syncProfile || initRules || showRules) {
 	const {
 		BOT_PROFILE_PATH,
 		formatProfileStatus,
 		syncManualProfileToConfig,
 		writeProfileTemplate,
 	} = await import("./src/config.ts");
+	const { BOT_RULES_PATH, formatRulesStatus, writeRulesTemplate } =
+		await import("./src/bot-rules.ts");
 
 	if (initProfile) {
 		const written = writeProfileTemplate(forceProfile);
@@ -72,6 +79,19 @@ if (initProfile || showProfile || syncProfile) {
 
 	if (showProfile) {
 		console.log(formatProfileStatus());
+	}
+
+	if (initRules) {
+		const written = writeRulesTemplate(forceProfile);
+		console.log(
+			written
+				? `Created ${BOT_RULES_PATH}. Edit it, then run ./mgsbot.`
+				: `${BOT_RULES_PATH} already exists. Use --force to overwrite it.`,
+		);
+	}
+
+	if (showRules) {
+		console.log(formatRulesStatus());
 	}
 
 	process.exit(0);

@@ -28,27 +28,37 @@ function bulletList(heading: string, bullets: string[]): string {
 export const rulesBehavior: PromptSection = {
 	id: "rules.behavior",
 	render(ctx: PromptContext) {
+		const customRules = ctx.botRules ?? {};
 		const bullets = [...BEHAVIOR_BULLETS];
 		if (!ctx.mode.fullAccess) {
 			bullets.push(PHOTO_BULLET);
 		}
+		bullets.push(...(customRules.customInstructions ?? []));
+		bullets.push(...(customRules.styleRules ?? []));
+		bullets.push(...(customRules.relationshipRules ?? []));
 		return bulletList("Behavior Rules", bullets);
 	},
 };
 
 export const rulesGroup: PromptSection = {
 	id: "rules.group",
-	render() {
-		return bulletList("Group Behavior", GROUP_BULLETS);
+	render(ctx: PromptContext) {
+		const customRules = ctx.botRules ?? {};
+		return bulletList("Group Behavior", [
+			...GROUP_BULLETS,
+			...(customRules.groupRules ?? []),
+		]);
 	},
 };
 
 export const rulesNewPerson: PromptSection = {
 	id: "rules.newPerson",
-	render() {
+	render(ctx: PromptContext) {
 		const c = loadConfig();
+		const customRules = ctx.botRules ?? {};
 		return bulletList("New Person", [
 			`Introduce yourself politely, stating that you are ${c.botName}.`,
+			...(customRules.newPersonRules ?? []),
 		]);
 	},
 };
