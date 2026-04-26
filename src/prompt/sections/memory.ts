@@ -96,9 +96,13 @@ export const memoryPersons: PromptSection = {
 		);
 		if (personFacts.length === 0) return null;
 
-		const filtered = ctx.activeNames?.length
+		const relevantNames = [
+			...(ctx.activeNames ?? []),
+			...(ctx.mentionedNames ?? []),
+		];
+		const filtered = relevantNames.length
 			? (() => {
-					const activeNormalized = new Set(ctx.activeNames.map(normalizeName));
+					const activeNormalized = new Set(relevantNames.map(normalizeName));
 					return personFacts.filter(
 						(f) => f.subject && activeNormalized.has(normalizeName(f.subject)),
 					);

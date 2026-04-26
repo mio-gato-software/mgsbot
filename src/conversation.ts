@@ -2,12 +2,16 @@ import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { evaluateConversationChunk } from "./ai/evaluation.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
-import { generateEmbedding } from "./embeddings.ts";
+import { EMBEDDING_MODEL, generateEmbedding } from "./embeddings.ts";
 import {
 	checkAndCancelResolvedFollowUps,
 	detectAndStoreFollowUps,
 } from "./follow-ups.ts";
-import { registerIdentity, resolveCanonicalName } from "./identities.ts";
+import {
+	findMentionedCanonicalNames,
+	registerIdentity,
+	resolveCanonicalName,
+} from "./identities.ts";
 import { shouldGenerateImageNow } from "./image-scheduler.ts";
 import {
 	addEpisode,
@@ -17,8 +21,8 @@ import {
 	getPermanentFacts,
 	getQueryEmbedding,
 	getRelevantEpisodes,
+	getRelevantExistingFactsForDedup,
 	getRelevantFacts,
-	loadSemanticStore,
 	loadSensory,
 	withChatLock,
 } from "./memory/index.ts";
@@ -41,6 +45,25 @@ const ACTIVE_NAME_WINDOW_MESSAGES = 6;
 const MAX_RELEVANT_EPISODES = 3;
 const MAX_RELEVANT_FACTS = 8;
 const MAX_PARTICIPANT_FACTS_PER_SUBJECT = 3;
+
+function uniqueNames(names: string[]): string[] {
+	return [...new Set(names.filter((name) => name.trim().length > 0))];
+}
+
+function formatExistingFactSummary(facts: SemanticFact[]): string | undefined {
+	if (facts.length === 0) return undefined;
+	return facts
+		.map((fact) => `- [${fact.subject || fact.category}] ${fact.content}`)
+		.join("\n");
+}
+
+function inferSemanticScope(
+	fact: Pick<SemanticFact, "category" | "subject">,
+): SemanticFact["scope"] {
+	if (fact.category === "person") return "person";
+	if (fact.subject) return "person";
+	return "chat";
+}
 
 export function isGroupChat(ctx: Context): boolean {
 	const type = ctx.chat?.type;
@@ -161,6 +184,8 @@ export async function processConversation(
 		// Wait for both to complete
 		const [{ embedding: queryEmbedding, text: queryText }, activeNames] =
 			await Promise.all([queryEmbeddingPromise, activeNamesPromise]);
+		const mentionedNames = await findMentionedCanonicalNames(queryText);
+		const subjectNames = uniqueNames([...activeNames, ...mentionedNames]);
 
 		// Retrieve episodes, semantic facts, participant facts, and permanent facts in parallel
 		const [episodes, facts, participantFacts, permanentFacts] =
@@ -174,9 +199,10 @@ export async function processConversation(
 				getRelevantFacts(queryEmbedding, {
 					queryText,
 					maxCount: MAX_RELEVANT_FACTS,
+					chatId,
 				}),
-				activeNames.length > 0
-					? getFactsForSubjects(activeNames, MAX_PARTICIPANT_FACTS_PER_SUBJECT)
+				subjectNames.length > 0
+					? getFactsForSubjects(subjectNames, MAX_PARTICIPANT_FACTS_PER_SUBJECT)
 					: ([] as SemanticFact[]),
 				getPermanentFacts(),
 			]);
@@ -200,6 +226,7 @@ export async function processConversation(
 			relevantFacts: mergedFacts,
 			permanentFacts,
 			activeNames,
+			mentionedNames,
 			mentionType: isGroupChat(ctx) ? mentionType : undefined,
 			isVoiceMessage,
 			userAttachedImage: !!userImagePath,
@@ -266,15 +293,27 @@ export async function promoteToMemory(
 			(m) => `${m.role === "user" ? (m.name ?? "User") : "Bot"}: ${m.content}`,
 		)
 		.join("\n");
+	const rawParticipants = [
+		...new Set(overflow.map((m) => m.name).filter((n): n is string => !!n)),
+	];
+	const participants = await Promise.all(
+		rawParticipants.map((n) => resolveCanonicalName(n)),
+	).then(uniqueNames);
 
-	// Build existing fact summary for dedup (include all facts, grouped by subject/category)
-	const store = await loadSemanticStore();
-	const existingFactSummary =
-		store.length > 0
-			? store
-					.map((f) => `- [${f.subject || f.category}] ${f.content}`)
-					.join("\n")
-			: undefined;
+	// Keep the extractor's dedup context bounded so promotion cost does not grow
+	// linearly with the whole semantic store.
+	const existingFacts = await getRelevantExistingFactsForDedup([
+		...participants.map((participant) => ({
+			content: participant,
+			category: "person" as const,
+			subject: participant,
+			sourceChatId: chatId,
+		})),
+		{ content: recentText, category: "group" as const, sourceChatId: chatId },
+		{ content: recentText, category: "rule" as const, sourceChatId: chatId },
+		{ content: recentText, category: "event" as const, sourceChatId: chatId },
+	]);
+	const existingFactSummary = formatExistingFactSummary(existingFacts);
 
 	// LLM: evaluate and extract
 	const result = await evaluateConversationChunk(
@@ -300,16 +339,8 @@ export async function promoteToMemory(
 		return;
 	}
 
-	// Generate episode embedding, resolve participants, and fact embeddings in parallel
-	const rawParticipants = [
-		...new Set(overflow.map((m) => m.name).filter((n): n is string => !!n)),
-	];
-	const [episodeEmbedding, participants] = await Promise.all([
-		generateEmbedding(result.summary),
-		Promise.all(rawParticipants.map((n) => resolveCanonicalName(n))).then(
-			(names) => [...new Set(names)],
-		),
-	]);
+	// Generate episode embedding.
+	const episodeEmbedding = await generateEmbedding(result.summary);
 
 	const now = Date.now();
 	await addEpisode(chatId, {
@@ -319,6 +350,8 @@ export async function promoteToMemory(
 		timestamp: now,
 		importance: result.importance,
 		embedding: episodeEmbedding,
+		embeddingModel: EMBEDDING_MODEL,
+		embeddingDim: episodeEmbedding.length,
 	});
 
 	// Add semantic facts with embeddings in parallel (canonicalize subjects)
@@ -341,10 +374,15 @@ export async function promoteToMemory(
 			subject: fact.canonicalSubject,
 			context: fact.context,
 			embedding: fact.factEmbedding,
+			embeddingModel: EMBEDDING_MODEL,
+			embeddingDim: fact.factEmbedding.length,
 			importance: fact.importance,
 			confidence: 1.0,
 			createdAt: now,
 			lastConfirmed: now,
+			lastDecayedAt: now,
+			scope: inferSemanticScope(fact),
+			sourceChatId: chatId,
 			...(fact.permanent ? { permanent: true } : {}),
 		}));
 		await addSemanticFacts(semanticFacts);
