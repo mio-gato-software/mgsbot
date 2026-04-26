@@ -12,6 +12,7 @@ export interface PromptContext {
 	relevantFacts: SemanticFact[];
 	permanentFacts?: SemanticFact[];
 	activeNames?: string[];
+	mentionedNames?: string[];
 	mentionType?: MentionType;
 	isVoiceMessage: boolean;
 	userAttachedImage: boolean;
