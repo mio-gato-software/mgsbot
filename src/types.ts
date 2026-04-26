@@ -45,6 +45,28 @@ export interface WorkingMemory {
 	episodes: Episode[]; // max 20
 }
 
+export interface RelationshipMemory {
+	chatId: number;
+	summary: string; // 80-140 words about the relationship dynamic
+	tone: string; // e.g. "warm, playful, direct"
+	notableDynamics: string[]; // max 5
+	openThreads: string[]; // max 5, relational topics that still feel alive
+	updatedAt: number;
+	interactionCount: number;
+}
+
+export interface MemoryChapter {
+	id: string; // "chapter_<chatId>_<YYYY-MM>"
+	chatId: number;
+	month: string; // YYYY-MM in bot timezone
+	title: string;
+	summary: string; // compact narrative of the month
+	participants: string[];
+	importance: number; // 1-5
+	episodeIds: string[];
+	updatedAt: number;
+}
+
 export interface SemanticFact {
 	id: string;
 	content: string; // atomic fact
@@ -63,6 +85,7 @@ export interface SemanticFact {
 	sourceChatId?: number;
 	validUntil?: number;
 	supersedes?: string[];
+	supersededBy?: string;
 	permanent?: boolean; // never decays, always included in prompt
 }
 
@@ -144,6 +167,7 @@ export interface PromotionResult {
 		context?: string;
 		importance: number;
 		permanent?: boolean;
+		supersedes?: string[];
 	}>;
 	personalitySignals?: PersonalitySignals;
 }

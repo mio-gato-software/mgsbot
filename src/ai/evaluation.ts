@@ -1,5 +1,10 @@
 import { getTraitDefinitionsForPrompt } from "../personality.ts";
-import type { PromotionResult } from "../types.ts";
+import type {
+	Episode,
+	MemoryChapter,
+	PromotionResult,
+	RelationshipMemory,
+} from "../types.ts";
 import { TRAIT_NAMES } from "../types.ts";
 import { hasFollowUpIntent } from "./classifiers.ts";
 import { generateResponse } from "./core.ts";
@@ -8,6 +13,76 @@ const isDev = process.env.NODE_ENV === "development";
 
 const VALID_CATEGORIES = new Set(["person", "group", "rule", "event"]);
 const VALID_TRAIT_NAMES = new Set<string>(TRAIT_NAMES);
+const MAX_RELATIONSHIP_DYNAMICS = 5;
+const MAX_RELATIONSHIP_THREADS = 5;
+
+export interface LongTermMemoryUpdate {
+	relationship: Pick<
+		RelationshipMemory,
+		"summary" | "tone" | "notableDynamics" | "openThreads"
+	>;
+	chapter: Pick<MemoryChapter, "title" | "summary" | "importance">;
+}
+
+function compactList(raw: unknown, maxItems: number): string[] {
+	if (!Array.isArray(raw)) return [];
+	return raw
+		.filter((item): item is string => typeof item === "string")
+		.map((item) => item.trim())
+		.filter(Boolean)
+		.slice(0, maxItems);
+}
+
+function validateLongTermMemoryUpdate(raw: unknown): LongTermMemoryUpdate {
+	const candidate = (raw ?? {}) as {
+		relationship?: Partial<RelationshipMemory>;
+		chapter?: Partial<MemoryChapter>;
+	};
+	const relationship = candidate.relationship ?? {};
+	const chapter = candidate.chapter ?? {};
+
+	const relationshipSummary =
+		typeof relationship.summary === "string" && relationship.summary.trim()
+			? relationship.summary.trim()
+			: "The relationship is still forming through casual conversations.";
+	const tone =
+		typeof relationship.tone === "string" && relationship.tone.trim()
+			? relationship.tone.trim()
+			: "casual";
+
+	const chapterSummary =
+		typeof chapter.summary === "string" && chapter.summary.trim()
+			? chapter.summary.trim()
+			: "A small conversation added a bit of shared context.";
+	const title =
+		typeof chapter.title === "string" && chapter.title.trim()
+			? chapter.title.trim()
+			: "Shared moments";
+	const importance =
+		typeof chapter.importance === "number"
+			? Math.max(1, Math.min(5, Math.round(chapter.importance)))
+			: 2;
+
+	return {
+		relationship: {
+			summary: relationshipSummary,
+			tone,
+			notableDynamics: compactList(
+				relationship.notableDynamics,
+				MAX_RELATIONSHIP_DYNAMICS,
+			),
+			openThreads: compactList(
+				relationship.openThreads,
+				MAX_RELATIONSHIP_THREADS,
+			),
+		},
+		chapter: {
+			title,
+			summary: chapterSummary,
+			importance,
+		},
+	};
+}
 
 function validatePromotionResult(raw: PromotionResult): PromotionResult {
 	const summary =
@@ -38,6 +113,12 @@ function validatePromotionResult(raw: PromotionResult): PromotionResult {
 					? Math.max(1, Math.min(5, Math.round(f.importance)))
 					: importance,
 			permanent: f.permanent === true,
+			supersedes: Array.isArray(f.supersedes)
+				? f.supersedes
+						.filter((id): id is string => typeof id === "string")
+						.map((id) => id.trim())
+						.filter(Boolean)
+				: undefined,
 		}));
 
 	// Validate personality signals
@@ -78,7 +159,9 @@ export async function evaluateConversationChunk(
 FACTS ALREADY SAVED (do NOT duplicate):
 ${existingFactSummary}
 
-IMPORTANT: Only add NEW information not already covered above.
+	IMPORTANT: Only add NEW information not already covered above.
+	If a new fact clearly replaces or contradicts one of these saved mutable facts, include that old fact's id in the new fact's "supersedes" array.
+	Only supersede mutable facts such as current job, current location, current plans, preferences, or opinions. NEVER supersede permanent facts.
 
 `;
 	}
@@ -122,7 +205,8 @@ IMPORTANT: Only add NEW information not already covered above.
    - Future plans
    - Mood, opinions
    Be VERY selective: only data that will NEVER change in the person's life.
-5. **Personality signals**: Does the conversation reveal something about how the bot is evolving emotionally? Only if the signals are clear.
+5. **Supersession**: If a new fact replaces or contradicts an older mutable saved fact, set "supersedes" to the old fact id(s). If unsure, leave it empty.
+6. **Personality signals**: Does the conversation reveal something about how the bot is evolving emotionally? Only if the signals are clear.
 You can ONLY use these EXACT trait names (do not invent others):
 ${getTraitDefinitionsForPrompt()}
 
@@ -130,7 +214,7 @@ If the conversation shows no clear signals, leave traitChanges empty.
 Each delta must be between -0.15 and +0.15.
 ${contextSection}
 Respond ONLY with JSON:
-{"summary": "brief summary", "importance": 1-5, "facts": [{"content": "fact about the PERSON", "category": "person|group|rule|event", "subject": "name (only if person)", "context": "why it matters", "importance": 1-5, "permanent": false}], "personalitySignals": {"traitChanges": [{"trait": "warmth", "delta": 0.1, "reason": "reason for the change"}]}}
+{"summary": "brief summary", "importance": 1-5, "facts": [{"content": "fact about the PERSON", "category": "person|group|rule|event", "subject": "name (only if person)", "context": "why it matters", "importance": 1-5, "permanent": false, "supersedes": []}], "personalitySignals": {"traitChanges": [{"trait": "warmth", "delta": 0.1, "reason": "reason for the change"}]}}
 
 If there's nothing personally relevant: {"summary": "casual conversation", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
 
@@ -167,6 +251,87 @@ export async function summarizeConversation(
 	return generateResponse(systemPrompt, [
 		{ role: "user", content: userMessage },
 	]);
+}
+
+export async function generateLongTermMemoryUpdate(input: {
+	existingRelationship: RelationshipMemory | null;
+	existingChapter: MemoryChapter | null;
+	episode: Episode;
+	recentMessages: string;
+	month: string;
+}): Promise<LongTermMemoryUpdate> {
+	const relationshipContext = input.existingRelationship
+		? `Existing relationship memory:
+Summary: ${input.existingRelationship.summary}
+Tone: ${input.existingRelationship.tone}
+Dynamics:
+${(input.existingRelationship.notableDynamics ?? []).map((d) => `- ${d}`).join("\n")}
+Open threads:
+${(input.existingRelationship.openThreads ?? []).map((t) => `- ${t}`).join("\n")}`
+		: "No relationship memory exists yet.";
+
+	const chapterContext = input.existingChapter
+		? `Existing ${input.month} chapter:
+Title: ${input.existingChapter.title}
+Summary: ${input.existingChapter.summary}
+Importance: ${input.existingChapter.importance}`
+		: `No chapter exists yet for ${input.month}.`;
+
+	const systemPrompt =
+		"You update long-term conversational memory. Respond ONLY with valid JSON, no additional text.";
+
+	const userMessage = `Update two compact memories from this new episode.
+
+Goal:
+1. Relationship memory: a living sense of the relationship dynamic with the chat. This is NOT a list of facts. Capture rapport, recurring emotional tone, how people relate, topics that feel alive, and what the bot should subtly remember about the relationship.
+2. Monthly chapter: a short narrative chapter for ${input.month}. This compresses what has been happening this month so old episodes can fade without losing continuity.
+
+Rules:
+- Be concise and concrete.
+- Do not invent events.
+- Do not store general world knowledge.
+- Do not turn temporary activities into timeless facts.
+- Open threads should be relationally useful, not task-manager reminders.
+- Preserve the user's language when obvious.
+
+${relationshipContext}
+
+${chapterContext}
+
+New episode:
+- Summary: ${input.episode.summary}
+- Participants: ${input.episode.participants.join(", ") || "Unknown"}
+- Importance: ${input.episode.importance}
+
+Conversation excerpt:
+${input.recentMessages}
+
+Respond ONLY with JSON:
+{
+  "relationship": {
+    "summary": "80-140 words",
+    "tone": "short tone label",
+    "notableDynamics": ["max 5 short bullets"],
+    "openThreads": ["max 5 short bullets"]
+  },
+  "chapter": {
+    "title": "short title",
+    "summary": "80-140 words",
+    "importance": 1-5
+  }
+}`;
+
+	try {
+		const text = await generateResponse(systemPrompt, [
+			{ role: "user", content: userMessage },
+		]);
+		const jsonMatch = text.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) return validateLongTermMemoryUpdate({});
+		return validateLongTermMemoryUpdate(JSON.parse(jsonMatch[0]));
+	} catch (error) {
+		if (isDev) console.error("[long-term-memory] Update failed:", error);
+		return validateLongTermMemoryUpdate({});
+	}
 }
 
 interface ExtractedFollowUp {

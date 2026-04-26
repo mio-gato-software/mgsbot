@@ -1,5 +1,10 @@
 import type { MentionType } from "../handlers.ts";
-import type { Episode, SemanticFact } from "../types.ts";
+import type {
+	Episode,
+	MemoryChapter,
+	RelationshipMemory,
+	SemanticFact,
+} from "../types.ts";
 import { resolveModeFlags } from "./modes.ts";
 import type { PromptContext } from "./types.ts";
 
@@ -7,6 +12,8 @@ export interface PromptContextInput {
 	relevantEpisodes: Episode[];
 	relevantFacts: SemanticFact[];
 	permanentFacts?: SemanticFact[];
+	relationshipMemory?: RelationshipMemory | null;
+	recentChapters?: MemoryChapter[];
 	activeNames?: string[];
 	mentionedNames?: string[];
 	mentionType?: MentionType;
@@ -22,6 +29,8 @@ export function buildPromptContext(input: PromptContextInput): PromptContext {
 		relevantEpisodes: input.relevantEpisodes,
 		relevantFacts: input.relevantFacts,
 		permanentFacts: input.permanentFacts,
+		relationshipMemory: input.relationshipMemory,
+		recentChapters: input.recentChapters,
 		activeNames: input.activeNames,
 		mentionedNames: input.mentionedNames,
 		mentionType: input.mentionType,
