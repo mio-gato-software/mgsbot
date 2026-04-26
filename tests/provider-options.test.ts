@@ -18,6 +18,12 @@ describe("provider options", () => {
 		);
 	});
 
+	test("accepts deepseek as a chat provider", () => {
+		expect(resolveChatProviderName({ CHAT_PROVIDER: "deepseek" })).toBe(
+			"deepseek",
+		);
+	});
+
 	test("resolves automatic STT provider order", () => {
 		expect(
 			resolveSttProviderOrder({
@@ -54,6 +60,15 @@ describe("provider options", () => {
 		});
 		expect(result.errors).toContain(
 			"fal.ai TTS requires FAL_API_KEY when TTS_PROVIDER=fal.",
+		);
+	});
+
+	test("validation requires the DeepSeek key when selected", () => {
+		const result = validateProviderConfiguration({
+			CHAT_PROVIDER: "deepseek",
+		});
+		expect(result.errors).toContain(
+			"DeepSeek chat requires DEEPSEEK_API_KEY when CHAT_PROVIDER=deepseek.",
 		);
 	});
 

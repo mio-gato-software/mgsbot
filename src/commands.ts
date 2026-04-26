@@ -39,7 +39,7 @@ export function registerCommands(bot: Bot): void {
 
 		if (!isChatProviderName(providerArg)) {
 			await ctx.reply(
-				`Uso:\n/provider — ver proveedor actual\n/provider <proveedor> [modelo]\n\nEjemplos:\n/provider gemini\n/provider openrouter meta-llama/llama-4-scout\n/provider fal google/gemini-2.5-pro\n\nProveedores: ${CHAT_PROVIDER_NAMES.join(", ")}`,
+				`Uso:\n/provider — ver proveedor actual\n/provider <proveedor> [modelo]\n\nEjemplos:\n/provider gemini\n/provider openrouter meta-llama/llama-4-scout\n/provider deepseek deepseek-v4-pro\n/provider fal google/gemini-2.5-pro\n\nProveedores: ${CHAT_PROVIDER_NAMES.join(", ")}`,
 			);
 			return;
 		}
