@@ -12,11 +12,13 @@ import {
 	imageWeekly,
 } from "./sections/image.ts";
 import {
+	memoryChapters,
 	memoryEpisodes,
 	memoryGeneralFacts,
 	memoryPermanentOther,
 	memoryPermanentPersons,
 	memoryPersons,
+	memoryRelationship,
 } from "./sections/memory.ts";
 import { mentionGroupName } from "./sections/mention.ts";
 import { personalityTraits } from "./sections/personality.ts";
@@ -31,6 +33,8 @@ export const PIPELINE: ReadonlyArray<PromptSection> = [
 	rulesNewPerson,
 	headerDatetime,
 	personalityTraits,
+	memoryRelationship,
+	memoryChapters,
 	memoryEpisodes,
 	memoryPermanentPersons,
 	memoryPermanentOther,

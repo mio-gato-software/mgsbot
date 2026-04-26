@@ -8,8 +8,10 @@ import {
 	getFactsForSubjects,
 	getPermanentFacts,
 	getQueryEmbedding,
+	getRecentChapters,
 	getRelevantEpisodes,
 	getRelevantFacts,
+	loadRelationshipMemory,
 	loadSensory,
 	withChatLock,
 } from "./memory/index.ts";
@@ -275,11 +277,14 @@ async function generateCheckInMessage(
 	}
 
 	// Gather context
-	const [episodes, facts, permanentFacts] = await Promise.all([
-		getRelevantEpisodes(chatId, queryEmbedding),
-		getRelevantFacts(queryEmbedding, { chatId }),
-		getPermanentFacts(),
-	]);
+	const [episodes, facts, permanentFacts, relationshipMemory, recentChapters] =
+		await Promise.all([
+			getRelevantEpisodes(chatId, queryEmbedding),
+			getRelevantFacts(queryEmbedding, { chatId }),
+			getPermanentFacts(),
+			loadRelationshipMemory(chatId),
+			getRecentChapters(chatId),
+		]);
 
 	// Get person-specific facts from recent conversation participants
 	const participantNames = new Set<string>();
@@ -304,6 +309,8 @@ async function generateCheckInMessage(
 			relevantEpisodes: episodes,
 			relevantFacts: allFacts,
 			permanentFacts,
+			relationshipMemory,
+			recentChapters,
 		}),
 	);
 
