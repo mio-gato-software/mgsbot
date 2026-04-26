@@ -16,6 +16,67 @@ if (!process.env.CHAT_PROVIDER && process.env.PROVIDER) {
 	process.env.CHAT_PROVIDER = process.env.PROVIDER;
 }
 
+// --- Headless profile helpers (safe to run without bot env vars) ---
+
+const showHelp = process.argv.includes("--help") || process.argv.includes("-h");
+const initProfile = process.argv.includes("--init-profile");
+const forceProfile = process.argv.includes("--force");
+const showProfile = process.argv.includes("--show-profile");
+const syncProfile = process.argv.includes("--sync-profile");
+
+if (showHelp) {
+	console.log(`MGS Bot
+
+Usage:
+  ./mgsbot                       Start the bot
+  ./mgsbot --setup               Run the web setup wizard for .env
+  ./mgsbot --init-profile        Create memory/bot_profile.json for manual personality setup
+  ./mgsbot --init-profile --force  Overwrite memory/bot_profile.json with a fresh template
+  ./mgsbot --show-profile        Print the active bot personality profile
+  ./mgsbot --sync-profile        Copy memory/bot_profile.json into memory/bot_config.json
+
+Headless personality setup:
+  1. Run ./mgsbot --init-profile
+  2. Edit memory/bot_profile.json
+  3. Run ./mgsbot
+
+If memory/bot_profile.json exists and is valid, it is used as the active personality profile.`);
+	process.exit(0);
+}
+
+if (initProfile || showProfile || syncProfile) {
+	const {
+		BOT_PROFILE_PATH,
+		formatProfileStatus,
+		syncManualProfileToConfig,
+		writeProfileTemplate,
+	} = await import("./src/config.ts");
+
+	if (initProfile) {
+		const written = writeProfileTemplate(forceProfile);
+		console.log(
+			written
+				? `Created ${BOT_PROFILE_PATH}. Edit it, then run ./mgsbot.`
+				: `${BOT_PROFILE_PATH} already exists. Use --force to overwrite it.`,
+		);
+	}
+
+	if (syncProfile) {
+		const profile = syncManualProfileToConfig();
+		console.log(
+			profile
+				? `Synced ${BOT_PROFILE_PATH} into memory/bot_config.json.`
+				: `Could not sync ${BOT_PROFILE_PATH}; check that it exists and has required fields.`,
+		);
+	}
+
+	if (showProfile) {
+		console.log(formatProfileStatus());
+	}
+
+	process.exit(0);
+}
+
 // --- Setup wizard check (before any bot imports that need env vars) ---
 
 const forceSetup = process.argv.includes("--setup");
