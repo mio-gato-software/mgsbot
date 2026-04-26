@@ -44,12 +44,33 @@ function normalizeFactShape(fact: SemanticFact): SemanticFact {
 	return fact;
 }
 
+function isFactActive(fact: SemanticFact, now = Date.now()): boolean {
+	return !fact.supersededBy && (!fact.validUntil || fact.validUntil > now);
+}
+
+function applySupersession(
+	store: SemanticFact[],
+	newFact: SemanticFact,
+	replacementId: string,
+	now: number,
+): void {
+	if (!newFact.supersedes?.length) return;
+	const supersededIds = new Set(newFact.supersedes);
+	for (const existing of store) {
+		if (!supersededIds.has(existing.id) || existing.permanent) continue;
+		existing.supersededBy = replacementId;
+		existing.validUntil = now;
+		existing.confidence = Math.min(existing.confidence, 0.2);
+	}
+}
+
 function findDedupCandidates(
 	store: SemanticFact[],
 	newFact: SemanticFact,
 ): SemanticFact[] {
 	const sameSubject = store.filter(
 		(existing) =>
+			isFactActive(existing) &&
 			existing.category === newFact.category &&
 			existing.subject &&
 			newFact.subject &&
@@ -64,6 +85,7 @@ function findDedupCandidates(
 	const sameCategory = store
 		.filter(
 			(existing) =>
+				isFactActive(existing) &&
 				existing.category === newFact.category &&
 				(newFact.sourceChatId === undefined ||
 					existing.sourceChatId === undefined ||
@@ -160,6 +182,7 @@ export async function addSemanticFacts(
 						existing.scope = newFact.scope;
 						existing.sourceChatId ??= newFact.sourceChatId;
 					}
+					applySupersession(store, newFact, existing.id, now);
 					// Promote to permanent if new fact is permanent and cap allows
 					if (newFact.permanent && !existing.permanent) {
 						const permanentCount = store.filter((f) => f.permanent).length;
@@ -193,6 +216,7 @@ export async function addSemanticFacts(
 					}
 				}
 				store.push(newFact);
+				applySupersession(store, newFact, newFact.id, now);
 				if (isDev)
 					console.log(
 						`[semantic] Added new ${newFact.permanent ? "permanent " : ""}fact: "${newFact.content.slice(0, 60)}"`,
@@ -265,6 +289,7 @@ export async function getRelevantFacts(
 
 	// Exclude permanent facts (they are always included separately)
 	let candidates = store.filter((f) => !f.permanent);
+	candidates = candidates.filter((f) => isFactActive(f, now));
 
 	if (options?.chatId !== undefined) {
 		candidates = candidates.filter(
@@ -332,6 +357,7 @@ export async function getFactsForSubjects(
 
 	const matching = store.filter(
 		(f) =>
+			isFactActive(f) &&
 			!f.permanent &&
 			f.category === "person" &&
 			f.subject &&

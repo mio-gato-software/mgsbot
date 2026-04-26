@@ -54,6 +54,52 @@ export const memoryEpisodes: PromptSection = {
 	},
 };
 
+export const memoryRelationship: PromptSection = {
+	id: "memory.relationship",
+	render(ctx: PromptContext) {
+		const memory = ctx.relationshipMemory;
+		if (!memory?.summary) return null;
+
+		let section =
+			"## Relationship memory\nThis is a living sense of the relationship, not a script. Let it influence tone subtly; don't mention it unless it naturally fits.";
+		section += `\nTone: ${memory.tone}`;
+		section += `\nSummary: ${memory.summary}`;
+
+		const notableDynamics = memory.notableDynamics ?? [];
+		const openThreads = memory.openThreads ?? [];
+
+		if (notableDynamics.length > 0) {
+			section += "\nNotable dynamics:";
+			for (const dynamic of notableDynamics) {
+				section += `\n  - ${dynamic}`;
+			}
+		}
+
+		if (openThreads.length > 0) {
+			section += "\nThreads that still feel alive:";
+			for (const thread of openThreads) {
+				section += `\n  - ${thread}`;
+			}
+		}
+
+		return section;
+	},
+};
+
+export const memoryChapters: PromptSection = {
+	id: "memory.chapters",
+	render(ctx: PromptContext) {
+		if (!ctx.recentChapters?.length) return null;
+		const chapters = ctx.recentChapters
+			.map(
+				(chapter) =>
+					`- [${chapter.month}] ${chapter.title}: ${chapter.summary}`,
+			)
+			.join("\n");
+		return `## Long-term chapters\nCompressed narrative memory from recent months. Use it for continuity, not as something to recite.\n${chapters}`;
+	},
+};
+
 export const memoryPermanentPersons: PromptSection = {
 	id: "memory.permanentFacts.persons",
 	render(ctx: PromptContext) {

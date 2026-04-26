@@ -37,6 +37,20 @@ export async function withEpisodeLock<T>(
 	return withKeyLock(`episodes:${chatId}`, fn);
 }
 
+export async function withRelationshipLock<T>(
+	chatId: number,
+	fn: () => Promise<T>,
+): Promise<T> {
+	return withKeyLock(`relationship:${chatId}`, fn);
+}
+
+export async function withChapterLock<T>(
+	chatId: number,
+	fn: () => Promise<T>,
+): Promise<T> {
+	return withKeyLock(`chapters:${chatId}`, fn);
+}
+
 export async function withSemanticLock<T>(fn: () => Promise<T>): Promise<T> {
 	return withKeyLock("semantic", fn);
 }

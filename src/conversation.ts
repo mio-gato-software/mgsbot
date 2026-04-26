@@ -1,6 +1,10 @@
 import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
-import { evaluateConversationChunk } from "./ai/evaluation.ts";
+import {
+	evaluateConversationChunk,
+	generateLongTermMemoryUpdate,
+} from "./ai/evaluation.ts";
+import { botNow } from "./bot-time.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { EMBEDDING_MODEL, generateEmbedding } from "./embeddings.ts";
 import {
@@ -17,13 +21,18 @@ import {
 	addEpisode,
 	addMessageToSensory,
 	addSemanticFacts,
+	getChapterForMonth,
 	getFactsForSubjects,
 	getPermanentFacts,
 	getQueryEmbedding,
+	getRecentChapters,
 	getRelevantEpisodes,
 	getRelevantExistingFactsForDedup,
 	getRelevantFacts,
+	loadRelationshipMemory,
 	loadSensory,
+	saveRelationshipMemory,
+	upsertChapter,
 	withChatLock,
 } from "./memory/index.ts";
 import { applyPersonalitySignals } from "./personality.ts";
@@ -53,7 +62,10 @@ function uniqueNames(names: string[]): string[] {
 function formatExistingFactSummary(facts: SemanticFact[]): string | undefined {
 	if (facts.length === 0) return undefined;
 	return facts
-		.map((fact) => `- [${fact.subject || fact.category}] ${fact.content}`)
+		.map(
+			(fact) =>
+				`- (${fact.id}) [${fact.subject || fact.category}] ${fact.content}`,
+		)
 		.join("\n");
 }
 
@@ -63,6 +75,66 @@ function inferSemanticScope(
 	if (fact.category === "person") return "person";
 	if (fact.subject) return "person";
 	return "chat";
+}
+
+async function updateNarrativeMemory(input: {
+	chatId: number;
+	episode: {
+		id: string;
+		summary: string;
+		participants: string[];
+		timestamp: number;
+		importance: number;
+	};
+	recentText: string;
+}): Promise<void> {
+	const month = botNow(input.episode.timestamp).format("YYYY-MM");
+	const [existingRelationship, existingChapter] = await Promise.all([
+		loadRelationshipMemory(input.chatId),
+		getChapterForMonth(input.chatId, month),
+	]);
+	const update = await generateLongTermMemoryUpdate({
+		existingRelationship,
+		existingChapter,
+		episode: { ...input.episode, embedding: [] },
+		recentMessages: input.recentText,
+		month,
+	});
+	const now = Date.now();
+
+	await Promise.all([
+		saveRelationshipMemory({
+			chatId: input.chatId,
+			summary: update.relationship.summary,
+			tone: update.relationship.tone,
+			notableDynamics: update.relationship.notableDynamics,
+			openThreads: update.relationship.openThreads,
+			updatedAt: now,
+			interactionCount: (existingRelationship?.interactionCount ?? 0) + 1,
+		}),
+		upsertChapter({
+			id: existingChapter?.id ?? `chapter_${input.chatId}_${month}`,
+			chatId: input.chatId,
+			month,
+			title: update.chapter.title,
+			summary: update.chapter.summary,
+			participants: uniqueNames([
+				...(existingChapter?.participants ?? []),
+				...input.episode.participants,
+			]),
+			importance: Math.max(
+				existingChapter?.importance ?? 1,
+				update.chapter.importance,
+			),
+			episodeIds: [
+				...(existingChapter?.episodeIds ?? []).filter(
+					(id) => id !== input.episode.id,
+				),
+				input.episode.id,
+			].slice(-30),
+			updatedAt: now,
+		}),
+	]);
 }
 
 export function isGroupChat(ctx: Context): boolean {
@@ -187,25 +259,33 @@ export async function processConversation(
 		const mentionedNames = await findMentionedCanonicalNames(queryText);
 		const subjectNames = uniqueNames([...activeNames, ...mentionedNames]);
 
-		// Retrieve episodes, semantic facts, participant facts, and permanent facts in parallel
-		const [episodes, facts, participantFacts, permanentFacts] =
-			await Promise.all([
-				getRelevantEpisodes(
-					chatId,
-					queryEmbedding,
-					queryText,
-					MAX_RELEVANT_EPISODES,
-				),
-				getRelevantFacts(queryEmbedding, {
-					queryText,
-					maxCount: MAX_RELEVANT_FACTS,
-					chatId,
-				}),
-				subjectNames.length > 0
-					? getFactsForSubjects(subjectNames, MAX_PARTICIPANT_FACTS_PER_SUBJECT)
-					: ([] as SemanticFact[]),
-				getPermanentFacts(),
-			]);
+		// Retrieve episodic, semantic, relationship, chapter, and permanent context in parallel.
+		const [
+			episodes,
+			facts,
+			participantFacts,
+			permanentFacts,
+			relationshipMemory,
+			recentChapters,
+		] = await Promise.all([
+			getRelevantEpisodes(
+				chatId,
+				queryEmbedding,
+				queryText,
+				MAX_RELEVANT_EPISODES,
+			),
+			getRelevantFacts(queryEmbedding, {
+				queryText,
+				maxCount: MAX_RELEVANT_FACTS,
+				chatId,
+			}),
+			subjectNames.length > 0
+				? getFactsForSubjects(subjectNames, MAX_PARTICIPANT_FACTS_PER_SUBJECT)
+				: ([] as SemanticFact[]),
+			getPermanentFacts(),
+			loadRelationshipMemory(chatId),
+			getRecentChapters(chatId),
+		]);
 
 		// Merge and deduplicate facts
 		const allFactIds = new Set(facts.map((f) => f.id));
@@ -225,6 +305,8 @@ export async function processConversation(
 			relevantEpisodes: episodes,
 			relevantFacts: mergedFacts,
 			permanentFacts,
+			relationshipMemory,
+			recentChapters,
 			activeNames,
 			mentionedNames,
 			mentionType: isGroupChat(ctx) ? mentionType : undefined,
@@ -343,7 +425,7 @@ export async function promoteToMemory(
 	const episodeEmbedding = await generateEmbedding(result.summary);
 
 	const now = Date.now();
-	await addEpisode(chatId, {
+	const episode = {
 		id: `ep_${now}_${Math.random().toString(36).slice(2, 8)}`,
 		summary: result.summary,
 		participants,
@@ -352,7 +434,8 @@ export async function promoteToMemory(
 		embedding: episodeEmbedding,
 		embeddingModel: EMBEDDING_MODEL,
 		embeddingDim: episodeEmbedding.length,
-	});
+	};
+	await addEpisode(chatId, episode);
 
 	// Add semantic facts with embeddings in parallel (canonicalize subjects)
 	if (result.facts.length > 0) {
@@ -383,6 +466,7 @@ export async function promoteToMemory(
 			lastDecayedAt: now,
 			scope: inferSemanticScope(fact),
 			sourceChatId: chatId,
+			supersedes: fact.supersedes,
 			...(fact.permanent ? { permanent: true } : {}),
 		}));
 		await addSemanticFacts(semanticFacts);
@@ -392,4 +476,8 @@ export async function promoteToMemory(
 	if (result.personalitySignals?.traitChanges?.length) {
 		await applyPersonalitySignals(result.personalitySignals, recentText);
 	}
+
+	updateNarrativeMemory({ chatId, episode, recentText }).catch((err) => {
+		console.error(`[long-term-memory] Failed for chat ${chatId}:`, err);
+	});
 }

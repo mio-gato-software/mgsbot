@@ -1,5 +1,10 @@
 import type { MentionType } from "../handlers.ts";
-import type { Episode, SemanticFact } from "../types.ts";
+import type {
+	Episode,
+	MemoryChapter,
+	RelationshipMemory,
+	SemanticFact,
+} from "../types.ts";
 
 export interface PromptModeFlags {
 	simpleAssistant: boolean;
@@ -11,6 +16,8 @@ export interface PromptContext {
 	relevantEpisodes: Episode[];
 	relevantFacts: SemanticFact[];
 	permanentFacts?: SemanticFact[];
+	relationshipMemory?: RelationshipMemory | null;
+	recentChapters?: MemoryChapter[];
 	activeNames?: string[];
 	mentionedNames?: string[];
 	mentionType?: MentionType;
