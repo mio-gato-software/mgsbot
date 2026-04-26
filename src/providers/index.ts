@@ -6,6 +6,7 @@ import {
 import { AlibabaChatProvider } from "./alibaba.ts";
 import { AnthropicChatProvider } from "./anthropic.ts";
 import { AzureChatProvider } from "./azure.ts";
+import { DeepSeekChatProvider } from "./deepseek.ts";
 import { FalChatProvider } from "./fal.ts";
 import { FireworksChatProvider } from "./fireworks.ts";
 import { GeminiChatProvider } from "./gemini.ts";
@@ -53,6 +54,10 @@ function buildChatProvider(
 				: new FireworksChatProvider();
 		case "openai":
 			return model ? new OpenAIChatProvider(model) : new OpenAIChatProvider();
+		case "deepseek":
+			return model
+				? new DeepSeekChatProvider(model)
+				: new DeepSeekChatProvider();
 		case "fal":
 			return model ? new FalChatProvider(model) : new FalChatProvider();
 		case "gemini":

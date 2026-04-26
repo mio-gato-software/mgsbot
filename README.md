@@ -21,7 +21,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations, develops persona
 - **Voice responses** — text-to-speech replies via ElevenLabs, LemonFox, Inworld, or fal.ai
 - **Proactive behavior** — follow-up questions about mentioned plans and periodic check-in messages
 - **User identity tracking** — canonical names with alias support, handles name changes gracefully
-- **Multi-provider chat** — swap between Gemini, OpenRouter, Anthropic, Azure, Alibaba, Fireworks, OpenAI, or fal.ai at runtime
+- **Multi-provider chat** — swap between Gemini, OpenRouter, Anthropic, Azure, Alibaba, Fireworks, OpenAI, DeepSeek, or fal.ai at runtime
 - **Sleep schedule** — configurable quiet hours (default: 11:30 PM – 6:00 AM)
 - **Bilingual** — setup wizard and bot personality support English and Spanish
 - **English tutor mode** — natural English practice with the same bot personality, plus automatic English hints for STT
@@ -100,7 +100,7 @@ There are four independent provider axes:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, or `fal` |
+| `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, or `fal` |
 | `GEMINI_MODEL` | `gemini-3-flash-preview` | Gemini model when `CHAT_PROVIDER=gemini` (other Gemini-only paths in code use fixed models; see **Google AI usage** below) |
 | `OPENROUTER_API_KEY` | — | Required if using OpenRouter |
 | `OPENROUTER_MODEL` | `anthropic/claude-3.5-sonnet` | OpenRouter model |
@@ -115,6 +115,8 @@ There are four independent provider axes:
 | `FIREWORKS_MODEL` | `accounts/fireworks/models/glm-5` | Fireworks model |
 | `OPENAI_API_KEY` | — | Required if using OpenAI |
 | `OPENAI_MODEL` | `gpt-5.4` | OpenAI model |
+| `DEEPSEEK_API_KEY` | — | Required if using DeepSeek |
+| `DEEPSEEK_MODEL` | `deepseek-v4-pro` | DeepSeek model |
 | `FAL_API_KEY` | — | Required if using fal.ai for chat, TTS, STT, or image generation |
 | `FAL_MODEL` | `google/gemini-2.5-pro` | fal.ai model (via OpenRouter proxy) |
 
@@ -131,6 +133,7 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 /provider anthropic claude-sonnet-4-5-20250929
 /provider gemini
 /provider openrouter meta-llama/llama-4-scout
+/provider deepseek deepseek-v4-pro
 /provider fal google/gemini-2.5-pro
 ```
 
@@ -219,6 +222,7 @@ src/
     alibaba.ts               Alibaba DashScope provider
     fireworks.ts             Fireworks AI provider
     openai.ts                OpenAI provider
+    deepseek.ts              DeepSeek provider
     fal.ts                   fal.ai provider (OpenRouter proxy)
   tts/
     types.ts                 TTS provider interface

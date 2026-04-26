@@ -70,6 +70,15 @@ export const CHAT_PROVIDERS = [
 			"Chat through OpenAI; image descriptions can use vision models.",
 	},
 	{
+		name: "deepseek",
+		label: "DeepSeek",
+		requiredEnv: ["DEEPSEEK_API_KEY"],
+		modelEnv: "DEEPSEEK_MODEL",
+		defaultModel: "deepseek-v4-pro",
+		description:
+			"Chat through DeepSeek's OpenAI-compatible chat completions API.",
+	},
+	{
 		name: "fal",
 		label: "fal.ai",
 		requiredEnv: ["FAL_API_KEY"],
@@ -194,6 +203,7 @@ const ProviderEnvSchema = z.object({
 			"alibaba",
 			"fireworks",
 			"openai",
+			"deepseek",
 			"fal",
 		]),
 	),
@@ -210,6 +220,7 @@ const ProviderEnvSchema = z.object({
 	DASHSCOPE_API_KEY: optionalString,
 	FIREWORKS_API_KEY: optionalString,
 	OPENAI_API_KEY: optionalString,
+	DEEPSEEK_API_KEY: optionalString,
 	FAL_API_KEY: optionalString,
 	ELEVENLABS_API_KEY: optionalString,
 	LEMON_FOX_API_KEY: optionalString,
