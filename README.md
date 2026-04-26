@@ -181,7 +181,7 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 
 **Provider combinations:** You can mix providers across axes. For example, `CHAT_PROVIDER=anthropic`, `STT_PROVIDER=gemini`, `TTS_PROVIDER=elevenlabs`, and `IMAGE_PROVIDER=fal` is valid as long as the matching keys are set. A single `FAL_API_KEY` can satisfy fal.ai chat, STT, TTS, and images. A single `GOOGLE_API_KEY` powers Gemini chat plus the Google-only support paths.
 
-**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2-preview`. Character image generation uses `gemini-3-pro-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview`.
+**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2`. Character image generation uses `gemini-3-pro-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview`.
 
 ### Access Control
 
@@ -241,7 +241,7 @@ src/
   setup.ts                   In-Telegram personality setup conversation
   wizard.ts                  Browser-based .env setup wizard
   provider-options.ts        Provider metadata, env validation, runtime status formatting
-  embeddings.ts              Vector embeddings (gemini-embedding-2-preview) with disk-persisted LRU cache
+  embeddings.ts              Vector embeddings (gemini-embedding-2) with disk-persisted LRU cache
   personality.ts             Emergent personality: trait growth, decay, momentum, AI description
   identities.ts              User identity tracking: canonical names, aliases, name changes
   check-ins.ts               Proactive check-in scheduling and delivery
@@ -338,7 +338,7 @@ The bot uses a layered memory architecture inspired by human cognition. The top 
 ├─────────────────────────────────────────────────┤
 │  Semantic Store (memory/semantic.json)          │
 │  Global knowledge base of atomic facts with     │
-│  vector embeddings (gemini-embedding-2-preview).│
+│  vector embeddings (gemini-embedding-2).│
 │  Categories: person, group, rule, event.        │
 │  Confidence decays 0.02/day (min 0.1).          │
 │  Deduplication via cosine similarity at 0.85.   │
@@ -488,7 +488,7 @@ The bot's conversational language is configured during setup and stored in `memo
 
 - **Runtime:** [Bun](https://bun.sh)
 - **Bot framework:** [grammY](https://grammy.dev)
-- **AI:** [Google GenAI](https://ai.google.dev) — default chat: `gemini-3-flash-preview`; character images: `gemini-3-pro-image-preview`; embeddings: `gemini-embedding-2-preview`
+- **AI:** [Google GenAI](https://ai.google.dev) — default chat: `gemini-3-flash-preview`; character images: `gemini-3-pro-image-preview`; embeddings: `gemini-embedding-2`
 - **Language:** TypeScript (strict mode)
 - **Linter/Formatter:** [Biome](https://biomejs.dev) — tabs, double quotes, auto-organized imports
 

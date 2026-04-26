@@ -19,7 +19,7 @@ import {
 import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({});
-const EMBEDDING_MODEL = "gemini-embedding-2-preview";
+const EMBEDDING_MODEL = "gemini-embedding-2";
 
 // --- Types (old) ---
 
