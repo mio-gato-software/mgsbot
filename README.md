@@ -62,6 +62,35 @@ To re-run the wizard later:
 bun run start -- --setup
 ```
 
+#### Headless personality setup
+
+If you are deploying only the compiled executable on a VPS, you can configure the bot personality without the browser wizard or Telegram setup conversation:
+
+```bash
+./mgsbot --init-profile
+nano memory/bot_profile.json
+./mgsbot
+```
+
+If `memory/bot_profile.json` exists and contains the required fields, it is used as the active personality profile and the bot is considered configured.
+
+Useful executable commands:
+
+```bash
+./mgsbot --help
+./mgsbot --show-profile
+./mgsbot --sync-profile
+./mgsbot --init-profile --force
+```
+
+The same helpers are available during development:
+
+```bash
+bun run profile:init
+bun run profile:show
+bun run profile:sync
+```
+
 ### Docker
 
 ```bash
@@ -240,13 +269,21 @@ src/
 
 ### Memory System
 
-The bot uses a 4-tier memory architecture inspired by human cognition:
+The bot uses a layered memory architecture inspired by human cognition:
 
 ```text
 ┌─────────────────────────────────────────────────┐
-│  Permanent Memory (memory/permanent.md)         │
-│  Bot personality and rules. Auto-generated      │
-│  during setup. Cached with 1-minute refresh.    │
+│  Bot Profile (memory/bot_profile.json optional) │
+│  Manual personality override for headless VPS   │
+│  deployments. Falls back to bot_config.json.    │
+├─────────────────────────────────────────────────┤
+│  Relationship Memory                            │
+│  Per-chat relational summary and open threads   │
+│  stored in memory/relationships/<chat_id>.json. │
+├─────────────────────────────────────────────────┤
+│  Monthly Chapters                               │
+│  Per-chat narrative month summaries stored in   │
+│  memory/chapters/<chat_id>.json.                │
 ├─────────────────────────────────────────────────┤
 │  Semantic Store (memory/semantic.json)           │
 │  Global knowledge base of atomic facts with     │
@@ -284,10 +321,10 @@ The bot develops emergent personality traits that evolve over time:
 ### Conversation Flow
 
 1. Security middleware checks `ALLOWED_GROUP_ID` / `OWNER_USER_ID`
-2. If not configured, enter the interactive personality setup
+2. If not configured by `memory/bot_profile.json` or `bot_config.json`, enter the interactive personality setup
 3. Load sensory buffer; register/update user identity
 4. In groups: detect mention type (reply / @tag / name / none) — only respond when mentioned
-5. Assemble system prompt: permanent personality + personality description + relevant semantic facts + relevant episodes + sensory messages + time/activity context
+5. Assemble system prompt: bot profile + evolving personality + relationship/chapter memory + relevant semantic facts + relevant episodes + sensory messages + time/activity context
 6. Call the active chat provider, save the exchange, reply with Markdown (falls back to plain text)
 7. Special response markers:
    - `[SILENCE]` — no response
@@ -375,7 +412,7 @@ Place a reference image at `memory/base.png` (or `.jpg`/`.jpeg`). The bot uses t
 
 ### Language
 
-The bot's conversational language is configured during setup and stored in `memory/permanent.md`. The setup wizard and in-Telegram personality setup both support English and Spanish. The bot adapts to the user's language naturally.
+The bot's conversational language is configured during setup and stored in `memory/bot_config.json`, or manually in `memory/bot_profile.json` for headless deployments. The setup wizard and in-Telegram personality setup both support English and Spanish. The bot adapts to the user's language naturally.
 
 ## Tech Stack
 
