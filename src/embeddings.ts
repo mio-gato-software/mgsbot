@@ -9,7 +9,7 @@ function getAI(): GoogleGenAI {
 	if (!_ai) _ai = new GoogleGenAI({});
 	return _ai;
 }
-export const EMBEDDING_MODEL = "gemini-embedding-2-preview";
+export const EMBEDDING_MODEL = "gemini-embedding-2";
 
 const isDev = process.env.NODE_ENV === "development";
 
