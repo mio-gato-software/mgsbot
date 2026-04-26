@@ -277,7 +277,7 @@ async function generateCheckInMessage(
 	// Gather context
 	const [episodes, facts, permanentFacts] = await Promise.all([
 		getRelevantEpisodes(chatId, queryEmbedding),
-		getRelevantFacts(queryEmbedding),
+		getRelevantFacts(queryEmbedding, { chatId }),
 		getPermanentFacts(),
 	]);
 
