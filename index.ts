@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
 import {
+	formatProviderConfigurationFailure,
 	formatProviderStartupSummary,
 	validateProviderConfiguration,
 } from "./src/provider-options.ts";
@@ -61,11 +62,8 @@ if (!process.env.OWNER_USER_ID) {
 
 const providerValidation = validateProviderConfiguration();
 if (providerValidation.errors.length > 0) {
-	throw new Error(
-		`Provider configuration error:\n${providerValidation.errors
-			.map((error) => `- ${error}`)
-			.join("\n")}`,
-	);
+	console.error(formatProviderConfigurationFailure(providerValidation));
+	process.exit(1);
 }
 for (const warning of providerValidation.warnings) {
 	console.warn(`[startup] ${warning}`);

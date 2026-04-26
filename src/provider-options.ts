@@ -418,6 +418,29 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 	return { errors, warnings };
 }
 
+export function formatProviderConfigurationFailure(
+	validation: { errors: string[] },
+	env: EnvMap = process.env,
+): string {
+	const chatProvider = env.CHAT_PROVIDER?.trim() || "gemini (default)";
+	const lines = [
+		"Startup blocked: provider configuration is invalid.",
+		"",
+		`Configured CHAT_PROVIDER: ${chatProvider}`,
+		"",
+		"Errors:",
+		...validation.errors.map((error) => `- ${error}`),
+		"",
+		"How to fix:",
+		"- Add the missing key(s) to .env or the systemd EnvironmentFile.",
+		"- If CHAT_PROVIDER=deepseek, set DEEPSEEK_API_KEY and optionally DEEPSEEK_MODEL=deepseek-v4-pro.",
+		"- Restart the service after editing env: sudo systemctl restart hellybot",
+		"- Full startup logs: sudo journalctl -u hellybot -n 80 --no-pager",
+	];
+
+	return lines.join("\n");
+}
+
 export function formatProviderStartupSummary(
 	env: EnvMap = process.env,
 ): string[] {

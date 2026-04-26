@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	formatProviderCommandStatus,
+	formatProviderConfigurationFailure,
 	resolveChatProviderName,
 	resolveSttProviderOrder,
 	resolveTtsProviderName,
@@ -70,6 +71,18 @@ describe("provider options", () => {
 		expect(result.errors).toContain(
 			"DeepSeek chat requires DEEPSEEK_API_KEY when CHAT_PROVIDER=deepseek.",
 		);
+	});
+
+	test("provider configuration failure explains the selected provider and fix", () => {
+		const result = validateProviderConfiguration({
+			CHAT_PROVIDER: "deepseek",
+		});
+		const message = formatProviderConfigurationFailure(result, {
+			CHAT_PROVIDER: "deepseek",
+		});
+		expect(message).toContain("Configured CHAT_PROVIDER: deepseek");
+		expect(message).toContain("DEEPSEEK_API_KEY");
+		expect(message).toContain("sudo journalctl -u hellybot");
 	});
 
 	test("/provider status says chat switching is independent", () => {
