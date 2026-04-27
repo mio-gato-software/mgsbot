@@ -41,7 +41,7 @@ src/
   prompt.ts                  ← Prompt assembly: buildSystemPrompt(), buildMessages(), activity/time context
   handlers.ts                ← grammY handlers: voice, audio, photo, text (catch-all), YouTube detection,
                                /provider command, security middleware (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
-  embeddings.ts              ← Gemini embedding generation (gemini-embedding-001) with disk-persisted LRU cache
+  embeddings.ts              ← Gemini embedding generation (gemini-embedding-2) with disk-persisted LRU cache
   personality.ts             ← Emergent personality traits: growth events, trait decay, AI description regen
   identities.ts              ← User identity tracking: canonical names, aliases, name change handling
   check-ins.ts               ← Proactive check-in messages: cadence-driven weekly scheduling, strategy rotation
@@ -108,7 +108,7 @@ The memory system uses 4 tiers with vector embeddings for semantic search:
 - **Episodes** (`memory/episodes/<chat_id>.json`): Per-chat summarized conversations (max 20). Each episode has `summary`, `participants`, `timestamp`, `importance`, and an `embedding` for similarity search. Top 3 most relevant episodes selected for prompts.
 - **Sensory Buffer** (`memory/sensory/<chat_id>.json`): Per-chat recent messages (max 10, FIFO). Tracks `lastActivity`, `messageCountSincePromotion`. When overflow, oldest 5 are promoted to an episode via AI summarization. Inactive chats (>3 days) clear messages but keep summary.
 
-**Embeddings** (`src/embeddings.ts`): Uses `gemini-embedding-001` model. Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, auto-persisted every 60 seconds. Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
+**Embeddings** (`src/embeddings.ts`): Uses `gemini-embedding-2` model. Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, auto-persisted every 60 seconds. Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
 
 **Identities** (`src/identities.ts`): Maps Telegram user IDs to canonical names with alias tracking. Handles name changes by adding old names as aliases. Prefix matching (e.g., "Eliaquín" matches "Eliaquín Encarnación"). Used to link facts across name variations.
 
@@ -213,7 +213,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 
 - **Runtime:** Bun v1.3.8
 - **Bot framework:** grammY (`grammy` ^1.40.0)
-- **AI:** Google GenAI (`@google/genai` ^1) — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen), gemini-embedding-001 (embeddings)
+- **AI:** Google GenAI (`@google/genai` ^1) — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen), gemini-embedding-2 (embeddings)
 - **Language:** TypeScript (strict mode, ESNext target, bundler module resolution)
 - **Source code language:** English (variables, functions, comments, file names)
 - **Linter/Formatter:** Biome (`@biomejs/biome` 2.4.4)
