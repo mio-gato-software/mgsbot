@@ -4,6 +4,7 @@ import {
 	formatProviderConfigurationFailure,
 	resolveChatProviderName,
 	resolveFalImageModelName,
+	resolveFalImageQuality,
 	resolveSttProviderOrder,
 	resolveTtsProviderName,
 	validateProviderConfiguration,
@@ -28,6 +29,10 @@ describe("provider options", () => {
 
 	test("defaults fal image model to GPT Image 2", () => {
 		expect(resolveFalImageModelName({})).toBe("gpt-image-2");
+	});
+
+	test("defaults fal image quality to high", () => {
+		expect(resolveFalImageQuality({})).toBe("high");
 	});
 
 	test("accepts fal image model endpoint aliases", () => {
@@ -102,6 +107,17 @@ describe("provider options", () => {
 		);
 	});
 
+	test("validation rejects invalid fal image quality when fal images are selected", () => {
+		const result = validateProviderConfiguration({
+			IMAGE_PROVIDER: "fal",
+			FAL_API_KEY: "fal",
+			FAL_IMAGE_QUALITY: "ultra",
+		});
+		expect(result.errors).toContain(
+			"fal.ai images require FAL_IMAGE_QUALITY to be low, medium, or high when set.",
+		);
+	});
+
 	test("provider configuration failure explains the selected provider and fix", () => {
 		const result = validateProviderConfiguration({
 			CHAT_PROVIDER: "deepseek",
@@ -134,6 +150,6 @@ describe("provider options", () => {
 				FAL_IMAGE_MODEL: "nano-banana-pro",
 			},
 		);
-		expect(status).toContain("Imágenes: fal (nano-banana-pro)");
+		expect(status).toContain("Imágenes: fal (nano-banana-pro, high)");
 	});
 });

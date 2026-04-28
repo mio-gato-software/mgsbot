@@ -2,11 +2,14 @@ import * as fs from "node:fs";
 import {
 	FAL_IMAGE_MODELS,
 	resolveFalImageModelName,
+	resolveFalImageQuality,
 } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ImageProvider } from "./types.ts";
 
 const isDev = process.env.NODE_ENV === "development";
+const DEFAULT_GENERATION_TIMEOUT_MS = 300_000;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60_000;
 
 interface FalImageResponse {
 	images?: Array<{
@@ -15,10 +18,33 @@ interface FalImageResponse {
 	}>;
 }
 
+function resolveTimeoutMs(
+	name: string,
+	defaultValue: number,
+	minValue: number,
+): number {
+	const raw = process.env[name]?.trim();
+	if (!raw) return defaultValue;
+	const parsed = Number.parseInt(raw, 10);
+	if (!Number.isFinite(parsed) || parsed < minValue) return defaultValue;
+	return parsed;
+}
+
 export class FalImageProvider implements ImageProvider {
 	readonly name = "fal";
 	private readonly apiKey: string;
 	private readonly modelName = resolveFalImageModelName();
+	private readonly quality = resolveFalImageQuality();
+	private readonly generationTimeoutMs = resolveTimeoutMs(
+		"FAL_IMAGE_TIMEOUT_MS",
+		DEFAULT_GENERATION_TIMEOUT_MS,
+		30_000,
+	);
+	private readonly downloadTimeoutMs = resolveTimeoutMs(
+		"FAL_IMAGE_DOWNLOAD_TIMEOUT_MS",
+		DEFAULT_DOWNLOAD_TIMEOUT_MS,
+		10_000,
+	);
 
 	constructor() {
 		const apiKey = process.env.FAL_API_KEY;
@@ -40,6 +66,7 @@ export class FalImageProvider implements ImageProvider {
 
 		const body: Record<string, unknown> = {
 			prompt,
+			quality: this.quality,
 			num_images: 1,
 			output_format: "png",
 		};
@@ -64,6 +91,7 @@ export class FalImageProvider implements ImageProvider {
 
 		if (isDev) {
 			console.log("[image:fal] Model:", this.modelName);
+			console.log("[image:fal] Quality:", this.quality);
 			console.log("[image:fal] Endpoint:", endpoint);
 		}
 
@@ -75,7 +103,7 @@ export class FalImageProvider implements ImageProvider {
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify(body),
-				signal: AbortSignal.timeout(60_000),
+				signal: AbortSignal.timeout(this.generationTimeoutMs),
 			});
 			if (!response.ok) {
 				const errorBody = await response.text().catch(() => "");
@@ -93,7 +121,7 @@ export class FalImageProvider implements ImageProvider {
 
 		// Download the generated image
 		const imageResponse = await fetch(imageUrl, {
-			signal: AbortSignal.timeout(30_000),
+			signal: AbortSignal.timeout(this.downloadTimeoutMs),
 		});
 		if (!imageResponse.ok) {
 			throw new Error(

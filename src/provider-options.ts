@@ -170,11 +170,14 @@ export const FAL_IMAGE_MODELS = [
 	},
 ] as const;
 
+export const FAL_IMAGE_QUALITIES = ["low", "medium", "high"] as const;
+
 export type ChatProviderName = (typeof CHAT_PROVIDERS)[number]["name"];
 export type TtsProviderName = (typeof TTS_PROVIDERS)[number]["name"];
 export type SttProviderName = (typeof STT_PROVIDERS)[number]["name"];
 export type ImageProviderName = (typeof IMAGE_PROVIDERS)[number]["name"];
 export type FalImageModelName = (typeof FAL_IMAGE_MODELS)[number]["name"];
+export type FalImageQuality = (typeof FAL_IMAGE_QUALITIES)[number];
 
 interface ProviderEnv extends EnvMap {
 	CHAT_PROVIDER?: ChatProviderName;
@@ -182,6 +185,7 @@ interface ProviderEnv extends EnvMap {
 	TTS_PROVIDER?: TtsProviderName;
 	IMAGE_PROVIDER?: ImageProviderName;
 	FAL_IMAGE_MODEL?: string;
+	FAL_IMAGE_QUALITY?: string;
 }
 
 export const CHAT_PROVIDER_NAMES = CHAT_PROVIDERS.map(
@@ -232,6 +236,7 @@ const ProviderEnvSchema = z.object({
 	),
 	IMAGE_PROVIDER: optionalProviderString(z.enum(["gemini", "fal"])),
 	FAL_IMAGE_MODEL: optionalString,
+	FAL_IMAGE_QUALITY: optionalString,
 	GOOGLE_API_KEY: optionalString,
 	OPENROUTER_API_KEY: optionalString,
 	ANTHROPIC_API_KEY: optionalString,
@@ -353,6 +358,26 @@ export function resolveFalImageModelName(
 	return model;
 }
 
+function normalizeFalImageQuality(value?: string): FalImageQuality | null {
+	const normalized = value?.trim().toLowerCase();
+	if (!normalized) return "high";
+	return FAL_IMAGE_QUALITIES.includes(normalized as FalImageQuality)
+		? (normalized as FalImageQuality)
+		: null;
+}
+
+export function resolveFalImageQuality(
+	env: EnvMap = process.env,
+): FalImageQuality {
+	const quality = normalizeFalImageQuality(
+		parseProviderEnv(env).FAL_IMAGE_QUALITY,
+	);
+	if (!quality) {
+		throw new Error("FAL_IMAGE_QUALITY must be low, medium, or high.");
+	}
+	return quality;
+}
+
 export function resolveExplicitTtsProviderName(
 	env: EnvMap = process.env,
 ): TtsProviderName | null {
@@ -410,6 +435,9 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 	const chatProvider = providerEnv.CHAT_PROVIDER ?? "gemini";
 	const imageProvider = providerEnv.IMAGE_PROVIDER ?? "gemini";
 	const falImageModel = normalizeFalImageModelName(providerEnv.FAL_IMAGE_MODEL);
+	const falImageQuality = normalizeFalImageQuality(
+		providerEnv.FAL_IMAGE_QUALITY,
+	);
 	const ttsProvider = resolveTtsProviderName(providerEnv);
 	const sttOrder = resolveSttProviderOrder(providerEnv);
 
@@ -434,6 +462,11 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 		if (imageProvider === "fal" && !falImageModel) {
 			errors.push(
 				"fal.ai images require FAL_IMAGE_MODEL to be gpt-image-2 or nano-banana-pro when set.",
+			);
+		}
+		if (imageProvider === "fal" && !falImageQuality) {
+			errors.push(
+				"fal.ai images require FAL_IMAGE_QUALITY to be low, medium, or high when set.",
 			);
 		}
 	}
@@ -506,7 +539,9 @@ export function formatProviderStartupSummary(
 	const sttOrder = resolveSttProviderOrder(env);
 	const stt = sttOrder.length > 0 ? sttOrder.join(" -> ") : "none";
 	const imageSummary =
-		image === "fal" ? `${image} (${resolveFalImageModelName(env)})` : image;
+		image === "fal"
+			? `${image} (${resolveFalImageModelName(env)}, ${resolveFalImageQuality(env)})`
+			: image;
 
 	return [
 		`[startup] Chat provider: ${chat}`,
@@ -536,7 +571,9 @@ export function formatProviderCommandStatus(
 	const stt = sttOrder.length > 0 ? sttOrder.join(" -> ") : "none";
 	const image = resolveImageProviderName(env);
 	const imageSummary =
-		image === "fal" ? `${image} (${resolveFalImageModelName(env)})` : image;
+		image === "fal"
+			? `${image} (${resolveFalImageModelName(env)}, ${resolveFalImageQuality(env)})`
+			: image;
 
 	return [
 		`Proveedor de chat: ${current.provider}`,
@@ -548,7 +585,7 @@ export function formatProviderCommandStatus(
 		"Independientes de /provider:",
 		`- STT: ${stt} (STT_PROVIDER)`,
 		`- TTS: ${tts} (TTS_PROVIDER)`,
-		`- Imágenes: ${imageSummary} (IMAGE_PROVIDER, FAL_IMAGE_MODEL)`,
+		`- Imágenes: ${imageSummary} (IMAGE_PROVIDER, FAL_IMAGE_MODEL, FAL_IMAGE_QUALITY)`,
 		"",
 		"/provider solo cambia el chat. Voz, transcripción e imágenes se combinan aparte por env vars.",
 	].join("\n");
