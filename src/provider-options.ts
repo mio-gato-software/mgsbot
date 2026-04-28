@@ -149,20 +149,39 @@ export const IMAGE_PROVIDERS = [
 		name: "fal",
 		label: "fal.ai",
 		requiredEnv: ["FAL_API_KEY"],
-		description: "Alternative image provider using nano-banana-pro.",
+		modelEnv: "FAL_IMAGE_MODEL",
+		defaultModel: "gpt-image-2",
+		description: "Alternative image provider using GPT Image 2 by default.",
 	},
 ] as const satisfies readonly ProviderOption<string>[];
+
+export const FAL_IMAGE_MODELS = [
+	{
+		name: "gpt-image-2",
+		label: "GPT Image 2",
+		textEndpoint: "openai/gpt-image-2",
+		editEndpoint: "openai/gpt-image-2/edit",
+	},
+	{
+		name: "nano-banana-pro",
+		label: "Nano Banana Pro",
+		textEndpoint: "fal-ai/nano-banana-pro",
+		editEndpoint: "fal-ai/nano-banana-pro/edit",
+	},
+] as const;
 
 export type ChatProviderName = (typeof CHAT_PROVIDERS)[number]["name"];
 export type TtsProviderName = (typeof TTS_PROVIDERS)[number]["name"];
 export type SttProviderName = (typeof STT_PROVIDERS)[number]["name"];
 export type ImageProviderName = (typeof IMAGE_PROVIDERS)[number]["name"];
+export type FalImageModelName = (typeof FAL_IMAGE_MODELS)[number]["name"];
 
 interface ProviderEnv extends EnvMap {
 	CHAT_PROVIDER?: ChatProviderName;
 	STT_PROVIDER?: SttProviderName;
 	TTS_PROVIDER?: TtsProviderName;
 	IMAGE_PROVIDER?: ImageProviderName;
+	FAL_IMAGE_MODEL?: string;
 }
 
 export const CHAT_PROVIDER_NAMES = CHAT_PROVIDERS.map(
@@ -212,6 +231,7 @@ const ProviderEnvSchema = z.object({
 		z.enum(["elevenlabs", "inworld", "lemonfox", "fal"]),
 	),
 	IMAGE_PROVIDER: optionalProviderString(z.enum(["gemini", "fal"])),
+	FAL_IMAGE_MODEL: optionalString,
 	GOOGLE_API_KEY: optionalString,
 	OPENROUTER_API_KEY: optionalString,
 	ANTHROPIC_API_KEY: optionalString,
@@ -303,6 +323,36 @@ export function resolveImageProviderName(
 	return parseProviderEnv(env).IMAGE_PROVIDER ?? "gemini";
 }
 
+function normalizeFalImageModelName(value?: string): FalImageModelName | null {
+	const normalized = value?.trim().toLowerCase();
+	if (!normalized) return "gpt-image-2";
+
+	switch (normalized) {
+		case "gpt-image-2":
+		case "openai/gpt-image-2":
+		case "openai/gpt-image-2/edit":
+			return "gpt-image-2";
+		case "nano-banana-pro":
+		case "fal-ai/nano-banana-pro":
+		case "fal-ai/nano-banana-pro/edit":
+			return "nano-banana-pro";
+		default:
+			return null;
+	}
+}
+
+export function resolveFalImageModelName(
+	env: EnvMap = process.env,
+): FalImageModelName {
+	const model = normalizeFalImageModelName(
+		parseProviderEnv(env).FAL_IMAGE_MODEL,
+	);
+	if (!model) {
+		throw new Error("FAL_IMAGE_MODEL must be gpt-image-2 or nano-banana-pro.");
+	}
+	return model;
+}
+
 export function resolveExplicitTtsProviderName(
 	env: EnvMap = process.env,
 ): TtsProviderName | null {
@@ -359,6 +409,7 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 	const providerEnv = parsed.data as ProviderEnv;
 	const chatProvider = providerEnv.CHAT_PROVIDER ?? "gemini";
 	const imageProvider = providerEnv.IMAGE_PROVIDER ?? "gemini";
+	const falImageModel = normalizeFalImageModelName(providerEnv.FAL_IMAGE_MODEL);
 	const ttsProvider = resolveTtsProviderName(providerEnv);
 	const sttOrder = resolveSttProviderOrder(providerEnv);
 
@@ -378,6 +429,11 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 		if (missing.length > 0) {
 			errors.push(
 				`${provider.label} images require ${missing.join(", ")} when IMAGE_PROVIDER=${provider.name}.`,
+			);
+		}
+		if (imageProvider === "fal" && !falImageModel) {
+			errors.push(
+				"fal.ai images require FAL_IMAGE_MODEL to be gpt-image-2 or nano-banana-pro when set.",
 			);
 		}
 	}
@@ -449,12 +505,14 @@ export function formatProviderStartupSummary(
 	const tts = resolveTtsProviderName(env) ?? "none";
 	const sttOrder = resolveSttProviderOrder(env);
 	const stt = sttOrder.length > 0 ? sttOrder.join(" -> ") : "none";
+	const imageSummary =
+		image === "fal" ? `${image} (${resolveFalImageModelName(env)})` : image;
 
 	return [
 		`[startup] Chat provider: ${chat}`,
 		`[startup] STT provider order: ${stt}`,
 		`[startup] TTS provider: ${tts}`,
-		`[startup] Image provider: ${image}`,
+		`[startup] Image provider: ${imageSummary}`,
 	];
 }
 
@@ -477,6 +535,8 @@ export function formatProviderCommandStatus(
 	const sttOrder = resolveSttProviderOrder(env);
 	const stt = sttOrder.length > 0 ? sttOrder.join(" -> ") : "none";
 	const image = resolveImageProviderName(env);
+	const imageSummary =
+		image === "fal" ? `${image} (${resolveFalImageModelName(env)})` : image;
 
 	return [
 		`Proveedor de chat: ${current.provider}`,
@@ -488,7 +548,7 @@ export function formatProviderCommandStatus(
 		"Independientes de /provider:",
 		`- STT: ${stt} (STT_PROVIDER)`,
 		`- TTS: ${tts} (TTS_PROVIDER)`,
-		`- Imágenes: ${image} (IMAGE_PROVIDER)`,
+		`- Imágenes: ${imageSummary} (IMAGE_PROVIDER, FAL_IMAGE_MODEL)`,
 		"",
 		"/provider solo cambia el chat. Voz, transcripción e imágenes se combinan aparte por env vars.",
 	].join("\n");

@@ -3,6 +3,7 @@ import {
 	formatProviderCommandStatus,
 	formatProviderConfigurationFailure,
 	resolveChatProviderName,
+	resolveFalImageModelName,
 	resolveSttProviderOrder,
 	resolveTtsProviderName,
 	validateProviderConfiguration,
@@ -23,6 +24,23 @@ describe("provider options", () => {
 		expect(resolveChatProviderName({ CHAT_PROVIDER: "deepseek" })).toBe(
 			"deepseek",
 		);
+	});
+
+	test("defaults fal image model to GPT Image 2", () => {
+		expect(resolveFalImageModelName({})).toBe("gpt-image-2");
+	});
+
+	test("accepts fal image model endpoint aliases", () => {
+		expect(
+			resolveFalImageModelName({
+				FAL_IMAGE_MODEL: "openai/gpt-image-2/edit",
+			}),
+		).toBe("gpt-image-2");
+		expect(
+			resolveFalImageModelName({
+				FAL_IMAGE_MODEL: "fal-ai/nano-banana-pro/edit",
+			}),
+		).toBe("nano-banana-pro");
 	});
 
 	test("resolves automatic STT provider order", () => {
@@ -73,6 +91,17 @@ describe("provider options", () => {
 		);
 	});
 
+	test("validation rejects invalid fal image model when fal images are selected", () => {
+		const result = validateProviderConfiguration({
+			IMAGE_PROVIDER: "fal",
+			FAL_API_KEY: "fal",
+			FAL_IMAGE_MODEL: "typo",
+		});
+		expect(result.errors).toContain(
+			"fal.ai images require FAL_IMAGE_MODEL to be gpt-image-2 or nano-banana-pro when set.",
+		);
+	});
+
 	test("provider configuration failure explains the selected provider and fix", () => {
 		const result = validateProviderConfiguration({
 			CHAT_PROVIDER: "deepseek",
@@ -93,5 +122,18 @@ describe("provider options", () => {
 		expect(status).toContain("/provider solo cambia el chat");
 		expect(status).toContain("STT: gemini");
 		expect(status).toContain("TTS: none");
+	});
+
+	test("/provider status includes the fal image model when fal images are selected", () => {
+		const status = formatProviderCommandStatus(
+			{ provider: "gemini", model: "gemini-3-flash-preview" },
+			{
+				GOOGLE_API_KEY: "google",
+				IMAGE_PROVIDER: "fal",
+				FAL_API_KEY: "fal",
+				FAL_IMAGE_MODEL: "nano-banana-pro",
+			},
+		);
+		expect(status).toContain("Imágenes: fal (nano-banana-pro)");
 	});
 });
