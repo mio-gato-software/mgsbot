@@ -1,5 +1,8 @@
 import type { Bot, Context } from "grammy";
-import { classifyEditIntent } from "./ai/classifiers.ts";
+import {
+	classifyEditIntent,
+	classifyGroupMessageIntent,
+} from "./ai/classifiers.ts";
 import { analyzeYouTube, describeImage } from "./ai/vision.ts";
 import { isBotOff, isSleepingHour } from "./bot-state.ts";
 import { registerCommands } from "./commands.ts";
@@ -7,6 +10,7 @@ import { getBotName, isBotConfigured, loadConfig } from "./config.ts";
 import {
 	getUserDisplayName,
 	isGroupChat,
+	observeConversationTurn,
 	processConversation,
 } from "./conversation.ts";
 import {
@@ -16,18 +20,30 @@ import {
 	downloadImage,
 	extractYouTubeUrl,
 } from "./media-handlers.ts";
-import { decayConfidence } from "./memory/index.ts";
+import { decayConfidence, loadSensory } from "./memory/index.ts";
 import { isSimpleAssistantMode } from "./prompt/modes.ts";
 import { createChatProvider } from "./providers/index.ts";
 import { supportsInlineImages } from "./providers/types.ts";
 import { processSetupConversation } from "./setup.ts";
-import type { MentionType } from "./types.ts";
+import type { ConversationMessage, MentionType } from "./types.ts";
 import { safeMediaExtension } from "./utils.ts";
 
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
 const OWNER_USER_ID = Number(process.env.OWNER_USER_ID);
 const isDev = process.env.NODE_ENV === "development";
 const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
+const GROUP_SPONTANEOUS_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+const GROUP_SPONTANEOUS_EVALUATION_COOLDOWN_MS = 10 * 60 * 1000;
+const MAX_SPONTANEOUS_REPLIES_PER_WINDOW = 1;
+const GROUP_CONTINUATION_WINDOW_MS = 15 * 60 * 1000;
+const GROUP_CONTINUATION_MAX_MESSAGES = 6;
+
+const groupAutoReplyTimestamps = new Map<number, number[]>();
+const groupSpontaneousEvaluationTimestamps = new Map<number, number>();
+const groupContinuationWindows = new Map<
+	number,
+	{ expiresAt: number; remainingMessages: number }
+>();
 
 /**
  * Regex fallback for edit intent detection when the LLM classifier is unavailable.
@@ -75,6 +91,85 @@ export function detectMentionType(ctx: Context, botId: number): MentionType {
 	if (nameRegex.test(text)) return "name";
 
 	return "none";
+}
+
+function isIgnorableGroupMessage(text: string): boolean {
+	const trimmed = text.trim();
+	if (!trimmed) return true;
+	if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u.test(trimmed)) {
+		return true;
+	}
+	return false;
+}
+
+function canAutoReplyInGroup(chatId: number): boolean {
+	const now = Date.now();
+	const recent = (groupAutoReplyTimestamps.get(chatId) ?? []).filter(
+		(ts) => now - ts <= GROUP_SPONTANEOUS_COOLDOWN_MS,
+	);
+	const last = recent[recent.length - 1];
+	if (last && now - last < GROUP_SPONTANEOUS_COOLDOWN_MS) {
+		groupAutoReplyTimestamps.set(chatId, recent);
+		return false;
+	}
+	if (recent.length >= MAX_SPONTANEOUS_REPLIES_PER_WINDOW) {
+		groupAutoReplyTimestamps.set(chatId, recent);
+		return false;
+	}
+	return true;
+}
+
+function canEvaluateSpontaneousReplyInGroup(chatId: number): boolean {
+	const now = Date.now();
+	const last = groupSpontaneousEvaluationTimestamps.get(chatId);
+	return !last || now - last >= GROUP_SPONTANEOUS_EVALUATION_COOLDOWN_MS;
+}
+
+function registerSpontaneousReplyEvaluation(chatId: number): void {
+	groupSpontaneousEvaluationTimestamps.set(chatId, Date.now());
+}
+
+function registerGroupAutoReply(chatId: number): void {
+	const now = Date.now();
+	const recent = (groupAutoReplyTimestamps.get(chatId) ?? []).filter(
+		(ts) => now - ts <= GROUP_SPONTANEOUS_COOLDOWN_MS,
+	);
+	recent.push(now);
+	groupAutoReplyTimestamps.set(chatId, recent);
+}
+
+function openGroupContinuationWindow(chatId: number): void {
+	groupContinuationWindows.set(chatId, {
+		expiresAt: Date.now() + GROUP_CONTINUATION_WINDOW_MS,
+		remainingMessages: GROUP_CONTINUATION_MAX_MESSAGES,
+	});
+}
+
+function claimGroupContinuationSlot(chatId: number): boolean {
+	const now = Date.now();
+	const window = groupContinuationWindows.get(chatId);
+	if (!window || window.expiresAt <= now || window.remainingMessages <= 0) {
+		groupContinuationWindows.delete(chatId);
+		return false;
+	}
+
+	window.remainingMessages--;
+	if (window.remainingMessages <= 0) {
+		groupContinuationWindows.delete(chatId);
+	} else {
+		groupContinuationWindows.set(chatId, window);
+	}
+	return true;
+}
+
+function getLastBotMessageBeforeLatest(
+	messages: ConversationMessage[],
+): string | undefined {
+	for (let i = messages.length - 2; i >= 0; i--) {
+		const message = messages[i];
+		if (message?.role === "model") return message.content;
+	}
+	return undefined;
 }
 
 export function registerHandlers(bot: Bot): void {
@@ -137,7 +232,15 @@ export function registerHandlers(bot: Bot): void {
 	// Voice messages
 	bot.on("message:voice", async (ctx) => {
 		const mentionType = detectMentionType(ctx, ctx.me.id);
-		if (isGroupChat(ctx) && mentionType === "none") return;
+		const userName = getUserDisplayName(ctx);
+		if (isGroupChat(ctx) && mentionType === "none") {
+			await observeConversationTurn(
+				ctx,
+				`[Voice message from ${userName}]`,
+				userName,
+			);
+			return;
+		}
 		try {
 			const transcription = await downloadAndTranscribe(
 				ctx,
@@ -153,7 +256,6 @@ export function registerHandlers(bot: Bot): void {
 					})
 					.catch(() => {});
 			}
-			const userName = getUserDisplayName(ctx);
 			const content = `[Audio from ${userName}]: ${transcription}`;
 			await processConversation(
 				ctx,
@@ -175,7 +277,15 @@ export function registerHandlers(bot: Bot): void {
 	// Audio files
 	bot.on("message:audio", async (ctx) => {
 		const mentionType = detectMentionType(ctx, ctx.me.id);
-		if (isGroupChat(ctx) && mentionType === "none") return;
+		const userName = getUserDisplayName(ctx);
+		if (isGroupChat(ctx) && mentionType === "none") {
+			await observeConversationTurn(
+				ctx,
+				`[Audio file from ${userName}]`,
+				userName,
+			);
+			return;
+		}
 		try {
 			const ext = safeMediaExtension(
 				ctx.message.audio.mime_type?.split("/")[1],
@@ -196,7 +306,6 @@ export function registerHandlers(bot: Bot): void {
 					})
 					.catch(() => {});
 			}
-			const userName = getUserDisplayName(ctx);
 			const content = `[Audio from ${userName}]: ${transcription}`;
 			await processConversation(
 				ctx,
@@ -217,11 +326,18 @@ export function registerHandlers(bot: Bot): void {
 	bot.on("message:photo", async (ctx) => {
 		if (isSimpleAssistantMode) return;
 		const mentionType = detectMentionType(ctx, ctx.me.id);
-		if (isGroupChat(ctx) && mentionType === "none") return;
+		const userName = getUserDisplayName(ctx);
+		if (isGroupChat(ctx) && mentionType === "none") {
+			const caption = ctx.message.caption;
+			const observedContent = caption
+				? `[Image from ${userName}, caption: "${caption}"]`
+				: `[Image from ${userName}]`;
+			await observeConversationTurn(ctx, observedContent, userName);
+			return;
+		}
 		try {
 			const { filePath, mimeType } = await downloadImage(ctx, botToken);
 			const caption = ctx.message.caption;
-			const userName = getUserDisplayName(ctx);
 			const provider = createChatProvider();
 
 			try {
@@ -296,7 +412,10 @@ export function registerHandlers(bot: Bot): void {
 		// YouTube analysis disabled in simple assistant mode
 		const yt = isSimpleAssistantMode ? null : extractYouTubeUrl(ctx);
 		if (yt) {
-			if (isGroupChat(ctx) && mentionType === "none") return;
+			if (isGroupChat(ctx) && mentionType === "none") {
+				await observeConversationTurn(ctx, text, userName);
+				return;
+			}
 			const analysis = await analyzeYouTube(
 				yt.url,
 				yt.remainingText || undefined,
@@ -323,7 +442,14 @@ export function registerHandlers(bot: Bot): void {
 			const replyPhoto = replyMsg?.photo;
 
 			if (replyVoice || replyAudio) {
-				if (isGroupChat(ctx) && mentionType === "none") return;
+				if (isGroupChat(ctx) && mentionType === "none") {
+					await observeConversationTurn(
+						ctx,
+						`[Reply to audio by ${userName}]: "${text}"`,
+						userName,
+					);
+					return;
+				}
 
 				try {
 					const fileId = replyVoice
@@ -379,7 +505,14 @@ export function registerHandlers(bot: Bot): void {
 
 			// Reply-to-photo: describe image from replied message
 			if (replyPhoto && replyPhoto.length > 0) {
-				if (isGroupChat(ctx) && mentionType === "none") return;
+				if (isGroupChat(ctx) && mentionType === "none") {
+					await observeConversationTurn(
+						ctx,
+						`[Reply to image by ${userName}]: "${text}"`,
+						userName,
+					);
+					return;
+				}
 
 				try {
 					const photo = replyPhoto[replyPhoto.length - 1];
@@ -486,8 +619,77 @@ export function registerHandlers(bot: Bot): void {
 			}
 		}
 
-		// In groups, only respond when mentioned
-		if (isGroupChat(ctx) && mentionType === "none") return;
+		// In groups, observe everything and occasionally evaluate whether to join.
+		if (isGroupChat(ctx) && mentionType === "none") {
+			await observeConversationTurn(ctx, text, userName);
+			if (isIgnorableGroupMessage(text)) return;
+
+			const buffer = await loadSensory(ctx.chat.id);
+			const lastBotMessage = getLastBotMessageBeforeLatest(buffer.messages);
+			let canContinue = false;
+			let canStartSpontaneously = false;
+			let consideredContinuation = false;
+
+			if (claimGroupContinuationSlot(ctx.chat.id)) {
+				consideredContinuation = true;
+				const decision = await classifyGroupMessageIntent({
+					mode: "continuation",
+					botName: getBotName(),
+					currentSpeaker: userName,
+					currentMessage: text,
+					recentMessages: buffer.messages,
+					lastBotMessage,
+				});
+				canContinue = decision === "respond";
+			}
+
+			if (
+				!canContinue &&
+				!consideredContinuation &&
+				canAutoReplyInGroup(ctx.chat.id) &&
+				canEvaluateSpontaneousReplyInGroup(ctx.chat.id)
+			) {
+				registerSpontaneousReplyEvaluation(ctx.chat.id);
+				const decision = await classifyGroupMessageIntent({
+					mode: "spontaneous",
+					botName: getBotName(),
+					currentSpeaker: userName,
+					currentMessage: text,
+					recentMessages: buffer.messages,
+					lastBotMessage,
+				});
+				canStartSpontaneously = decision === "respond";
+			}
+
+			if (canContinue || canStartSpontaneously) {
+				const botOff = isBotOff();
+				const sleeping = isSleepingHour();
+				if (canStartSpontaneously) {
+					registerGroupAutoReply(ctx.chat.id);
+				}
+				const didRespond = await processConversation(
+					ctx,
+					text,
+					userName,
+					mentionType,
+					botOff,
+					sleeping,
+					undefined,
+					undefined,
+					undefined,
+					{
+						skipHistoricalContext: true,
+						userTurnAlreadyRecorded: true,
+						groupAutoReply: canStartSpontaneously,
+						groupContinuation: canContinue,
+					},
+				);
+				if (didRespond) {
+					openGroupContinuationWindow(ctx.chat.id);
+				}
+			}
+			return;
+		}
 
 		// Reply-to-text: include quoted message content for context
 		const replyText = ctx.message.reply_to_message?.text;

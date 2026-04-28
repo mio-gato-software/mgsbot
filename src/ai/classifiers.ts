@@ -1,5 +1,6 @@
 import { createUserContent, GoogleGenAI } from "@google/genai";
 import { createChatProvider } from "../providers/index.ts";
+import type { ConversationMessage } from "../types.ts";
 import { withRetry } from "../utils.ts";
 
 const isDev = process.env.NODE_ENV === "development";
@@ -19,6 +20,90 @@ const CLASSIFIER_PROMPT = (caption: string) =>
 Decide: is the user asking to EDIT, MODIFY, TRANSFORM, or GENERATE A NEW VERSION of the image? (vs. just commenting on it, asking a question about it, or sharing it)
 
 Answer with a single word: "yes" or "no".`;
+
+export interface GroupMessageIntentInput {
+	mode: "spontaneous" | "continuation";
+	botName: string;
+	currentSpeaker: string;
+	currentMessage: string;
+	recentMessages: ConversationMessage[];
+	lastBotMessage?: string;
+}
+
+export type GroupMessageIntentDecision = "respond" | "silence";
+
+function formatGroupMessageForClassifier(message: ConversationMessage): string {
+	const speaker =
+		message.role === "model" ? "Bot" : (message.name ?? "Group member");
+	return `${speaker}: ${message.content}`;
+}
+
+function buildGroupMessageIntentPrompt(input: GroupMessageIntentInput): string {
+	const recent = input.recentMessages
+		.slice(-6)
+		.map(formatGroupMessageForClassifier)
+		.join("\n");
+	const lastBotMessage = input.lastBotMessage?.trim()
+		? input.lastBotMessage.trim()
+		: "(none)";
+
+	return `You are a lightweight multilingual router for a Telegram group chat bot named ${input.botName}.
+
+Your job is NOT to write the bot's reply. Decide only whether the bot should be allowed to generate a reply.
+
+Mode: ${input.mode}
+
+Decision rules:
+- Return "respond" only when the bot's participation would feel natural in a group chat.
+- Return "silence" when responding would feel intrusive, attention-seeking, repetitive, or like the group moved on.
+- Be conservative. If uncertain, return "silence".
+- This must work across languages. Do not rely on language-specific keywords.
+
+Mode-specific guidance:
+- spontaneous: The bot has not been directly addressed. Allow a reply only if the latest message creates a clear opening where a normal group member could add value.
+- continuation: The bot recently spoke. Allow a reply only if the latest message likely engages with the bot's last message or asks the bot to continue. If it is just members talking among themselves, choose silence.
+
+Recent chat:
+${recent || "(no recent chat)"}
+
+Bot's last message:
+${lastBotMessage}
+
+Latest message:
+${input.currentSpeaker}: ${input.currentMessage}
+
+Answer with exactly one word: respond or silence.`;
+}
+
+async function runSingleWordClassifier(
+	prompt: string,
+	maxOutputTokens: number,
+): Promise<string> {
+	const useGemini = !!process.env.GOOGLE_API_KEY;
+	if (useGemini) {
+		const response = await withRetry(
+			() =>
+				getAI().models.generateContent({
+					model: CLASSIFIER_MODEL,
+					contents: createUserContent([prompt]),
+					config: {
+						temperature: 0,
+						maxOutputTokens,
+					},
+				}),
+			2,
+			500,
+		);
+		return response.text ?? "";
+	}
+
+	const provider = createChatProvider();
+	return await withRetry(
+		() => provider.generateResponse("", [{ role: "user", content: prompt }]),
+		2,
+		500,
+	);
+}
 
 /**
  * Decide whether the caption expresses intent to edit/modify an attached image.
@@ -41,34 +126,9 @@ export async function classifyEditIntent(
 	}
 
 	try {
-		let text: string;
-		if (useGemini) {
-			const response = await withRetry(
-				() =>
-					getAI().models.generateContent({
-						model: CLASSIFIER_MODEL,
-						contents: createUserContent([CLASSIFIER_PROMPT(trimmed)]),
-						config: {
-							temperature: 0,
-							maxOutputTokens: 5,
-						},
-					}),
-				2,
-				500,
-			);
-			text = (response.text ?? "").trim().toLowerCase();
-		} else {
-			const provider = createChatProvider();
-			const raw = await withRetry(
-				() =>
-					provider.generateResponse("", [
-						{ role: "user", content: CLASSIFIER_PROMPT(trimmed) },
-					]),
-				2,
-				500,
-			);
-			text = raw.trim().toLowerCase();
-		}
+		const text = (await runSingleWordClassifier(CLASSIFIER_PROMPT(trimmed), 5))
+			.trim()
+			.toLowerCase();
 
 		if (isDev) console.log(`[classifyEditIntent] "${trimmed}" → ${text}`);
 		if (text.startsWith("yes")) return true;
@@ -76,6 +136,45 @@ export async function classifyEditIntent(
 		return null;
 	} catch (error) {
 		console.error("[classifyEditIntent] Error:", error);
+		return null;
+	}
+}
+
+/**
+ * Lightweight multilingual gate for group participation. This intentionally
+ * receives only the recent chat slice and never loads long-term memory.
+ */
+export async function classifyGroupMessageIntent(
+	input: GroupMessageIntentInput,
+): Promise<GroupMessageIntentDecision | null> {
+	const currentMessage = input.currentMessage.trim();
+	if (!currentMessage) return "silence";
+
+	const useGemini = !!process.env.GOOGLE_API_KEY;
+	if (!useGemini && !warnedClassifierFallback) {
+		warnedClassifierFallback = true;
+		console.warn(
+			"[classifyGroupMessageIntent] GOOGLE_API_KEY not set — falling back to the configured chat provider for group-intent classification.",
+		);
+	}
+
+	try {
+		const prompt = buildGroupMessageIntentPrompt(input);
+		const text = (await runSingleWordClassifier(prompt, 8))
+			.trim()
+			.toLowerCase()
+			.replace(/[`"'.,:;!]/g, "");
+
+		if (isDev) {
+			console.log(
+				`[classifyGroupMessageIntent] ${input.mode} "${currentMessage}" → ${text}`,
+			);
+		}
+		if (text.startsWith("respond")) return "respond";
+		if (text.startsWith("silence")) return "silence";
+		return null;
+	} catch (error) {
+		console.error("[classifyGroupMessageIntent] Error:", error);
 		return null;
 	}
 }

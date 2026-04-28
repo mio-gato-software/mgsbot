@@ -16,7 +16,7 @@ import {
 	memoryPersons,
 	memoryRelationship,
 } from "../src/prompt/sections/memory.ts";
-import { rulesBehavior } from "../src/prompt/sections/rules.ts";
+import { rulesBehavior, rulesGroup } from "../src/prompt/sections/rules.ts";
 import { voiceTts, voiceTutor } from "../src/prompt/sections/voice.ts";
 import type { PromptContext } from "../src/prompt/types.ts";
 import type {
@@ -37,6 +37,8 @@ function makeCtx(overrides: Partial<PromptContext> = {}): PromptContext {
 		activeNames: undefined,
 		mentionedNames: undefined,
 		mentionType: undefined,
+		groupAutoReply: false,
+		groupContinuation: false,
 		isVoiceMessage: false,
 		userAttachedImage: false,
 		shouldGenerateImage: false,
@@ -202,6 +204,31 @@ describe("section: rules.behavior", () => {
 			)) ?? "";
 		expect(out).not.toContain("If asked for a photo");
 		expect(out).toContain("Behavior Rules");
+	});
+});
+
+describe("section: rules.group", () => {
+	test("allows natural group participation by default", async () => {
+		const out = (await rulesGroup.render(makeCtx())) ?? "";
+		expect(out).toContain("regular member of the group");
+		expect(out).toContain("[SILENCE]");
+		expect(out).not.toContain("NEVER respond to conversations");
+	});
+
+	test("uses lightweight auto-intervention guidance without mention-only contradiction", async () => {
+		const out =
+			(await rulesGroup.render(makeCtx({ groupAutoReply: true }))) ?? "";
+		expect(out).toContain("room for you to participate");
+		expect(out).toContain("[SILENCE]");
+		expect(out).not.toContain("NEVER respond to conversations");
+	});
+
+	test("allows unmentioned continuation after the bot has spoken", async () => {
+		const out =
+			(await rulesGroup.render(makeCtx({ groupContinuation: true }))) ?? "";
+		expect(out).toContain("recently spoke");
+		expect(out).toContain("asking you to continue");
+		expect(out).toContain("[SILENCE]");
 	});
 });
 

@@ -19,6 +19,8 @@ export interface PromptContextInput {
 	activeNames?: string[];
 	mentionedNames?: string[];
 	mentionType?: MentionType;
+	groupAutoReply?: boolean;
+	groupContinuation?: boolean;
 	isVoiceMessage?: boolean;
 	userAttachedImage?: boolean;
 	shouldGenerateImage?: boolean;
@@ -37,6 +39,8 @@ export function buildPromptContext(input: PromptContextInput): PromptContext {
 		activeNames: input.activeNames,
 		mentionedNames: input.mentionedNames,
 		mentionType: input.mentionType,
+		groupAutoReply: input.groupAutoReply === true,
+		groupContinuation: input.groupContinuation === true,
 		isVoiceMessage: input.isVoiceMessage === true,
 		userAttachedImage: input.userAttachedImage === true,
 		shouldGenerateImage: input.shouldGenerateImage === true,
