@@ -169,9 +169,15 @@ export async function processConversation(
 	mediaAttachment?: MediaAttachment,
 	isVoiceMessage?: boolean,
 	userImagePath?: string,
-): Promise<void> {
+	options?: {
+		skipHistoricalContext?: boolean;
+		userTurnAlreadyRecorded?: boolean;
+		groupAutoReply?: boolean;
+		groupContinuation?: boolean;
+	},
+): Promise<boolean> {
 	const chatId = ctx.chat?.id;
-	if (!chatId) return;
+	if (!chatId) return false;
 
 	if (botOff || (isGroupChat(ctx) && isSleepingHour)) {
 		try {
@@ -179,7 +185,7 @@ export async function processConversation(
 		} catch (error) {
 			if (isDev) console.error("[off] Error reacting:", error);
 		}
-		return;
+		return false;
 	}
 
 	// Register identity for this user
@@ -189,11 +195,15 @@ export async function processConversation(
 	}
 
 	// Load sensory buffer and append the user turn atomically per chat.
+	const userTurnAlreadyRecorded = options?.userTurnAlreadyRecorded === true;
 	const { buffer, overflow, allowPhotoRequest } = await withChatLock(
 		chatId,
 		async () => {
 			const buf = await loadSensory(chatId);
 			const allow = buf.allowPhotoRequest === true;
+			if (userTurnAlreadyRecorded) {
+				return { buffer: buf, overflow: null, allowPhotoRequest: allow };
+			}
 			const userMessage: ConversationMessage = {
 				role: "user",
 				name: userName,
@@ -205,7 +215,9 @@ export async function processConversation(
 			return { buffer: buf, overflow: ov, allowPhotoRequest: allow };
 		},
 	);
-	logUserMessage(userName, userContent).catch(console.error);
+	if (!userTurnAlreadyRecorded) {
+		logUserMessage(userName, userContent).catch(console.error);
+	}
 
 	// Promote overflow to memory in background
 	if (overflow) {
@@ -232,11 +244,15 @@ export async function processConversation(
 	// Build prompt and messages
 	let shouldGenImage = false;
 	let promptCtx: Parameters<typeof assembleSystemPrompt>[0];
+	const skipHistoricalContext = options?.skipHistoricalContext === true;
 
-	if (isSimpleAssistantMode) {
+	if (isSimpleAssistantMode || skipHistoricalContext) {
 		promptCtx = buildPromptContext({
 			relevantEpisodes: [],
 			relevantFacts: [],
+			mentionType: isGroupChat(ctx) ? mentionType : undefined,
+			groupAutoReply: options?.groupAutoReply === true,
+			groupContinuation: options?.groupContinuation === true,
 		});
 	} else {
 		// Start query embedding and name resolution in parallel
@@ -321,9 +337,6 @@ export async function processConversation(
 	const systemPrompt = await assembleSystemPrompt(promptCtx);
 	const messages = buildMessages(buffer, mediaAttachment);
 
-	// Show typing indicator (non-critical, don't crash if it fails)
-	await ctx.replyWithChatAction("typing").catch(() => {});
-
 	// Generate response
 	const responseText = await generateResponse(systemPrompt, messages);
 
@@ -339,7 +352,8 @@ export async function processConversation(
 	});
 
 	// Save bot response to sensory buffer (only if non-silenced and non-empty)
-	if (result?.cleanedText.trim()) {
+	const didRespond = !!result?.cleanedText.trim();
+	if (didRespond) {
 		const botMessage: ConversationMessage = {
 			role: "model",
 			content: result.cleanedText,
@@ -362,6 +376,53 @@ export async function processConversation(
 					err,
 				);
 			});
+		}
+	}
+
+	return didRespond;
+}
+
+export async function observeConversationTurn(
+	ctx: Context,
+	userContent: string,
+	userName: string,
+	options?: {
+		promoteOverflow?: boolean;
+	},
+): Promise<void> {
+	const chatId = ctx.chat?.id;
+	if (!chatId) return;
+
+	const { userId, username } = getUserInfo(ctx);
+	if (userId) {
+		await registerIdentity(userId, userName, username);
+	}
+
+	const overflow = await withChatLock(chatId, async () => {
+		const buffer = await loadSensory(chatId);
+		const userMessage: ConversationMessage = {
+			role: "user",
+			name: userName,
+			userId,
+			content: userContent,
+			timestamp: Date.now(),
+		};
+		return addMessageToSensory(buffer, userMessage);
+	});
+	logUserMessage(userName, userContent).catch(console.error);
+
+	if (overflow) {
+		if (options?.promoteOverflow === true) {
+			promoteToMemory(chatId, overflow).catch((err) => {
+				console.error(
+					`[promote] Failed for chat ${chatId} (observer overflow):`,
+					err,
+				);
+			});
+		} else if (isDev) {
+			console.log(
+				`[observer] Discarded ${overflow.length} passive overflow messages for chat ${chatId}`,
+			);
 		}
 	}
 }

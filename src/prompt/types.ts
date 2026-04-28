@@ -23,6 +23,8 @@ export interface PromptContext {
 	activeNames?: string[];
 	mentionedNames?: string[];
 	mentionType?: MentionType;
+	groupAutoReply: boolean;
+	groupContinuation: boolean;
 	isVoiceMessage: boolean;
 	userAttachedImage: boolean;
 	shouldGenerateImage: boolean;

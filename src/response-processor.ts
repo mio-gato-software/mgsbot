@@ -198,6 +198,7 @@ export async function sendResponse(
 
 		if (ttsText) {
 			try {
+				await ctx.replyWithChatAction("typing").catch(() => {});
 				if (isDev) console.log("[TTS] Generating speech for:", ttsText);
 				const audioPath = await textToSpeech(ttsText);
 				if (isDev) console.log("[TTS] Audio saved to:", audioPath);
@@ -217,6 +218,7 @@ export async function sendResponse(
 			}
 		} else {
 			try {
+				await ctx.replyWithChatAction("typing").catch(() => {});
 				await ctx.reply(responseText, {
 					...replyOptions,
 					parse_mode: "Markdown",
