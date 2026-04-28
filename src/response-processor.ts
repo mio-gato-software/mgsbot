@@ -16,7 +16,42 @@ const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
 export const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
 export const IMAGE_SELF_MARKER_REGEX = /\[IMAGE_SELF:\s*([^\]]+)\]/;
 export const REACTION_MARKER_REGEX = /\[REACT:\s*([^\]]+)\]/;
+export const QUOTE_REPLY_MARKER = "[QUOTE_REPLY]";
 export const SILENCE_MARKER = "[SILENCE]";
+
+const QUOTE_REPLY_MARKER_REGEX = /\[QUOTE_REPLY\]/g;
+
+export function extractQuoteReplyMarker(responseText: string): {
+	responseText: string;
+	quoteReplyRequested: boolean;
+} {
+	const quoteReplyRequested = responseText.includes(QUOTE_REPLY_MARKER);
+	return {
+		responseText: responseText.replace(QUOTE_REPLY_MARKER_REGEX, "").trim(),
+		quoteReplyRequested,
+	};
+}
+
+export function buildReplyOptions(input: {
+	isGroup: boolean;
+	messageId?: number;
+	quoteReplyRequested: boolean;
+}): {
+	reply_parameters?: {
+		message_id: number;
+		allow_sending_without_reply: true;
+	};
+} {
+	if (!input.isGroup || !input.quoteReplyRequested || !input.messageId) {
+		return {};
+	}
+	return {
+		reply_parameters: {
+			message_id: input.messageId,
+			allow_sending_without_reply: true,
+		},
+	};
+}
 
 export interface SendResponseOptions {
 	ctx: Context;
@@ -52,6 +87,8 @@ export async function sendResponse(
 		userImagePath,
 	} = options;
 	let responseText = options.responseText;
+	const quoteMarker = extractQuoteReplyMarker(responseText);
+	responseText = quoteMarker.responseText;
 
 	// Guard against empty responses
 	if (!responseText.trim()) {
@@ -94,9 +131,11 @@ export async function sendResponse(
 	}
 
 	// Reply options
-	const replyOptions = {
-		reply_to_message_id: isGroup ? ctx.message?.message_id : undefined,
-	};
+	const replyOptions = buildReplyOptions({
+		isGroup,
+		messageId: ctx.message?.message_id,
+		quoteReplyRequested: quoteMarker.quoteReplyRequested,
+	});
 
 	// Extract TTS markers up-front so they never leak into an image caption
 	// when [IMAGE:...] and [TTS]...[/TTS] co-occur. Tolerate a missing slash
