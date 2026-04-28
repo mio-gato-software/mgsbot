@@ -34,7 +34,6 @@ export class FalImageProvider implements ImageProvider {
 	readonly name = "fal";
 	private readonly apiKey: string;
 	private readonly modelName = resolveFalImageModelName();
-	private readonly quality = resolveFalImageQuality();
 	private readonly generationTimeoutMs = resolveTimeoutMs(
 		"FAL_IMAGE_TIMEOUT_MS",
 		DEFAULT_GENERATION_TIMEOUT_MS,
@@ -66,7 +65,6 @@ export class FalImageProvider implements ImageProvider {
 
 		const body: Record<string, unknown> = {
 			prompt,
-			quality: this.quality,
 			num_images: 1,
 			output_format: "png",
 		};
@@ -74,6 +72,9 @@ export class FalImageProvider implements ImageProvider {
 			(candidate) => candidate.name === this.modelName,
 		);
 		if (!model) throw new Error(`Unknown fal image model: ${this.modelName}`);
+		if (model.name === "gpt-image-2") {
+			body.quality = resolveFalImageQuality();
+		}
 
 		let endpoint: string;
 
@@ -91,7 +92,9 @@ export class FalImageProvider implements ImageProvider {
 
 		if (isDev) {
 			console.log("[image:fal] Model:", this.modelName);
-			console.log("[image:fal] Quality:", this.quality);
+			if (model.name === "gpt-image-2") {
+				console.log("[image:fal] Quality:", body.quality);
+			}
 			console.log("[image:fal] Endpoint:", endpoint);
 		}
 

@@ -126,7 +126,7 @@ There are four independent provider axes:
 | Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` | Provider-specific chat key |
 | Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | `gemini` -> `fal` -> `lemonfox` by available keys | `GOOGLE_API_KEY`, `FAL_API_KEY`, or `LEMON_FOX_API_KEY` |
 | Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` by available keys; `fal` only when explicit | `ELEVENLABS_API_KEY`, `INWORLD_API_KEY`, `LEMON_FOX_API_KEY`, or `FAL_API_KEY` |
-| Images | `IMAGE_PROVIDER` + `FAL_IMAGE_MODEL` | Character image generation/editing | `gemini`; fal defaults to `gpt-image-2` at `high` quality | `GOOGLE_API_KEY` or `FAL_API_KEY` |
+| Images | `IMAGE_PROVIDER` + `FAL_IMAGE_MODEL` | Character image generation/editing | `gemini`; fal defaults to `nano-banana-pro` | `GOOGLE_API_KEY` or `FAL_API_KEY` |
 
 `/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis.
 
@@ -205,8 +205,8 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 | `FAL_VOICE` | `Sarah` | ElevenLabs voice name for fal.ai TTS (Aria, Roger, Sarah, Charlotte, Rachel) |
 | `STT_PROVIDER` | *(auto)* | STT provider: `gemini`, `lemonfox` *(auto if key set)*, or `fal` (ElevenLabs Scribe v2 via fal.ai) |
 | `IMAGE_PROVIDER` | `gemini` | Image generation provider: `gemini` or `fal` |
-| `FAL_IMAGE_MODEL` | `gpt-image-2` | fal.ai image model: `gpt-image-2` or `nano-banana-pro` |
-| `FAL_IMAGE_QUALITY` | `high` | fal.ai image quality: `low`, `medium`, or `high` |
+| `FAL_IMAGE_MODEL` | `nano-banana-pro` | fal.ai image model: `nano-banana-pro` or `gpt-image-2` |
+| `FAL_IMAGE_QUALITY` | `high` | fal.ai GPT Image 2 quality: `low`, `medium`, or `high` |
 | `FAL_IMAGE_TIMEOUT_MS` | `300000` | fal.ai generation timeout in milliseconds |
 | `SHOW_TRANSCRIPTION` | `false` | Show transcription text for voice messages (both sent and received) |
 
@@ -395,8 +395,8 @@ The bot generates character images on a weekly schedule:
 - One random day per week, at a random time between 8 AM and 11 PM (bot timezone)
 - Pluggable provider: Gemini (`IMAGE_PROVIDER=gemini`, default) or fal.ai (`IMAGE_PROVIDER=fal`)
 - Gemini uses `gemini-3-pro-image-preview` with a base character image (`memory/base.{png,jpg,jpeg}`)
-- fal.ai defaults to GPT Image 2 (`FAL_IMAGE_MODEL=gpt-image-2`) and can be switched back to Nano Banana Pro with `FAL_IMAGE_MODEL=nano-banana-pro`
-- fal.ai sends `FAL_IMAGE_QUALITY=high` by default; lower values can reduce latency and cost
+- fal.ai defaults to Nano Banana Pro (`FAL_IMAGE_MODEL=nano-banana-pro`) and can be switched to GPT Image 2 with `FAL_IMAGE_MODEL=gpt-image-2`
+- fal.ai sends `FAL_IMAGE_QUALITY=high` only when GPT Image 2 is selected; lower values can reduce latency and cost
 - fal.ai uses the model's `/edit` endpoint when a base image exists (character images) and its base text-to-image endpoint for standalone generation (e.g., full-access mode illustrations)
 - Schedule tracked per-chat via sensory buffer fields (`lastImageDate`, `imageTargetDate`, `imageTargetTime`)
 - On-demand photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command)

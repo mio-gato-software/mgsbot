@@ -150,8 +150,8 @@ export const IMAGE_PROVIDERS = [
 		label: "fal.ai",
 		requiredEnv: ["FAL_API_KEY"],
 		modelEnv: "FAL_IMAGE_MODEL",
-		defaultModel: "gpt-image-2",
-		description: "Alternative image provider using GPT Image 2 by default.",
+		defaultModel: "nano-banana-pro",
+		description: "Alternative image provider using Nano Banana Pro by default.",
 	},
 ] as const satisfies readonly ProviderOption<string>[];
 
@@ -330,7 +330,7 @@ export function resolveImageProviderName(
 
 function normalizeFalImageModelName(value?: string): FalImageModelName | null {
 	const normalized = value?.trim().toLowerCase();
-	if (!normalized) return "gpt-image-2";
+	if (!normalized) return "nano-banana-pro";
 
 	switch (normalized) {
 		case "gpt-image-2":
@@ -464,7 +464,11 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 				"fal.ai images require FAL_IMAGE_MODEL to be gpt-image-2 or nano-banana-pro when set.",
 			);
 		}
-		if (imageProvider === "fal" && !falImageQuality) {
+		if (
+			imageProvider === "fal" &&
+			falImageModel === "gpt-image-2" &&
+			!falImageQuality
+		) {
 			errors.push(
 				"fal.ai images require FAL_IMAGE_QUALITY to be low, medium, or high when set.",
 			);
@@ -538,10 +542,13 @@ export function formatProviderStartupSummary(
 	const tts = resolveTtsProviderName(env) ?? "none";
 	const sttOrder = resolveSttProviderOrder(env);
 	const stt = sttOrder.length > 0 ? sttOrder.join(" -> ") : "none";
+	const falImageModel = image === "fal" ? resolveFalImageModelName(env) : null;
 	const imageSummary =
-		image === "fal"
-			? `${image} (${resolveFalImageModelName(env)}, ${resolveFalImageQuality(env)})`
-			: image;
+		image === "fal" && falImageModel === "gpt-image-2"
+			? `${image} (${falImageModel}, ${resolveFalImageQuality(env)})`
+			: image === "fal"
+				? `${image} (${falImageModel})`
+				: image;
 
 	return [
 		`[startup] Chat provider: ${chat}`,
@@ -570,10 +577,13 @@ export function formatProviderCommandStatus(
 	const sttOrder = resolveSttProviderOrder(env);
 	const stt = sttOrder.length > 0 ? sttOrder.join(" -> ") : "none";
 	const image = resolveImageProviderName(env);
+	const falImageModel = image === "fal" ? resolveFalImageModelName(env) : null;
 	const imageSummary =
-		image === "fal"
-			? `${image} (${resolveFalImageModelName(env)}, ${resolveFalImageQuality(env)})`
-			: image;
+		image === "fal" && falImageModel === "gpt-image-2"
+			? `${image} (${falImageModel}, ${resolveFalImageQuality(env)})`
+			: image === "fal"
+				? `${image} (${falImageModel})`
+				: image;
 
 	return [
 		`Proveedor de chat: ${current.provider}`,
