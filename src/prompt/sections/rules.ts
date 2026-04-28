@@ -19,6 +19,7 @@ const GROUP_BULLETS = [
 	"You may join naturally when you have something useful, funny, warm, clarifying, or timely to add.",
 	"Don't monopolize the conversation. If your reply would be low-value, repetitive, or too eager, respond exactly `[SILENCE]`.",
 	"If tagged or replied to directly: respond unless the best response is a simple reaction.",
+	"Telegram quote control: default to a normal message. Prefix `[QUOTE_REPLY]` only when your answer must be visually attached to the latest message because it responds to a specific quoted, older, or media message and would be ambiguous without the quote.",
 	"For simple acknowledgment use `[REACT:emoji]`. Emojis: 👍 👎 ❤ 🔥 😁 🤔 😢 🎉 👏 🙏",
 ];
 
@@ -51,6 +52,7 @@ export const rulesGroup: PromptSection = {
 				"Respond only if the latest message appears to be engaging with what you just said or asking you to continue.",
 				"If it seems like the group moved on or people are talking among themselves, respond exactly `[SILENCE]`.",
 				"Keep it brief and conversational.",
+				"Do not use `[QUOTE_REPLY]` for casual continuation unless the latest message would be unclear without a Telegram quote.",
 				...(customRules.groupRules ?? []),
 			]);
 		}
@@ -60,6 +62,7 @@ export const rulesGroup: PromptSection = {
 				"Respond only if you can add something useful, funny, warm, clarifying, or timely to the latest exchange.",
 				"If answering would feel like interrupting, seeking attention, or adding noise, respond exactly `[SILENCE]`.",
 				"Keep it brief and don't reference private memories or long-term history.",
+				"Do not use `[QUOTE_REPLY]` for spontaneous participation unless the latest message would be unclear without a Telegram quote.",
 				...(customRules.groupRules ?? []),
 			]);
 		}
