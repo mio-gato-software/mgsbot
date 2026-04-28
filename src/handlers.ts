@@ -2,6 +2,7 @@ import type { Bot, Context } from "grammy";
 import {
 	classifyEditIntent,
 	classifyGroupMessageIntent,
+	classifyGroupSocialIntent,
 } from "./ai/classifiers.ts";
 import { analyzeYouTube, describeImage } from "./ai/vision.ts";
 import { isBotOff, isSleepingHour } from "./bot-state.ts";
@@ -170,6 +171,65 @@ function getLastBotMessageBeforeLatest(
 		if (message?.role === "model") return message.content;
 	}
 	return undefined;
+}
+
+async function routeGroupNameMention(
+	ctx: Context,
+	text: string,
+	userName: string,
+): Promise<"full" | "handled"> {
+	const chatId = ctx.chat?.id;
+	if (!chatId) return "handled";
+
+	const buffer = await loadSensory(chatId);
+	const currentTurn: ConversationMessage = {
+		role: "user",
+		name: userName,
+		content: text,
+		timestamp: Date.now(),
+	};
+	const recentMessages = [...buffer.messages, currentTurn];
+	const lastBotMessage = getLastBotMessageBeforeLatest(recentMessages);
+	const decision = await classifyGroupSocialIntent({
+		mode: "name",
+		botName: getBotName(),
+		currentSpeaker: userName,
+		currentMessage: text,
+		recentMessages,
+		lastBotMessage,
+	});
+
+	if (decision?.addressing === "direct") {
+		return "full";
+	}
+
+	await observeConversationTurn(ctx, text, userName);
+	if (decision?.action !== "respond") {
+		return "handled";
+	}
+
+	const didRespond = await processConversation(
+		ctx,
+		text,
+		userName,
+		"name",
+		isBotOff(),
+		isSleepingHour(),
+		undefined,
+		undefined,
+		undefined,
+		{
+			skipHistoricalContext: true,
+			userTurnAlreadyRecorded: true,
+			groupAutoReply: decision.addressing !== "continuation",
+			groupContinuation: decision.addressing === "continuation",
+		},
+	);
+	if (didRespond) {
+		openGroupContinuationWindow(chatId);
+	}
+
+	return "handled";
 }
 
 export function registerHandlers(bot: Bot): void {
@@ -408,6 +468,11 @@ export function registerHandlers(bot: Bot): void {
 		if (text.startsWith("/")) return;
 		const userName = getUserDisplayName(ctx);
 		const mentionType = detectMentionType(ctx, ctx.me.id);
+
+		if (isGroupChat(ctx) && mentionType === "name") {
+			const route = await routeGroupNameMention(ctx, text, userName);
+			if (route === "handled") return;
+		}
 
 		// YouTube analysis disabled in simple assistant mode
 		const yt = isSimpleAssistantMode ? null : extractYouTubeUrl(ctx);

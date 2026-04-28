@@ -5,6 +5,9 @@ import { withRetry } from "../utils.ts";
 
 const isDev = process.env.NODE_ENV === "development";
 const CLASSIFIER_MODEL = "gemini-flash-lite-latest";
+const GROUP_ROUTER_MAX_MESSAGES = 6;
+const GROUP_ROUTER_MAX_MESSAGE_CHARS = 500;
+const GROUP_ROUTER_MAX_TOTAL_CHARS = 3000;
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
@@ -22,7 +25,7 @@ Decide: is the user asking to EDIT, MODIFY, TRANSFORM, or GENERATE A NEW VERSION
 Answer with a single word: "yes" or "no".`;
 
 export interface GroupMessageIntentInput {
-	mode: "spontaneous" | "continuation";
+	mode: "name" | "spontaneous" | "continuation";
 	botName: string;
 	currentSpeaker: string;
 	currentMessage: string;
@@ -31,35 +34,80 @@ export interface GroupMessageIntentInput {
 }
 
 export type GroupMessageIntentDecision = "respond" | "silence";
+export type GroupSocialAddressing =
+	| "direct"
+	| "about_bot"
+	| "continuation"
+	| "ambient";
+export type GroupSocialAction = "respond" | "silence";
+
+export interface GroupSocialDecision {
+	addressing: GroupSocialAddressing;
+	action: GroupSocialAction;
+	confidence: number;
+}
+
+function truncateText(text: string, maxChars: number): string {
+	if (text.length <= maxChars) return text;
+	return `${text.slice(0, maxChars - 12).trimEnd()} [truncated]`;
+}
 
 function formatGroupMessageForClassifier(message: ConversationMessage): string {
 	const speaker =
 		message.role === "model" ? "Bot" : (message.name ?? "Group member");
-	return `${speaker}: ${message.content}`;
+	return `${speaker}: ${truncateText(message.content, GROUP_ROUTER_MAX_MESSAGE_CHARS)}`;
+}
+
+function formatRecentGroupMessages(messages: ConversationMessage[]): string {
+	const lines = messages
+		.slice(-GROUP_ROUTER_MAX_MESSAGES)
+		.map(formatGroupMessageForClassifier);
+	let totalChars = 0;
+	const bounded: string[] = [];
+
+	for (let i = lines.length - 1; i >= 0; i--) {
+		const line = lines[i];
+		if (!line) continue;
+		const nextTotal = totalChars + line.length + 1;
+		if (nextTotal > GROUP_ROUTER_MAX_TOTAL_CHARS) break;
+		bounded.unshift(line);
+		totalChars = nextTotal;
+	}
+
+	return bounded.join("\n");
 }
 
 function buildGroupMessageIntentPrompt(input: GroupMessageIntentInput): string {
-	const recent = input.recentMessages
-		.slice(-6)
-		.map(formatGroupMessageForClassifier)
-		.join("\n");
+	const recent = formatRecentGroupMessages(input.recentMessages);
 	const lastBotMessage = input.lastBotMessage?.trim()
-		? input.lastBotMessage.trim()
+		? truncateText(input.lastBotMessage.trim(), GROUP_ROUTER_MAX_MESSAGE_CHARS)
 		: "(none)";
+	const currentMessage = truncateText(
+		input.currentMessage,
+		GROUP_ROUTER_MAX_MESSAGE_CHARS,
+	);
 
 	return `You are a lightweight multilingual router for a Telegram group chat bot named ${input.botName}.
 
-Your job is NOT to write the bot's reply. Decide only whether the bot should be allowed to generate a reply.
+Your job is NOT to write the bot's reply. Decide only how the latest group message relates socially to the bot, and whether the bot should be allowed to generate a reply.
 
 Mode: ${input.mode}
 
-Decision rules:
-- Return "respond" only when the bot's participation would feel natural in a group chat.
-- Return "silence" when responding would feel intrusive, attention-seeking, repetitive, or like the group moved on.
+Addressing labels:
+- direct: The latest message speaks to the bot, asks the bot a question, gives the bot an instruction, greets the bot, or clearly invites the bot to answer.
+- about_bot: The latest message mentions the bot as a topic, joke, complaint, or aside, but is not speaking to the bot.
+- continuation: The bot recently spoke and the latest message likely engages with that bot message or asks the bot to continue.
+- ambient: Group members are talking among themselves; the bot is not socially addressed.
+
+Action rules:
+- action "respond" only when the bot's participation would feel natural in a group chat.
+- action "silence" when responding would feel intrusive, attention-seeking, repetitive, or like the group moved on.
 - Be conservative. If uncertain, return "silence".
+- Mentioning the bot's name is not enough. Distinguish talking TO the bot from talking ABOUT the bot.
 - This must work across languages. Do not rely on language-specific keywords.
 
 Mode-specific guidance:
+- name: The latest message contains the bot's name. Classify whether it is direct, about_bot, continuation, or ambient.
 - spontaneous: The bot has not been directly addressed. Allow a reply only if the latest message creates a clear opening where a normal group member could add value.
 - continuation: The bot recently spoke. Allow a reply only if the latest message likely engages with the bot's last message or asks the bot to continue. If it is just members talking among themselves, choose silence.
 
@@ -70,9 +118,10 @@ Bot's last message:
 ${lastBotMessage}
 
 Latest message:
-${input.currentSpeaker}: ${input.currentMessage}
+${input.currentSpeaker}: ${currentMessage}
 
-Answer with exactly one word: respond or silence.`;
+Return ONLY compact JSON with this exact shape:
+{"addressing":"direct|about_bot|continuation|ambient","action":"respond|silence","confidence":0.0}`;
 }
 
 async function runSingleWordClassifier(
@@ -103,6 +152,35 @@ async function runSingleWordClassifier(
 		2,
 		500,
 	);
+}
+
+function parseGroupSocialDecision(text: string): GroupSocialDecision | null {
+	const jsonText = text.match(/\{[\s\S]*\}/)?.[0];
+	if (!jsonText) return null;
+
+	try {
+		const parsed = JSON.parse(jsonText) as Partial<GroupSocialDecision>;
+		const addressingValues = new Set<GroupSocialAddressing>([
+			"direct",
+			"about_bot",
+			"continuation",
+			"ambient",
+		]);
+		const actionValues = new Set<GroupSocialAction>(["respond", "silence"]);
+		const addressing = parsed.addressing;
+		const action = parsed.action;
+		if (!addressing || !addressingValues.has(addressing)) return null;
+		if (!action || !actionValues.has(action)) return null;
+		const confidence =
+			typeof parsed.confidence === "number" &&
+			Number.isFinite(parsed.confidence)
+				? Math.max(0, Math.min(1, parsed.confidence))
+				: 0.5;
+
+		return { addressing, action, confidence };
+	} catch {
+		return null;
+	}
 }
 
 /**
@@ -147,8 +225,21 @@ export async function classifyEditIntent(
 export async function classifyGroupMessageIntent(
 	input: GroupMessageIntentInput,
 ): Promise<GroupMessageIntentDecision | null> {
+	const decision = await classifyGroupSocialIntent(input);
+	return decision?.action ?? null;
+}
+
+/**
+ * Bounded social router for group participation. It intentionally sends only
+ * a small recent chat slice, the latest message, and the last bot message.
+ */
+export async function classifyGroupSocialIntent(
+	input: GroupMessageIntentInput,
+): Promise<GroupSocialDecision | null> {
 	const currentMessage = input.currentMessage.trim();
-	if (!currentMessage) return "silence";
+	if (!currentMessage) {
+		return { addressing: "ambient", action: "silence", confidence: 1 };
+	}
 
 	const useGemini = !!process.env.GOOGLE_API_KEY;
 	if (!useGemini && !warnedClassifierFallback) {
@@ -160,21 +251,17 @@ export async function classifyGroupMessageIntent(
 
 	try {
 		const prompt = buildGroupMessageIntentPrompt(input);
-		const text = (await runSingleWordClassifier(prompt, 8))
-			.trim()
-			.toLowerCase()
-			.replace(/[`"'.,:;!]/g, "");
+		const text = await runSingleWordClassifier(prompt, 80);
+		const decision = parseGroupSocialDecision(text);
 
 		if (isDev) {
 			console.log(
-				`[classifyGroupMessageIntent] ${input.mode} "${currentMessage}" → ${text}`,
+				`[classifyGroupSocialIntent] ${input.mode} "${currentMessage}" → ${text.trim()}`,
 			);
 		}
-		if (text.startsWith("respond")) return "respond";
-		if (text.startsWith("silence")) return "silence";
-		return null;
+		return decision;
 	} catch (error) {
-		console.error("[classifyGroupMessageIntent] Error:", error);
+		console.error("[classifyGroupSocialIntent] Error:", error);
 		return null;
 	}
 }
