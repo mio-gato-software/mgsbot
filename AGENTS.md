@@ -95,7 +95,7 @@ There are four independent provider axes:
 | Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` |
 | Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | `gemini` -> `fal` -> `lemonfox` by available keys |
 | Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` by available keys; `fal` only when explicit |
-| Images | `IMAGE_PROVIDER` | Character image generation/editing | `gemini` |
+| Images | `IMAGE_PROVIDER` + `FAL_IMAGE_MODEL` | Character image generation/editing | `gemini`; fal defaults to `gpt-image-2` |
 
 `/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis.
 
@@ -200,6 +200,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `TTS_PROVIDER`: `elevenlabs`, `inworld`, `lemonfox`, or `fal`. When unset, auto-detects in order: elevenlabs -> inworld -> lemonfox; fal requires explicit selection
 - `STT_PROVIDER`: `gemini`, `fal`, or `lemonfox`. When unset, falls back in order: gemini -> fal -> lemonfox (first with a key wins)
 - `IMAGE_PROVIDER`: `gemini` (default) or `fal`
+- `FAL_IMAGE_MODEL`: fal.ai image model, `gpt-image-2` (default) or `nano-banana-pro`
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
 - `ENABLE_FOLLOW_UPS`: Set `true` to enable proactive follow-ups in DMs
 - `ENABLE_CHECK_INS`: Set `true` to enable proactive check-in messages in DMs (~2/week)

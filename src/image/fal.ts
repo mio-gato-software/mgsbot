@@ -1,4 +1,8 @@
 import * as fs from "node:fs";
+import {
+	FAL_IMAGE_MODELS,
+	resolveFalImageModelName,
+} from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ImageProvider } from "./types.ts";
 
@@ -14,6 +18,7 @@ interface FalImageResponse {
 export class FalImageProvider implements ImageProvider {
 	readonly name = "fal";
 	private readonly apiKey: string;
+	private readonly modelName = resolveFalImageModelName();
 
 	constructor() {
 		const apiKey = process.env.FAL_API_KEY;
@@ -33,12 +38,15 @@ export class FalImageProvider implements ImageProvider {
 	): Promise<Buffer> {
 		if (isDev) console.log("[image:fal] Prompt:", prompt.slice(0, 200));
 
-		// Use /edit endpoint with reference image, or base endpoint for text-to-image
 		const body: Record<string, unknown> = {
 			prompt,
 			num_images: 1,
 			output_format: "png",
 		};
+		const model = FAL_IMAGE_MODELS.find(
+			(candidate) => candidate.name === this.modelName,
+		);
+		if (!model) throw new Error(`Unknown fal image model: ${this.modelName}`);
 
 		let endpoint: string;
 
@@ -49,12 +57,15 @@ export class FalImageProvider implements ImageProvider {
 				encoding: "base64",
 			});
 			body.image_urls = [`data:${mimeType};base64,${base64Data}`];
-			endpoint = "https://fal.run/fal-ai/nano-banana-pro/edit";
+			endpoint = `https://fal.run/${model.editEndpoint}`;
 		} else {
-			endpoint = "https://fal.run/fal-ai/nano-banana-pro";
+			endpoint = `https://fal.run/${model.textEndpoint}`;
 		}
 
-		if (isDev) console.log("[image:fal] Endpoint:", endpoint);
+		if (isDev) {
+			console.log("[image:fal] Model:", this.modelName);
+			console.log("[image:fal] Endpoint:", endpoint);
+		}
 
 		const data = await withRetry(async () => {
 			const response = await fetch(endpoint, {
