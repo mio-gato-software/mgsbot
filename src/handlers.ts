@@ -259,6 +259,18 @@ function buildUntranscribedVoiceContent(
 	return `[Voice message from ${userName}${formatVoiceDuration(duration)}, not transcribed because it exceeds the passive group limit of ${GROUP_PASSIVE_VOICE_MAX_SECONDS}s]`;
 }
 
+async function processConversationAndTrackGroupContinuation(
+	...args: Parameters<typeof processConversation>
+): Promise<boolean> {
+	const [ctx] = args;
+	const didRespond = await processConversation(...args);
+	const chatId = ctx.chat?.id;
+	if (didRespond && chatId && isGroupChat(ctx)) {
+		openGroupContinuationWindow(chatId);
+	}
+	return didRespond;
+}
+
 async function routeGroupNameMention(
 	ctx: Context,
 	text: string,
@@ -299,7 +311,7 @@ async function routeGroupNameMention(
 		return "handled";
 	}
 
-	const didRespond = await processConversation(
+	await processConversationAndTrackGroupContinuation(
 		ctx,
 		conversationContent,
 		userName,
@@ -316,9 +328,6 @@ async function routeGroupNameMention(
 			groupContinuation: decision.addressing === "continuation",
 		},
 	);
-	if (didRespond) {
-		openGroupContinuationWindow(chatId);
-	}
 
 	return "handled";
 }
@@ -334,7 +343,7 @@ async function routeGroupTranscribedVoice(
 
 	const content = buildVoiceContent(userName, transcription);
 	if (initialMentionType !== "none") {
-		await processConversation(
+		await processConversationAndTrackGroupContinuation(
 			ctx,
 			content,
 			userName,
@@ -368,7 +377,7 @@ async function routeGroupTranscribedVoice(
 		});
 		if (route === "handled") return;
 
-		await processConversation(
+		await processConversationAndTrackGroupContinuation(
 			ctx,
 			content,
 			userName,
@@ -400,7 +409,7 @@ async function routeGroupTranscribedVoice(
 
 	if (decision !== "respond") return;
 
-	const didRespond = await processConversation(
+	await processConversationAndTrackGroupContinuation(
 		ctx,
 		passiveContent,
 		userName,
@@ -416,9 +425,6 @@ async function routeGroupTranscribedVoice(
 			groupContinuation: true,
 		},
 	);
-	if (didRespond) {
-		openGroupContinuationWindow(chatId);
-	}
 }
 
 export function registerHandlers(bot: Bot): void {
@@ -522,7 +528,7 @@ export function registerHandlers(bot: Bot): void {
 			}
 
 			const content = buildVoiceContent(userName, transcription);
-			await processConversation(
+			await processConversationAndTrackGroupContinuation(
 				ctx,
 				content,
 				userName,
@@ -572,7 +578,7 @@ export function registerHandlers(bot: Bot): void {
 					.catch(() => {});
 			}
 			const content = `[Audio from ${userName}]: ${transcription}`;
-			await processConversation(
+			await processConversationAndTrackGroupContinuation(
 				ctx,
 				content,
 				userName,
@@ -613,7 +619,7 @@ export function registerHandlers(bot: Bot): void {
 					const content = caption
 						? `[Image from ${userName}, caption: "${caption}"]`
 						: `[Image from ${userName}]`;
-					await processConversation(
+					await processConversationAndTrackGroupContinuation(
 						ctx,
 						content,
 						userName,
@@ -644,7 +650,7 @@ export function registerHandlers(bot: Bot): void {
 							? `[Image from ${userName}, caption: "${caption}"]: ${description}`
 							: `[Image from ${userName}]: ${description}`;
 					}
-					await processConversation(
+					await processConversationAndTrackGroupContinuation(
 						ctx,
 						content,
 						userName,
@@ -693,7 +699,7 @@ export function registerHandlers(bot: Bot): void {
 			const content = yt.remainingText
 				? `[YouTube video from ${userName}, message: "${yt.remainingText}"]: ${analysis}`
 				: `[YouTube video from ${userName}]: ${analysis}`;
-			await processConversation(
+			await processConversationAndTrackGroupContinuation(
 				ctx,
 				content,
 				userName,
@@ -755,7 +761,7 @@ export function registerHandlers(bot: Bot): void {
 						? `[Audio from ${audioSender}, transcription requested by ${userName}]: ${transcription}\n\n${userName}'s message: "${text}"`
 						: `[Audio from ${audioSender}, transcription requested by ${userName}]: ${transcription}`;
 
-					await processConversation(
+					await processConversationAndTrackGroupContinuation(
 						ctx,
 						content,
 						userName,
@@ -832,7 +838,7 @@ export function registerHandlers(bot: Bot): void {
 							const content = text
 								? `[Image from ${photoSender}]\n\n${userName}'s message: "${text}"`
 								: `[Image from ${photoSender}]`;
-							await processConversation(
+							await processConversationAndTrackGroupContinuation(
 								ctx,
 								content,
 								userName,
@@ -863,7 +869,7 @@ export function registerHandlers(bot: Bot): void {
 									? `[Image from ${photoSender}]: ${description}\n\n${userName}'s message: "${text}"`
 									: `[Image from ${photoSender}]: ${description}`;
 							}
-							await processConversation(
+							await processConversationAndTrackGroupContinuation(
 								ctx,
 								content,
 								userName,
@@ -937,7 +943,7 @@ export function registerHandlers(bot: Bot): void {
 				if (canStartSpontaneously) {
 					registerGroupAutoReply(ctx.chat.id);
 				}
-				const didRespond = await processConversation(
+				await processConversationAndTrackGroupContinuation(
 					ctx,
 					text,
 					userName,
@@ -954,9 +960,6 @@ export function registerHandlers(bot: Bot): void {
 						groupContinuation: canContinue,
 					},
 				);
-				if (didRespond) {
-					openGroupContinuationWindow(ctx.chat.id);
-				}
 			}
 			return;
 		}
@@ -969,7 +972,7 @@ export function registerHandlers(bot: Bot): void {
 				? (replySenderUser.first_name ?? replySenderUser.username ?? "Unknown")
 				: "Unknown";
 			const content = `[Respondiendo al mensaje de ${replySenderName}: "${replyText}"]\n\n${text}`;
-			await processConversation(
+			await processConversationAndTrackGroupContinuation(
 				ctx,
 				content,
 				userName,
@@ -980,7 +983,7 @@ export function registerHandlers(bot: Bot): void {
 			return;
 		}
 
-		await processConversation(
+		await processConversationAndTrackGroupContinuation(
 			ctx,
 			text,
 			userName,
