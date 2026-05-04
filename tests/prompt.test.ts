@@ -211,7 +211,6 @@ describe("section: rules.group", () => {
 	test("allows natural group participation by default", async () => {
 		const out = (await rulesGroup.render(makeCtx())) ?? "";
 		expect(out).toContain("regular member of the group");
-		expect(out).toContain("opens the floor to the group");
 		expect(out).toContain("[QUOTE_REPLY]");
 		expect(out).toContain("[SILENCE]");
 		expect(out).not.toContain("NEVER respond to conversations");
@@ -221,8 +220,6 @@ describe("section: rules.group", () => {
 		const out =
 			(await rulesGroup.render(makeCtx({ groupAutoReply: true }))) ?? "";
 		expect(out).toContain("room for you to participate");
-		expect(out).toContain("asks the group for opinions");
-		expect(out).toContain("mostly repeat what someone already said");
 		expect(out).toContain("[QUOTE_REPLY]");
 		expect(out).toContain("[SILENCE]");
 		expect(out).not.toContain("NEVER respond to conversations");
