@@ -245,6 +245,12 @@ export async function processConversation(
 	let shouldGenImage = false;
 	let promptCtx: Parameters<typeof assembleSystemPrompt>[0];
 	const skipHistoricalContext = options?.skipHistoricalContext === true;
+	if (!isSimpleAssistantMode) {
+		shouldGenImage = shouldGenerateImageNow(buffer);
+		if (isFullAccessActive()) {
+			shouldGenImage = true;
+		}
+	}
 
 	if (isSimpleAssistantMode || skipHistoricalContext) {
 		promptCtx = buildPromptContext({
@@ -253,6 +259,11 @@ export async function processConversation(
 			mentionType: isGroupChat(ctx) ? mentionType : undefined,
 			groupAutoReply: options?.groupAutoReply === true,
 			groupContinuation: options?.groupContinuation === true,
+			isVoiceMessage,
+			userAttachedImage: !!userImagePath,
+			shouldGenerateImage: shouldGenImage,
+			allowPhotoRequest,
+			ttsAvailable: isTtsAvailable(),
 		});
 	} else {
 		// Start query embedding and name resolution in parallel
@@ -313,10 +324,6 @@ export async function processConversation(
 			}
 		}
 
-		shouldGenImage = shouldGenerateImageNow(buffer);
-		if (isFullAccessActive()) {
-			shouldGenImage = true;
-		}
 		promptCtx = buildPromptContext({
 			relevantEpisodes: episodes,
 			relevantFacts: mergedFacts,
