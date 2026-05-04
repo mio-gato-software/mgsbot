@@ -204,6 +204,9 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 | `INWORLD_VOICE_ID` | — | Inworld voice ID (required if using Inworld) |
 | `FAL_VOICE` | `Sarah` | ElevenLabs voice name for fal.ai TTS (Aria, Roger, Sarah, Charlotte, Rachel) |
 | `STT_PROVIDER` | *(auto)* | STT provider: `gemini`, `lemonfox` *(auto if key set)*, or `fal` (ElevenLabs Scribe v2 via fal.ai) |
+| `ENABLE_GROUP_VOICE_CONTEXT` | `true` | Transcribe passive group voice notes for memory/context. Set to `false` to return to placeholder-only observation. |
+| `GROUP_PASSIVE_VOICE_MAX_SECONDS` | `120` | Maximum duration for passive group voice-note transcription. Direct replies/mentions are still transcribed. |
+| `GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS` | `1200` | Maximum transcript characters stored for passive group voice context. |
 | `IMAGE_PROVIDER` | `gemini` | Image generation provider: `gemini` or `fal` |
 | `FAL_IMAGE_MODEL` | `nano-banana-pro` | fal.ai image model: `nano-banana-pro` or `gpt-image-2` |
 | `FAL_IMAGE_QUALITY` | `high` | fal.ai GPT Image 2 quality: `low`, `medium`, or `high` |

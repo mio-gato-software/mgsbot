@@ -38,6 +38,16 @@ const GROUP_SPONTANEOUS_EVALUATION_COOLDOWN_MS = 10 * 60 * 1000;
 const MAX_SPONTANEOUS_REPLIES_PER_WINDOW = 1;
 const GROUP_CONTINUATION_WINDOW_MS = 15 * 60 * 1000;
 const GROUP_CONTINUATION_MAX_MESSAGES = 6;
+const groupVoiceContextEnabled =
+	process.env.ENABLE_GROUP_VOICE_CONTEXT !== "false";
+const GROUP_PASSIVE_VOICE_MAX_SECONDS = readNonNegativeEnvNumber(
+	"GROUP_PASSIVE_VOICE_MAX_SECONDS",
+	120,
+);
+const GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS = readNonNegativeEnvNumber(
+	"GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS",
+	1200,
+);
 
 const groupAutoReplyTimestamps = new Map<number, number[]>();
 const groupSpontaneousEvaluationTimestamps = new Map<number, number>();
@@ -51,6 +61,13 @@ const groupContinuationWindows = new Map<
  */
 const EDIT_INTENT_REGEX =
 	/\b(edit|change|modify|add|remove|make it|turn it|turn this|transform|replace|paint|convert|crop|resize|edita|edítala|edítalo|cambia|cámbiale|modifica|modifícala|modifícalo|ponle|pónle|agrégale|agregale|añádele|añadele|quítale|quitale|hazla|hazlo|haz que|conviértela|conviertela|conviértelo|conviertelo|transforma|pinta|píntala|pintalo|reemplaza|sustituye)\b/i;
+
+function readNonNegativeEnvNumber(name: string, fallback: number): number {
+	const raw = process.env[name];
+	if (!raw) return fallback;
+	const value = Number(raw);
+	return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
 
 /**
  * Does the caption express intent to edit/modify the image?
@@ -70,12 +87,30 @@ async function hasEditIntent(caption?: string): Promise<boolean> {
 export { isBotOff, isSleepingHour } from "./bot-state.ts";
 export type { MentionType } from "./types.ts";
 
+function normalizeForLooseMatch(text: string): string {
+	return text
+		.normalize("NFD")
+		.replace(/\p{Diacritic}/gu, "")
+		.toLowerCase();
+}
+
+function textMentionsBotName(text: string): boolean {
+	const botName = normalizeForLooseMatch(getBotName());
+	if (!botName.trim()) return false;
+	const escaped = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const nameRegex = new RegExp(`\\b${escaped}\\b`, "i");
+	return nameRegex.test(normalizeForLooseMatch(text));
+}
+
 export function detectMentionType(ctx: Context, botId: number): MentionType {
 	// Check if replied to the bot - always respond
 	if (ctx.message?.reply_to_message?.from?.id === botId) return "reply";
 
-	const entities = ctx.message?.entities ?? [];
 	const text = ctx.message?.text ?? ctx.message?.caption ?? "";
+	const entities =
+		ctx.message?.text !== undefined
+			? (ctx.message.entities ?? [])
+			: (ctx.message?.caption_entities ?? []);
 
 	// Check if @mentioned - always respond
 	for (const entity of entities) {
@@ -86,11 +121,18 @@ export function detectMentionType(ctx: Context, botId: number): MentionType {
 	}
 
 	// Check if called by name - AI decides if addressed or just mentioned
-	const botName = getBotName().toLowerCase();
-	const escaped = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const nameRegex = new RegExp(`\\b${escaped}\\b`, "i");
-	if (nameRegex.test(text)) return "name";
+	if (textMentionsBotName(text)) return "name";
 
+	return "none";
+}
+
+function detectTranscribedMentionType(
+	ctx: Context,
+	botId: number,
+	transcription: string,
+): MentionType {
+	if (ctx.message?.reply_to_message?.from?.id === botId) return "reply";
+	if (textMentionsBotName(transcription)) return "name";
 	return "none";
 }
 
@@ -173,19 +215,68 @@ function getLastBotMessageBeforeLatest(
 	return undefined;
 }
 
+function isUsableTranscription(transcription: string): boolean {
+	const trimmed = transcription.trim();
+	return !!trimmed && trimmed !== "[transcription failed]";
+}
+
+function shouldTranscribePassiveGroupVoice(duration?: number): boolean {
+	if (!groupVoiceContextEnabled) return false;
+	if (GROUP_PASSIVE_VOICE_MAX_SECONDS <= 0) return false;
+	return duration === undefined || duration <= GROUP_PASSIVE_VOICE_MAX_SECONDS;
+}
+
+function formatVoiceDuration(duration?: number): string {
+	if (duration === undefined) return "";
+	return `, ${duration}s`;
+}
+
+function truncateForPassiveVoiceContext(text: string): string {
+	if (text.length <= GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS) return text;
+	return `${text
+		.slice(0, GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS)
+		.trimEnd()} [truncated]`;
+}
+
+function buildVoiceContent(userName: string, transcription: string): string {
+	return `[Audio from ${userName}]: ${transcription}`;
+}
+
+function buildPassiveVoiceContent(
+	userName: string,
+	transcription: string,
+): string {
+	return `[Voice message from ${userName}]: ${truncateForPassiveVoiceContext(transcription)}`;
+}
+
+function buildUntranscribedVoiceContent(
+	userName: string,
+	duration?: number,
+): string {
+	if (!groupVoiceContextEnabled) {
+		return `[Voice message from ${userName}${formatVoiceDuration(duration)}, not transcribed because group voice context is disabled]`;
+	}
+	return `[Voice message from ${userName}${formatVoiceDuration(duration)}, not transcribed because it exceeds the passive group limit of ${GROUP_PASSIVE_VOICE_MAX_SECONDS}s]`;
+}
+
 async function routeGroupNameMention(
 	ctx: Context,
 	text: string,
 	userName: string,
+	options?: {
+		conversationContent?: string;
+		isVoiceMessage?: boolean;
+	},
 ): Promise<"full" | "handled"> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return "handled";
+	const conversationContent = options?.conversationContent ?? text;
 
 	const buffer = await loadSensory(chatId);
 	const currentTurn: ConversationMessage = {
 		role: "user",
 		name: userName,
-		content: text,
+		content: conversationContent,
 		timestamp: Date.now(),
 	};
 	const recentMessages = [...buffer.messages, currentTurn];
@@ -203,20 +294,20 @@ async function routeGroupNameMention(
 		return "full";
 	}
 
-	await observeConversationTurn(ctx, text, userName);
+	await observeConversationTurn(ctx, conversationContent, userName);
 	if (decision?.action !== "respond") {
 		return "handled";
 	}
 
 	const didRespond = await processConversation(
 		ctx,
-		text,
+		conversationContent,
 		userName,
 		"name",
 		isBotOff(),
 		isSleepingHour(),
 		undefined,
-		undefined,
+		options?.isVoiceMessage,
 		undefined,
 		{
 			skipHistoricalContext: true,
@@ -230,6 +321,104 @@ async function routeGroupNameMention(
 	}
 
 	return "handled";
+}
+
+async function routeGroupTranscribedVoice(
+	ctx: Context,
+	transcription: string,
+	userName: string,
+	initialMentionType: MentionType,
+): Promise<void> {
+	const chatId = ctx.chat?.id;
+	if (!chatId) return;
+
+	const content = buildVoiceContent(userName, transcription);
+	if (initialMentionType !== "none") {
+		await processConversation(
+			ctx,
+			content,
+			userName,
+			initialMentionType,
+			isBotOff(),
+			isSleepingHour(),
+			undefined,
+			true,
+		);
+		return;
+	}
+
+	if (!isUsableTranscription(transcription)) {
+		await observeConversationTurn(
+			ctx,
+			`[Voice message from ${userName}: transcription failed]`,
+			userName,
+		);
+		return;
+	}
+
+	const transcribedMentionType = detectTranscribedMentionType(
+		ctx,
+		ctx.me.id,
+		transcription,
+	);
+	if (transcribedMentionType === "name") {
+		const route = await routeGroupNameMention(ctx, transcription, userName, {
+			conversationContent: content,
+			isVoiceMessage: true,
+		});
+		if (route === "handled") return;
+
+		await processConversation(
+			ctx,
+			content,
+			userName,
+			"name",
+			isBotOff(),
+			isSleepingHour(),
+			undefined,
+			true,
+		);
+		return;
+	}
+
+	const passiveContent = buildPassiveVoiceContent(userName, transcription);
+	await observeConversationTurn(ctx, passiveContent, userName);
+	if (isIgnorableGroupMessage(transcription)) return;
+
+	if (!claimGroupContinuationSlot(chatId)) return;
+
+	const buffer = await loadSensory(chatId);
+	const lastBotMessage = getLastBotMessageBeforeLatest(buffer.messages);
+	const decision = await classifyGroupMessageIntent({
+		mode: "continuation",
+		botName: getBotName(),
+		currentSpeaker: userName,
+		currentMessage: transcription,
+		recentMessages: buffer.messages,
+		lastBotMessage,
+	});
+
+	if (decision !== "respond") return;
+
+	const didRespond = await processConversation(
+		ctx,
+		passiveContent,
+		userName,
+		"none",
+		isBotOff(),
+		isSleepingHour(),
+		undefined,
+		true,
+		undefined,
+		{
+			skipHistoricalContext: true,
+			userTurnAlreadyRecorded: true,
+			groupContinuation: true,
+		},
+	);
+	if (didRespond) {
+		openGroupContinuationWindow(chatId);
+	}
 }
 
 export function registerHandlers(bot: Bot): void {
@@ -293,10 +482,16 @@ export function registerHandlers(bot: Bot): void {
 	bot.on("message:voice", async (ctx) => {
 		const mentionType = detectMentionType(ctx, ctx.me.id);
 		const userName = getUserDisplayName(ctx);
-		if (isGroupChat(ctx) && mentionType === "none") {
+		const isGroup = isGroupChat(ctx);
+		const duration = ctx.message.voice.duration;
+		if (
+			isGroup &&
+			mentionType === "none" &&
+			!shouldTranscribePassiveGroupVoice(duration)
+		) {
 			await observeConversationTurn(
 				ctx,
-				`[Voice message from ${userName}]`,
+				buildUntranscribedVoiceContent(userName, duration),
 				userName,
 			);
 			return;
@@ -309,14 +504,24 @@ export function registerHandlers(bot: Bot): void {
 				"ogg",
 				"voice",
 			);
-			if (showTranscription) {
+			if (showTranscription && (!isGroup || mentionType !== "none")) {
 				await ctx
 					.reply(`📝 ${transcription}`, {
 						reply_to_message_id: ctx.message?.message_id,
 					})
 					.catch(() => {});
 			}
-			const content = `[Audio from ${userName}]: ${transcription}`;
+			if (isGroup) {
+				await routeGroupTranscribedVoice(
+					ctx,
+					transcription,
+					userName,
+					mentionType,
+				);
+				return;
+			}
+
+			const content = buildVoiceContent(userName, transcription);
 			await processConversation(
 				ctx,
 				content,
