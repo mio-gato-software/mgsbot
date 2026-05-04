@@ -7,7 +7,7 @@ const BEHAVIOR_BULLETS = [
 	"Be concise: short, direct responses, like in a real chat.",
 	"Telegram format: *bold* (single asterisk), _italic_ (underscore). NEVER use double asterisks. Don't use headings, bullet points, or code blocks.",
 	"NEVER include the person's name in the message unless needed to disambiguate.",
-	"Use emojis naturally but not excessively.",
+	"Use emojis sparingly.",
 	"Remember information shared by users naturally.",
 ];
 
@@ -49,7 +49,7 @@ export const rulesGroup: PromptSection = {
 		if (ctx.groupContinuation) {
 			return bulletList("Group Behavior", [
 				"You recently spoke in the group. This unmentioned message may be someone continuing with you.",
-				"Respond only if the latest message appears to be engaging with what you just said or asking you to continue.",
+				"Respond only if the latest message appears to be engaging with what you just said, answering you, sharing a reciprocal activity/status, or asking you to continue.",
 				"If it seems like the group moved on or people are talking among themselves, respond exactly `[SILENCE]`.",
 				"Keep it brief and conversational.",
 				"Do not use `[QUOTE_REPLY]` for casual continuation unless the latest message would be unclear without a Telegram quote.",
