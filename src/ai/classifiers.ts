@@ -109,7 +109,7 @@ Action rules:
 Mode-specific guidance:
 - name: The latest message contains the bot's name. Classify whether it is direct, about_bot, continuation, or ambient.
 - spontaneous: The bot has not been directly addressed. Allow a reply only if the latest message creates a clear opening where a normal group member could add value.
-- continuation: The bot recently spoke. Allow a reply only if the latest message likely engages with the bot's last message or asks the bot to continue. If it is just members talking among themselves, choose silence.
+- continuation: The bot recently spoke. Allow a reply when the latest message likely engages with the bot's last message, answers a question the bot asked, shares a reciprocal status/activity after the bot shared one, or asks the bot to continue. If it is just members talking among themselves, choose silence.
 
 Recent chat:
 ${recent || "(no recent chat)"}
