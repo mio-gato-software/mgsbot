@@ -1,7 +1,7 @@
 {
 	"name": "mgsbot",
 	"description": "Conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities",
-	"version": "1.0.35",
+	"version": "1.0.36",
 	"author": "Mio Gato Software",
 	"license": "MIT",
 	"repository": {
