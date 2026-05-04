@@ -102,13 +102,14 @@ Addressing labels:
 Action rules:
 - action "respond" only when the bot's participation would feel natural in a group chat.
 - action "silence" when responding would feel intrusive, attention-seeking, repetitive, or like the group moved on.
-- Be conservative. If uncertain, return "silence".
+- Be mildly conservative. If the latest exchange clearly invites opinions, clarification, advice, or a low-stakes take from the group, action "respond" is appropriate even when the bot was not named.
+- If uncertain, return "silence".
 - Mentioning the bot's name is not enough. Distinguish talking TO the bot from talking ABOUT the bot.
 - This must work across languages. Do not rely on language-specific keywords.
 
 Mode-specific guidance:
 - name: The latest message contains the bot's name. Classify whether it is direct, about_bot, continuation, or ambient.
-- spontaneous: The bot has not been directly addressed. Allow a reply only if the latest message creates a clear opening where a normal group member could add value.
+- spontaneous: The bot has not been directly addressed. Allow a reply only if the latest message creates a clear opening where a normal group member could add value, such as an open question to the group ("what do you think?", "¿qué opinan?"), a language/wording question, a practical recommendation, or a small friendly debate.
 - continuation: The bot recently spoke. Allow a reply when the latest message likely engages with the bot's last message, answers a question the bot asked, shares a reciprocal status/activity after the bot shared one, or asks the bot to continue. If it is just members talking among themselves, choose silence.
 
 Recent chat:
