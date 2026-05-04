@@ -162,12 +162,13 @@ Interactive setup flow (`src/setup.ts` + `src/config.ts`):
 1. Security middleware checks `ALLOWED_GROUP_ID` and `OWNER_USER_ID`
 2. If not configured, enter interactive setup flow
 3. Load sensory buffer for the chat; register/update user identity
-4. In groups: detect mention type (reply/tag/name/none) — only respond when mentioned
+4. In groups: detect mention type (reply/tag/name/none). Text generally responds when directly addressed, but the group router may allow natural continuations/spontaneous replies.
 5. Assemble prompt: permanent.md + personality description + relevant semantic facts + relevant episodes + sensory messages + activity/time context
 6. Call chat provider, save exchange, reply (with Markdown, falling back to plain text)
 7. Special response markers: `[SILENCE]` (no response), `[REACT:emoji]` (emoji reaction), `[IMAGE: prompt]` (generate character image), `[TTS]text[/TTS]` (voice reply via TTS provider)
-8. When receiving a voice message, ~30% chance of responding with a voice note (via TTS provider, independent of `[TTS]` marker)
-8. Periodically: background memory evaluation (semantic facts + personality signals + follow-up detection)
+8. Voice messages in DMs or direct group mentions are transcribed and processed normally. Passive group voice notes are transcribed only when `ENABLE_GROUP_VOICE_CONTEXT` is not `false` and duration is within `GROUP_PASSIVE_VOICE_MAX_SECONDS`; transcripts stored in sensory memory are capped by `GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS`. The bot only routes passive group voice for a response when the transcript addresses the bot by name or continues an open bot conversation.
+9. When receiving a voice message, the bot may respond with a voice note via `[TTS]` behavior and voice prompt guidance; it is not required to respond with voice every time.
+10. Periodically: background memory evaluation (semantic facts + personality signals + follow-up detection)
 
 ### Image Generation
 
@@ -199,6 +200,9 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `INWORLD_API_KEY` / `INWORLD_VOICE_ID`: For Inworld TTS voice responses
 - `TTS_PROVIDER`: `elevenlabs`, `inworld`, `lemonfox`, or `fal`. When unset, auto-detects in order: elevenlabs -> inworld -> lemonfox; fal requires explicit selection
 - `STT_PROVIDER`: `gemini`, `fal`, or `lemonfox`. When unset, falls back in order: gemini -> fal -> lemonfox (first with a key wins)
+- `ENABLE_GROUP_VOICE_CONTEXT`: Set `false` to stop transcribing passive group voice notes; direct voice replies/mentions still transcribe
+- `GROUP_PASSIVE_VOICE_MAX_SECONDS`: Maximum duration for passive group voice-note transcription (default: `120`)
+- `GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS`: Maximum transcript characters stored for passive group voice context (default: `1200`)
 - `IMAGE_PROVIDER`: `gemini` (default) or `fal`
 - `FAL_IMAGE_MODEL`: fal.ai image model, `nano-banana-pro` (default) or `gpt-image-2`
 - `FAL_IMAGE_QUALITY`: fal.ai GPT Image 2 quality, `low`, `medium`, or `high` (default)
