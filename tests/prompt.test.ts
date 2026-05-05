@@ -230,6 +230,7 @@ describe("section: rules.group", () => {
 			(await rulesGroup.render(makeCtx({ groupContinuation: true }))) ?? "";
 		expect(out).toContain("recently spoke");
 		expect(out).toContain("asking you to continue");
+		expect(out).toContain("replying to each other");
 		expect(out).toContain("[QUOTE_REPLY]");
 		expect(out).toContain("[SILENCE]");
 	});

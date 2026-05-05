@@ -50,6 +50,8 @@ export const rulesGroup: PromptSection = {
 			return bulletList("Group Behavior", [
 				"You recently spoke in the group. This unmentioned message may be someone continuing with you.",
 				"Respond only if the latest message appears to be engaging with what you just said, answering you, sharing a reciprocal activity/status, or asking you to continue.",
+				"Do not assume words like 'you', 'tu', 'tú', 'ti', or 'usted' refer to you when group members are replying to each other.",
+				"Short acknowledgements, jokes, corrections, or agreement between other members should be `[SILENCE]`.",
 				"If it seems like the group moved on or people are talking among themselves, respond exactly `[SILENCE]`.",
 				"Keep it brief and conversational.",
 				"Do not use `[QUOTE_REPLY]` for casual continuation unless the latest message would be unclear without a Telegram quote.",

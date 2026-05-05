@@ -56,6 +56,18 @@ const groupContinuationWindows = new Map<
 	{ expiresAt: number; remainingMessages: number }
 >();
 
+export interface TelegramReplyContext {
+	senderName: string;
+	content: string;
+	isBot: boolean;
+}
+
+interface ClassifierReplyContext {
+	speaker: string;
+	message: string;
+	isBot: boolean;
+}
+
 /**
  * Regex fallback for edit intent detection when the LLM classifier is unavailable.
  */
@@ -67,6 +79,70 @@ function readNonNegativeEnvNumber(name: string, fallback: number): number {
 	if (!raw) return fallback;
 	const value = Number(raw);
 	return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function getTelegramUserName(user?: {
+	first_name?: string;
+	last_name?: string;
+	username?: string;
+}): string {
+	if (!user) return "Unknown";
+	if (user.first_name && user.last_name) {
+		return `${user.first_name} ${user.last_name}`;
+	}
+	return user.first_name ?? user.username ?? "Unknown";
+}
+
+function getReplyMessageContent(ctx: Context): string | undefined {
+	const replyMsg = ctx.message?.reply_to_message;
+	if (!replyMsg) return undefined;
+	if (replyMsg.text?.trim()) return replyMsg.text.trim();
+	if (replyMsg.caption?.trim()) return replyMsg.caption.trim();
+	if (replyMsg.photo?.length) return "[photo]";
+	if (replyMsg.voice) return "[voice message]";
+	if (replyMsg.audio) return "[audio file]";
+	return "[message]";
+}
+
+function truncateReplyContext(text: string): string {
+	const maxChars = 500;
+	if (text.length <= maxChars) return text;
+	return `${text.slice(0, maxChars - 12).trimEnd()} [truncated]`;
+}
+
+function getTelegramReplyContext(
+	ctx: Context,
+	botId: number,
+): TelegramReplyContext | undefined {
+	const replyMsg = ctx.message?.reply_to_message;
+	if (!replyMsg) return undefined;
+	const content = getReplyMessageContent(ctx);
+	if (!content) return undefined;
+	return {
+		senderName: getTelegramUserName(replyMsg.from),
+		content,
+		isBot: replyMsg.from?.id === botId,
+	};
+}
+
+function toClassifierReplyContext(
+	replyContext?: TelegramReplyContext,
+): ClassifierReplyContext | undefined {
+	if (!replyContext) return undefined;
+	return {
+		speaker: replyContext.senderName,
+		message: replyContext.content,
+		isBot: replyContext.isBot,
+	};
+}
+
+export function buildReplyAwareTextContent(
+	text: string,
+	replyContext?: TelegramReplyContext,
+): string {
+	if (!replyContext) return text;
+	const botMarker = replyContext.isBot ? " (bot)" : "";
+	return `[Replying to ${replyContext.senderName}${botMarker}: "${truncateReplyContext(replyContext.content)}"]\n\n${text}`;
 }
 
 /**
@@ -282,7 +358,11 @@ async function routeGroupNameMention(
 ): Promise<"full" | "handled"> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return "handled";
-	const conversationContent = options?.conversationContent ?? text;
+	const replyContext = getTelegramReplyContext(ctx, ctx.me.id);
+	const conversationContent = buildReplyAwareTextContent(
+		options?.conversationContent ?? text,
+		replyContext,
+	);
 
 	const buffer = await loadSensory(chatId);
 	const currentTurn: ConversationMessage = {
@@ -300,10 +380,16 @@ async function routeGroupNameMention(
 		currentMessage: text,
 		recentMessages,
 		lastBotMessage,
+		replyContext: toClassifierReplyContext(replyContext),
 	});
 
 	if (decision?.addressing === "direct") {
 		return "full";
+	}
+
+	if (replyContext && !replyContext.isBot) {
+		await observeConversationTurn(ctx, conversationContent, userName);
+		return "handled";
 	}
 
 	await observeConversationTurn(ctx, conversationContent, userName);
@@ -341,11 +427,12 @@ async function routeGroupTranscribedVoice(
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
 
+	const replyContext = getTelegramReplyContext(ctx, ctx.me.id);
 	const content = buildVoiceContent(userName, transcription);
 	if (initialMentionType !== "none") {
 		await processConversationAndTrackGroupContinuation(
 			ctx,
-			content,
+			buildReplyAwareTextContent(content, replyContext),
 			userName,
 			initialMentionType,
 			isBotOff(),
@@ -379,7 +466,7 @@ async function routeGroupTranscribedVoice(
 
 		await processConversationAndTrackGroupContinuation(
 			ctx,
-			content,
+			buildReplyAwareTextContent(content, replyContext),
 			userName,
 			"name",
 			isBotOff(),
@@ -390,8 +477,12 @@ async function routeGroupTranscribedVoice(
 		return;
 	}
 
-	const passiveContent = buildPassiveVoiceContent(userName, transcription);
+	const passiveContent = buildReplyAwareTextContent(
+		buildPassiveVoiceContent(userName, transcription),
+		replyContext,
+	);
 	await observeConversationTurn(ctx, passiveContent, userName);
+	if (replyContext && !replyContext.isBot) return;
 	if (isIgnorableGroupMessage(transcription)) return;
 
 	if (!claimGroupContinuationSlot(chatId)) return;
@@ -405,6 +496,7 @@ async function routeGroupTranscribedVoice(
 		currentMessage: transcription,
 		recentMessages: buffer.messages,
 		lastBotMessage,
+		replyContext: toClassifierReplyContext(replyContext),
 	});
 
 	if (decision !== "respond") return;
@@ -679,6 +771,8 @@ export function registerHandlers(bot: Bot): void {
 		if (text.startsWith("/")) return;
 		const userName = getUserDisplayName(ctx);
 		const mentionType = detectMentionType(ctx, ctx.me.id);
+		const replyContext = getTelegramReplyContext(ctx, ctx.me.id);
+		const replyAwareText = buildReplyAwareTextContent(text, replyContext);
 
 		if (isGroupChat(ctx) && mentionType === "name") {
 			const route = await routeGroupNameMention(ctx, text, userName);
@@ -689,7 +783,7 @@ export function registerHandlers(bot: Bot): void {
 		const yt = isSimpleAssistantMode ? null : extractYouTubeUrl(ctx);
 		if (yt) {
 			if (isGroupChat(ctx) && mentionType === "none") {
-				await observeConversationTurn(ctx, text, userName);
+				await observeConversationTurn(ctx, replyAwareText, userName);
 				return;
 			}
 			const analysis = await analyzeYouTube(
@@ -897,7 +991,8 @@ export function registerHandlers(bot: Bot): void {
 
 		// In groups, observe everything and occasionally evaluate whether to join.
 		if (isGroupChat(ctx) && mentionType === "none") {
-			await observeConversationTurn(ctx, text, userName);
+			await observeConversationTurn(ctx, replyAwareText, userName);
+			if (replyContext && !replyContext.isBot) return;
 			if (isIgnorableGroupMessage(text)) return;
 
 			const buffer = await loadSensory(ctx.chat.id);
@@ -915,6 +1010,7 @@ export function registerHandlers(bot: Bot): void {
 					currentMessage: text,
 					recentMessages: buffer.messages,
 					lastBotMessage,
+					replyContext: toClassifierReplyContext(replyContext),
 				});
 				canContinue = decision === "respond";
 			}
@@ -933,6 +1029,7 @@ export function registerHandlers(bot: Bot): void {
 					currentMessage: text,
 					recentMessages: buffer.messages,
 					lastBotMessage,
+					replyContext: toClassifierReplyContext(replyContext),
 				});
 				canStartSpontaneously = decision === "respond";
 			}
@@ -945,7 +1042,7 @@ export function registerHandlers(bot: Bot): void {
 				}
 				await processConversationAndTrackGroupContinuation(
 					ctx,
-					text,
+					replyAwareText,
 					userName,
 					mentionType,
 					botOff,
@@ -965,16 +1062,10 @@ export function registerHandlers(bot: Bot): void {
 		}
 
 		// Reply-to-text: include quoted message content for context
-		const replyText = ctx.message.reply_to_message?.text;
-		if (replyText) {
-			const replySenderUser = ctx.message.reply_to_message?.from;
-			const replySenderName = replySenderUser
-				? (replySenderUser.first_name ?? replySenderUser.username ?? "Unknown")
-				: "Unknown";
-			const content = `[Respondiendo al mensaje de ${replySenderName}: "${replyText}"]\n\n${text}`;
+		if (replyContext) {
 			await processConversationAndTrackGroupContinuation(
 				ctx,
-				content,
+				replyAwareText,
 				userName,
 				mentionType,
 				isBotOff(),
@@ -985,7 +1076,7 @@ export function registerHandlers(bot: Bot): void {
 
 		await processConversationAndTrackGroupContinuation(
 			ctx,
-			text,
+			replyAwareText,
 			userName,
 			mentionType,
 			isBotOff(),
