@@ -31,6 +31,11 @@ export interface GroupMessageIntentInput {
 	currentMessage: string;
 	recentMessages: ConversationMessage[];
 	lastBotMessage?: string;
+	replyContext?: {
+		speaker: string;
+		message: string;
+		isBot: boolean;
+	};
 }
 
 export type GroupMessageIntentDecision = "respond" | "silence";
@@ -77,6 +82,16 @@ function formatRecentGroupMessages(messages: ConversationMessage[]): string {
 	return bounded.join("\n");
 }
 
+function formatReplyContext(
+	replyContext: GroupMessageIntentInput["replyContext"],
+): string {
+	if (!replyContext) return "(not a Telegram reply)";
+	const speaker = replyContext.isBot
+		? `${replyContext.speaker} (the bot)`
+		: replyContext.speaker;
+	return `${speaker}: ${truncateText(replyContext.message, GROUP_ROUTER_MAX_MESSAGE_CHARS)}`;
+}
+
 function buildGroupMessageIntentPrompt(input: GroupMessageIntentInput): string {
 	const recent = formatRecentGroupMessages(input.recentMessages);
 	const lastBotMessage = input.lastBotMessage?.trim()
@@ -86,6 +101,7 @@ function buildGroupMessageIntentPrompt(input: GroupMessageIntentInput): string {
 		input.currentMessage,
 		GROUP_ROUTER_MAX_MESSAGE_CHARS,
 	);
+	const replyContext = formatReplyContext(input.replyContext);
 
 	return `You are a lightweight multilingual router for a Telegram group chat bot named ${input.botName}.
 
@@ -104,18 +120,24 @@ Action rules:
 - action "silence" when responding would feel intrusive, attention-seeking, repetitive, or like the group moved on.
 - Be conservative. If uncertain, return "silence".
 - Mentioning the bot's name is not enough. Distinguish talking TO the bot from talking ABOUT the bot.
+- Do not assume second-person words ("you", "tu", "tú", "ti", "usted", etc.) refer to the bot unless the Telegram reply target is the bot, the bot is explicitly addressed, or the recent exchange clearly makes the bot the addressee.
+- A Telegram reply to someone other than the bot is strong evidence the latest message is for that person. Choose "ambient"/"silence" unless the latest text explicitly addresses the bot.
+- Short acknowledgements, reactions, laughter, or agreement after another member's message are ambient unless they clearly answer the bot.
 - This must work across languages. Do not rely on language-specific keywords.
 
 Mode-specific guidance:
 - name: The latest message contains the bot's name. Classify whether it is direct, about_bot, continuation, or ambient.
 - spontaneous: The bot has not been directly addressed. Allow a reply only if the latest message creates a clear opening where a normal group member could add value.
-- continuation: The bot recently spoke. Allow a reply when the latest message likely engages with the bot's last message, answers a question the bot asked, shares a reciprocal status/activity after the bot shared one, or asks the bot to continue. If it is just members talking among themselves, choose silence.
+- continuation: The bot recently spoke. Allow a reply only when the latest message likely engages with the bot's last message, answers a question the bot asked, shares a reciprocal status/activity after the bot shared one, or asks the bot to continue. If it best fits the immediately previous non-bot message, or people are talking among themselves, choose silence.
 
 Recent chat:
 ${recent || "(no recent chat)"}
 
 Bot's last message:
 ${lastBotMessage}
+
+Telegram reply target:
+${replyContext}
 
 Latest message:
 ${input.currentSpeaker}: ${currentMessage}
