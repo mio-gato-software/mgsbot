@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { isSleepingHour } from "../src/handlers.ts";
+import {
+	buildReplyAwareTextContent,
+	isSleepingHour,
+	type TelegramReplyContext,
+} from "../src/handlers.ts";
 
 describe("isSleepingHour", () => {
 	test("returns a boolean", () => {
@@ -13,6 +17,36 @@ describe("detectMentionType", () => {
 	test("is exported from handlers", async () => {
 		const mod = await import("../src/handlers.ts");
 		expect(typeof mod.detectMentionType).toBe("function");
+	});
+});
+
+describe("buildReplyAwareTextContent", () => {
+	test("preserves Telegram reply target context", () => {
+		const replyContext: TelegramReplyContext = {
+			senderName: "Juan Wispe",
+			content: "Estoy con Brendy. Ella sabe más que ustedes dos.",
+			isBot: false,
+		};
+
+		expect(
+			buildReplyAwareTextContent("Deja de darle alas.", replyContext),
+		).toBe(`[Replying to Juan Wispe: "Estoy con Brendy. Ella sabe más que ustedes dos."]
+
+Deja de darle alas.`);
+	});
+
+	test("marks replies to the bot explicitly", () => {
+		const replyContext: TelegramReplyContext = {
+			senderName: "Brendy",
+			content: "Yo no le doy alas, él vuela solito.",
+			isBot: true,
+		};
+
+		expect(
+			buildReplyAwareTextContent("Definitivamente", replyContext),
+		).toBe(`[Replying to Brendy (bot): "Yo no le doy alas, él vuela solito."]
+
+Definitivamente`);
 	});
 });
 
