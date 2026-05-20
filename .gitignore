@@ -30,6 +30,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # IntelliJ based IDEs
 .idea
 
+# Local assistant configuration and skills
+/.agents/
+/.claude/
+
 # Finder (MacOS) folder config
 .DS_Store
 
@@ -47,4 +51,3 @@ mgsbot.exe
 bun.lock
 
 update.sh
-.claude/skills/deploy/SKILL.md
