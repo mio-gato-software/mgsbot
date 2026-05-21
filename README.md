@@ -144,8 +144,9 @@ There are four independent provider axes:
 | --- | --- | --- |
 | `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, or `fal` |
 | `GEMINI_MODEL` | `gemini-3-flash-preview` | Gemini model when `CHAT_PROVIDER=gemini` (other Gemini-only paths in code use fixed models; see **Google AI usage** below) |
-| `OPENROUTER_API_KEY` | — | Required if using OpenRouter |
+| `OPENROUTER_API_KEY` | — | Required if using OpenRouter direct transport |
 | `OPENROUTER_MODEL` | `anthropic/claude-3.5-sonnet` | OpenRouter model |
+| `OPENROUTER_TRANSPORT` | *(auto)* | `direct` uses `OPENROUTER_API_KEY`; `fal` uses `FAL_API_KEY` with fal.ai's `openrouter/router` endpoint. If unset, direct is used when `OPENROUTER_API_KEY` exists; otherwise fal is used when `FAL_API_KEY` exists. |
 | `ANTHROPIC_API_KEY` | — | Required if using Anthropic |
 | `ANTHROPIC_MODEL` | `claude-sonnet-4-5-20250929` | Anthropic model |
 | `AZURE_API_KEY` | — | Required if using Azure |
@@ -159,7 +160,7 @@ There are four independent provider axes:
 | `OPENAI_MODEL` | `gpt-5.4` | OpenAI model |
 | `DEEPSEEK_API_KEY` | — | Required if using DeepSeek |
 | `DEEPSEEK_MODEL` | `deepseek-v4-pro` | DeepSeek model |
-| `FAL_API_KEY` | — | Required if using fal.ai for chat, TTS, STT, or image generation |
+| `FAL_API_KEY` | — | Required if using fal.ai for chat, OpenRouter via fal, TTS, STT, or image generation |
 | `FAL_MODEL` | `google/gemini-2.5-pro` | fal.ai model (via OpenRouter proxy) |
 
 #### Recommended Models
@@ -175,11 +176,14 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 /provider anthropic claude-sonnet-4-5-20250929
 /provider gemini
 /provider openrouter meta-llama/llama-4-scout
+/provider openrouter anthropic/claude-sonnet-4.6
 /provider deepseek deepseek-v4-pro
 /provider fal google/gemini-2.5-pro
 ```
 
-**Provider combinations:** You can mix providers across axes. For example, `CHAT_PROVIDER=anthropic`, `STT_PROVIDER=gemini`, `TTS_PROVIDER=elevenlabs`, and `IMAGE_PROVIDER=fal` is valid as long as the matching keys are set. A single `FAL_API_KEY` can satisfy fal.ai chat, STT, TTS, and images. A single `GOOGLE_API_KEY` powers Gemini chat plus the Google-only support paths.
+**OpenRouter via fal.ai:** Set `CHAT_PROVIDER=openrouter`, `OPENROUTER_TRANSPORT=fal`, `FAL_API_KEY`, and `OPENROUTER_MODEL=<provider/model>` to use fal.ai's OpenRouter gateway without a separate OpenRouter key. If `OPENROUTER_TRANSPORT` is unset and `OPENROUTER_API_KEY` is missing, the bot automatically uses the fal transport when `FAL_API_KEY` is available.
+
+**Provider combinations:** You can mix providers across axes. For example, `CHAT_PROVIDER=anthropic`, `STT_PROVIDER=gemini`, `TTS_PROVIDER=elevenlabs`, and `IMAGE_PROVIDER=fal` is valid as long as the matching keys are set. A single `FAL_API_KEY` can satisfy OpenRouter via fal, fal.ai chat, STT, TTS, and images. A single `GOOGLE_API_KEY` powers Gemini chat plus the Google-only support paths.
 
 **Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2`. Character image generation uses `gemini-3-pro-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview`.
 

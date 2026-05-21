@@ -184,6 +184,7 @@ interface ProviderEnv extends EnvMap {
 	STT_PROVIDER?: SttProviderName;
 	TTS_PROVIDER?: TtsProviderName;
 	IMAGE_PROVIDER?: ImageProviderName;
+	OPENROUTER_TRANSPORT?: OpenRouterTransport;
 	FAL_IMAGE_MODEL?: string;
 	FAL_IMAGE_QUALITY?: string;
 }
@@ -200,6 +201,9 @@ export const STT_PROVIDER_NAMES = STT_PROVIDERS.map(
 export const IMAGE_PROVIDER_NAMES = IMAGE_PROVIDERS.map(
 	(provider) => provider.name,
 );
+
+export const OPENROUTER_TRANSPORTS = ["direct", "fal"] as const;
+export type OpenRouterTransport = (typeof OPENROUTER_TRANSPORTS)[number];
 
 const blankToUndefined = (value: unknown): unknown => {
 	if (typeof value !== "string") return value;
@@ -235,6 +239,7 @@ const ProviderEnvSchema = z.object({
 		z.enum(["elevenlabs", "inworld", "lemonfox", "fal"]),
 	),
 	IMAGE_PROVIDER: optionalProviderString(z.enum(["gemini", "fal"])),
+	OPENROUTER_TRANSPORT: optionalProviderString(z.enum(["direct", "fal"])),
 	FAL_IMAGE_MODEL: optionalString,
 	FAL_IMAGE_QUALITY: optionalString,
 	GOOGLE_API_KEY: optionalString,
@@ -326,6 +331,16 @@ export function resolveImageProviderName(
 	env: EnvMap = process.env,
 ): ImageProviderName {
 	return parseProviderEnv(env).IMAGE_PROVIDER ?? "gemini";
+}
+
+export function resolveOpenRouterTransport(
+	env: EnvMap = process.env,
+): OpenRouterTransport {
+	const parsed = parseProviderEnv(env);
+	if (parsed.OPENROUTER_TRANSPORT) return parsed.OPENROUTER_TRANSPORT;
+	if (parsed.OPENROUTER_API_KEY) return "direct";
+	if (parsed.FAL_API_KEY) return "fal";
+	return "direct";
 }
 
 function normalizeFalImageModelName(value?: string): FalImageModelName | null {
@@ -443,11 +458,26 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 
 	if (chatProvider) {
 		const provider = getOption(chatProvider, CHAT_PROVIDERS);
-		const missing = missingRequiredEnv(provider, providerEnv);
-		if (missing.length > 0) {
-			errors.push(
-				`${provider.label} chat requires ${missing.join(", ")} when CHAT_PROVIDER=${provider.name}.`,
-			);
+		if (chatProvider === "openrouter") {
+			const transport = resolveOpenRouterTransport(providerEnv);
+			if (transport === "fal") {
+				if (!providerEnv.FAL_API_KEY) {
+					errors.push(
+						"OpenRouter chat via fal.ai requires FAL_API_KEY when CHAT_PROVIDER=openrouter and OPENROUTER_TRANSPORT=fal.",
+					);
+				}
+			} else if (!providerEnv.OPENROUTER_API_KEY) {
+				errors.push(
+					"OpenRouter chat requires OPENROUTER_API_KEY, or FAL_API_KEY with OPENROUTER_TRANSPORT=fal, when CHAT_PROVIDER=openrouter.",
+				);
+			}
+		} else {
+			const missing = missingRequiredEnv(provider, providerEnv);
+			if (missing.length > 0) {
+				errors.push(
+					`${provider.label} chat requires ${missing.join(", ")} when CHAT_PROVIDER=${provider.name}.`,
+				);
+			}
 		}
 	}
 
@@ -526,6 +556,7 @@ export function formatProviderConfigurationFailure(
 		"",
 		"How to fix:",
 		"- Add the missing key(s) to .env or the systemd EnvironmentFile.",
+		"- If CHAT_PROVIDER=openrouter and you want to use fal.ai, set OPENROUTER_TRANSPORT=fal and FAL_API_KEY.",
 		"- If CHAT_PROVIDER=deepseek, set DEEPSEEK_API_KEY and optionally DEEPSEEK_MODEL=deepseek-v4-pro.",
 		"- Restart the service after editing env: sudo systemctl restart hellybot",
 		"- Full startup logs: sudo journalctl -u hellybot -n 80 --no-pager",
@@ -538,6 +569,8 @@ export function formatProviderStartupSummary(
 	env: EnvMap = process.env,
 ): string[] {
 	const chat = resolveChatProviderName(env);
+	const chatTransport =
+		chat === "openrouter" ? ` (${resolveOpenRouterTransport(env)})` : "";
 	const image = resolveImageProviderName(env);
 	const tts = resolveTtsProviderName(env) ?? "none";
 	const sttOrder = resolveSttProviderOrder(env);
@@ -551,7 +584,7 @@ export function formatProviderStartupSummary(
 				: image;
 
 	return [
-		`[startup] Chat provider: ${chat}`,
+		`[startup] Chat provider: ${chat}${chatTransport}`,
 		`[startup] STT provider order: ${stt}`,
 		`[startup] TTS provider: ${tts}`,
 		`[startup] Image provider: ${imageSummary}`,
@@ -563,6 +596,9 @@ export function formatChatProviderOptions(): string {
 		const model = provider.modelEnv
 			? `${provider.modelEnv} (default: ${provider.defaultModel})`
 			: "no model env";
+		if (provider.name === "openrouter") {
+			return `- ${provider.name}: OPENROUTER_API_KEY direct, or FAL_API_KEY with OPENROUTER_TRANSPORT=fal; ${model}`;
+		}
 		return `- ${provider.name}: ${provider.requiredEnv.join(" + ")}; ${model}`;
 	});
 

@@ -2,12 +2,13 @@ import {
 	type ChatProviderName,
 	isChatProviderName,
 	resolveChatProviderName,
+	resolveOpenRouterTransport,
 } from "../provider-options.ts";
 import { AlibabaChatProvider } from "./alibaba.ts";
 import { AnthropicChatProvider } from "./anthropic.ts";
 import { AzureChatProvider } from "./azure.ts";
 import { DeepSeekChatProvider } from "./deepseek.ts";
-import { FalChatProvider } from "./fal.ts";
+import { FalChatProvider, FalOpenRouterChatProvider } from "./fal.ts";
 import { FireworksChatProvider } from "./fireworks.ts";
 import { GeminiChatProvider } from "./gemini.ts";
 import { OpenAIChatProvider } from "./openai.ts";
@@ -37,6 +38,11 @@ function buildChatProvider(
 ): ChatProvider {
 	switch (providerName) {
 		case "openrouter":
+			if (resolveOpenRouterTransport() === "fal") {
+				return model
+					? new FalOpenRouterChatProvider(model)
+					: new FalOpenRouterChatProvider();
+			}
 			return model
 				? new OpenRouterChatProvider(model)
 				: new OpenRouterChatProvider();

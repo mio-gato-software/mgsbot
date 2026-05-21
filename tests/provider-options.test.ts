@@ -5,6 +5,7 @@ import {
 	resolveChatProviderName,
 	resolveFalImageModelName,
 	resolveFalImageQuality,
+	resolveOpenRouterTransport,
 	resolveSttProviderOrder,
 	resolveTtsProviderName,
 	validateProviderConfiguration,
@@ -24,6 +25,28 @@ describe("provider options", () => {
 	test("accepts deepseek as a chat provider", () => {
 		expect(resolveChatProviderName({ CHAT_PROVIDER: "deepseek" })).toBe(
 			"deepseek",
+		);
+	});
+
+	test("OpenRouter transport can use fal when no OpenRouter key is set", () => {
+		expect(resolveOpenRouterTransport({ FAL_API_KEY: "fal" })).toBe("fal");
+		expect(
+			validateProviderConfiguration({
+				CHAT_PROVIDER: "openrouter",
+				FAL_API_KEY: "fal",
+				GOOGLE_API_KEY: "google",
+			}).errors,
+		).toEqual([]);
+	});
+
+	test("OpenRouter direct transport still requires an OpenRouter key", () => {
+		const result = validateProviderConfiguration({
+			CHAT_PROVIDER: "openrouter",
+			OPENROUTER_TRANSPORT: "direct",
+			FAL_API_KEY: "fal",
+		});
+		expect(result.errors).toContain(
+			"OpenRouter chat requires OPENROUTER_API_KEY, or FAL_API_KEY with OPENROUTER_TRANSPORT=fal, when CHAT_PROVIDER=openrouter.",
 		);
 	});
 
