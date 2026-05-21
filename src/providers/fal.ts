@@ -21,10 +21,10 @@ export class FalChatProvider implements ChatProvider {
 
 	private readonly apiKey: string;
 
-	constructor(model?: string) {
+	constructor(model?: string, requiredFor = "CHAT_PROVIDER=fal") {
 		const apiKey = process.env.FAL_API_KEY;
 		if (!apiKey) {
-			throw new Error("FAL_API_KEY is required when CHAT_PROVIDER=fal");
+			throw new Error(`FAL_API_KEY is required when ${requiredFor}`);
 		}
 		this.apiKey = apiKey;
 		this.model = model ?? process.env.FAL_MODEL ?? "google/gemini-2.5-pro";
@@ -92,5 +92,16 @@ export class FalChatProvider implements ChatProvider {
 			console.log("[FalChatProvider] Response:", text.slice(0, 200));
 		}
 		return text;
+	}
+}
+
+export class FalOpenRouterChatProvider extends FalChatProvider {
+	override readonly name = "openrouter/fal";
+
+	constructor(model?: string) {
+		super(
+			model ?? process.env.OPENROUTER_MODEL,
+			"CHAT_PROVIDER=openrouter and OPENROUTER_TRANSPORT=fal",
+		);
 	}
 }
