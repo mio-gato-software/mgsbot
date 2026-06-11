@@ -15,6 +15,14 @@ import {
 	processConversation,
 } from "./conversation.ts";
 import {
+	canAutoReplyInGroup,
+	canEvaluateSpontaneousReplyInGroup,
+	claimGroupContinuationSlot,
+	openGroupContinuationWindow,
+	registerGroupAutoReply,
+	registerSpontaneousReplyEvaluation,
+} from "./group-state.ts";
+import {
 	cleanupFile,
 	downloadAndTranscribe,
 	downloadAndTranscribeByFileId,
@@ -33,11 +41,6 @@ const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
 const OWNER_USER_ID = Number(process.env.OWNER_USER_ID);
 const isDev = process.env.NODE_ENV === "development";
 const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
-const GROUP_SPONTANEOUS_COOLDOWN_MS = 4 * 60 * 60 * 1000;
-const GROUP_SPONTANEOUS_EVALUATION_COOLDOWN_MS = 10 * 60 * 1000;
-const MAX_SPONTANEOUS_REPLIES_PER_WINDOW = 1;
-const GROUP_CONTINUATION_WINDOW_MS = 15 * 60 * 1000;
-const GROUP_CONTINUATION_MAX_MESSAGES = 6;
 const groupVoiceContextEnabled =
 	process.env.ENABLE_GROUP_VOICE_CONTEXT !== "false";
 const GROUP_PASSIVE_VOICE_MAX_SECONDS = readNonNegativeEnvNumber(
@@ -48,13 +51,6 @@ const GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS = readNonNegativeEnvNumber(
 	"GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS",
 	1200,
 );
-
-const groupAutoReplyTimestamps = new Map<number, number[]>();
-const groupSpontaneousEvaluationTimestamps = new Map<number, number>();
-const groupContinuationWindows = new Map<
-	number,
-	{ expiresAt: number; remainingMessages: number }
->();
 
 export interface TelegramReplyContext {
 	senderName: string;
@@ -219,66 +215,6 @@ function isIgnorableGroupMessage(text: string): boolean {
 		return true;
 	}
 	return false;
-}
-
-function canAutoReplyInGroup(chatId: number): boolean {
-	const now = Date.now();
-	const recent = (groupAutoReplyTimestamps.get(chatId) ?? []).filter(
-		(ts) => now - ts <= GROUP_SPONTANEOUS_COOLDOWN_MS,
-	);
-	const last = recent[recent.length - 1];
-	if (last && now - last < GROUP_SPONTANEOUS_COOLDOWN_MS) {
-		groupAutoReplyTimestamps.set(chatId, recent);
-		return false;
-	}
-	if (recent.length >= MAX_SPONTANEOUS_REPLIES_PER_WINDOW) {
-		groupAutoReplyTimestamps.set(chatId, recent);
-		return false;
-	}
-	return true;
-}
-
-function canEvaluateSpontaneousReplyInGroup(chatId: number): boolean {
-	const now = Date.now();
-	const last = groupSpontaneousEvaluationTimestamps.get(chatId);
-	return !last || now - last >= GROUP_SPONTANEOUS_EVALUATION_COOLDOWN_MS;
-}
-
-function registerSpontaneousReplyEvaluation(chatId: number): void {
-	groupSpontaneousEvaluationTimestamps.set(chatId, Date.now());
-}
-
-function registerGroupAutoReply(chatId: number): void {
-	const now = Date.now();
-	const recent = (groupAutoReplyTimestamps.get(chatId) ?? []).filter(
-		(ts) => now - ts <= GROUP_SPONTANEOUS_COOLDOWN_MS,
-	);
-	recent.push(now);
-	groupAutoReplyTimestamps.set(chatId, recent);
-}
-
-function openGroupContinuationWindow(chatId: number): void {
-	groupContinuationWindows.set(chatId, {
-		expiresAt: Date.now() + GROUP_CONTINUATION_WINDOW_MS,
-		remainingMessages: GROUP_CONTINUATION_MAX_MESSAGES,
-	});
-}
-
-function claimGroupContinuationSlot(chatId: number): boolean {
-	const now = Date.now();
-	const window = groupContinuationWindows.get(chatId);
-	if (!window || window.expiresAt <= now || window.remainingMessages <= 0) {
-		groupContinuationWindows.delete(chatId);
-		return false;
-	}
-
-	window.remainingMessages--;
-	if (window.remainingMessages <= 0) {
-		groupContinuationWindows.delete(chatId);
-	} else {
-		groupContinuationWindows.set(chatId, window);
-	}
-	return true;
 }
 
 function getLastBotMessageBeforeLatest(

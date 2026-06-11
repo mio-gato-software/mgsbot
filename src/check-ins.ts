@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import type { Api } from "grammy";
 import { generateResponse } from "./ai/core.ts";
-import { botNow, getBotHour, getBotMinute } from "./bot-time.ts";
+import { botNow, clampToReasonableHours } from "./bot-time.ts";
 import { generateEmbedding } from "./embeddings.ts";
 import {
 	addMessageToSensory,
@@ -65,7 +65,7 @@ async function saveCheckIns(states: CheckInState[]): Promise<void> {
 
 // --- Scheduling ---
 
-function getWeekStart(date?: Date | number): string {
+export function getWeekStart(date?: Date | number): string {
 	const d = botNow(date);
 	// Monday-based week: dayOfWeek 0=Sun, 1=Mon...6=Sat
 	const dayOfWeek = d.day();
@@ -73,30 +73,13 @@ function getWeekStart(date?: Date | number): string {
 	return d.subtract(daysFromMonday, "day").format("YYYY-MM-DD");
 }
 
-/**
- * Clamp a timestamp to reasonable hours (8:00 AM – 9:30 PM bot timezone).
- * If outside range, move to 9:00 AM next day.
- */
-function clampToReasonableHours(timestamp: number): number {
-	const hour = getBotHour(timestamp);
-	const minute = getBotMinute(timestamp);
-
-	if (hour >= 8 && (hour < 21 || (hour === 21 && minute <= 30))) {
-		return timestamp;
-	}
-
-	let target = botNow(timestamp).hour(9).minute(0).second(0).millisecond(0);
-	if (hour >= 21) {
-		target = target.add(1, "day");
-	}
-	return target.valueOf();
-}
+export { clampToReasonableHours } from "./bot-time.ts";
 
 /**
  * Generate random time slots for the week with weighted hour distribution.
  * Weighted toward morning (10-12) and evening (17-20) windows.
  */
-function generateWeeklySlots(checkInsPerWeek: number): CheckInSlot[] {
+export function generateWeeklySlots(checkInsPerWeek: number): CheckInSlot[] {
 	const now = Date.now();
 	const monday = botNow()
 		.startOf("day")
@@ -153,7 +136,7 @@ function generateWeeklySlots(checkInsPerWeek: number): CheckInSlot[] {
 /**
  * Pick N days from available days with a minimum gap between them.
  */
-function pickDaysWithGap(
+export function pickDaysWithGap(
 	available: number[],
 	count: number,
 	minGap: number,

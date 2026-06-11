@@ -183,7 +183,7 @@ function createDefaultTrait(): PersonalityTrait {
 	return { value: 0.5, momentum: 0, lastReinforced: Date.now() };
 }
 
-function createEmptyState(): PersonalityState {
+export function createEmptyState(): PersonalityState {
 	const traits: Record<string, PersonalityTrait> = {};
 	for (const name of TRAIT_NAMES) {
 		traits[name] = createDefaultTrait();
@@ -191,7 +191,7 @@ function createEmptyState(): PersonalityState {
 	return { version: CURRENT_VERSION, traits, recentGrowth: [] };
 }
 
-function migrateState(old: Record<string, unknown>): PersonalityState {
+export function migrateState(old: Record<string, unknown>): PersonalityState {
 	const state = createEmptyState();
 	const oldTraits = (old.traits ?? {}) as Record<string, PersonalityTrait>;
 
@@ -304,12 +304,12 @@ export async function initPersonality(): Promise<void> {
 
 // --- Apply signals (constrained to fixed traits) ---
 
-export async function applyPersonalitySignals(
+export function applySignalsToState(
+	state: PersonalityState,
 	signals: PersonalitySignals,
 	conversationContext: string,
-): Promise<void> {
-	const state = await loadPersonality();
-	const now = Date.now();
+	now = Date.now(),
+): string[] {
 	const affectedTraits: string[] = [];
 
 	for (const change of signals.traitChanges) {
@@ -353,12 +353,21 @@ export async function applyPersonalitySignals(
 		}
 	}
 
+	return affectedTraits;
+}
+
+export async function applyPersonalitySignals(
+	signals: PersonalitySignals,
+	conversationContext: string,
+): Promise<void> {
+	const state = await loadPersonality();
+	applySignalsToState(state, signals, conversationContext);
 	await savePersonality(state);
 }
 
 // --- Build behavioral instructions for the system prompt ---
 
-function getTraitTier(value: number): "low" | "mid" | "high" {
+export function getTraitTier(value: number): "low" | "mid" | "high" {
 	if (value <= 0.33) return "low";
 	if (value >= 0.67) return "high";
 	return "mid";
