@@ -171,6 +171,15 @@ bot.catch((err) => {
 
 bot.start();
 
+// Liveness heartbeat for container healthchecks (see docker-compose.yml)
+const HEARTBEAT_FILE = "/tmp/mgsbot-heartbeat";
+setInterval(() => {
+	Bun.write(HEARTBEAT_FILE, String(Date.now())).catch((err) => {
+		if (process.env.NODE_ENV === "development")
+			console.error("[heartbeat] Failed to write heartbeat:", err);
+	});
+}, 30_000);
+
 // Follow-up checker (only if enabled)
 if (process.env.ENABLE_FOLLOW_UPS === "true") {
 	setInterval(() => {

@@ -54,6 +54,7 @@ src/
   handlers.ts                ← grammY handlers: voice, audio, photo, text (catch-all), YouTube detection,
                                group routing (mention/continuation/spontaneous), security middleware
                                (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
+  group-state.ts             ← In-memory group rate limits: spontaneous-reply cooldowns, continuation windows
   conversation.ts            ← Main turn pipeline: sensory append, memory retrieval, prompt assembly,
                                provider call, response send, episode promotion, background evaluation
   response-processor.ts      ← Response marker handling ([SILENCE], [REACT], [IMAGE], [TTS], [QUOTE_REPLY]),
@@ -104,14 +105,15 @@ src/
   providers/
     types.ts                 ← ChatProvider interface and ChatMessage type
     index.ts                 ← Provider factory: createChatProvider(), switchChatProvider(), getChatProviderInfo()
+    openai-compatible.ts     ← Base class for OpenAI-wire-format providers: fetch, retry, errors, token logging
     gemini.ts                ← Gemini provider implementation (with weather function calling)
-    openrouter.ts            ← OpenRouter provider implementation
+    openrouter.ts            ← OpenRouter provider (extends openai-compatible)
+    azure.ts                 ← Azure OpenAI provider (extends openai-compatible)
+    alibaba.ts               ← Alibaba DashScope provider (extends openai-compatible)
+    fireworks.ts             ← Fireworks AI provider (extends openai-compatible, adds vision)
     anthropic.ts             ← Anthropic API provider implementation
-    azure.ts                 ← Azure OpenAI provider implementation
-    alibaba.ts               ← Alibaba DashScope provider implementation
-    fireworks.ts             ← Fireworks AI provider implementation
-    openai.ts                ← OpenAI provider implementation
-    deepseek.ts              ← DeepSeek provider implementation
+    openai.ts                ← OpenAI provider implementation (OpenAI SDK, Responses API)
+    deepseek.ts              ← DeepSeek provider implementation (OpenAI SDK)
     fal.ts                   ← fal.ai provider implementation
   stt/                       ← Speech-to-text providers: gemini, fal, lemonfox (+ index factory)
   image/                     ← Image generation providers: gemini, fal (+ index factory)

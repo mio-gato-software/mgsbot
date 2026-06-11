@@ -100,3 +100,23 @@ export function formatTime(date?: Date | number): string {
 	const ampm = hour < 12 ? "a.m." : "p.m.";
 	return `${h12}:${String(minute).padStart(2, "0")} ${ampm}`;
 }
+
+/**
+ * Clamp a timestamp to reasonable hours (8:00 AM – 9:30 PM bot timezone).
+ * Too late (after 9:30 PM) moves to 9:00 AM the next day; too early
+ * (before 8 AM) moves to 9:00 AM the same day.
+ */
+export function clampToReasonableHours(timestamp: number): number {
+	const hour = getBotHour(timestamp);
+	const minute = getBotMinute(timestamp);
+
+	if (hour >= 8 && (hour < 21 || (hour === 21 && minute <= 30))) {
+		return timestamp;
+	}
+
+	let target = botNow(timestamp).hour(9).minute(0).second(0).millisecond(0);
+	if (hour >= 21) {
+		target = target.add(1, "day");
+	}
+	return target.valueOf();
+}

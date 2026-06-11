@@ -373,11 +373,10 @@ All memory files are auto-created on first run. The `memory/` directory is gitig
 
 The bot develops emergent personality traits that evolve over time:
 
-- **Traits** are key-value pairs with values between 0.0 and 1.0, plus momentum and a last-reinforced timestamp
-- Traits **decay** toward neutral (0.5) at 0.005/day — unused traits fade naturally
-- Inactive neutral traits are **pruned** after 14 days (max 15 traits)
-- Every 10 evaluations, the AI generates a personality **self-description** (100–150 words)
-- Growth events record what caused each trait change
+- A fixed set of **8 traits** (warmth, humor, patience, curiosity, assertiveness, energy, vulnerability, playfulness), each with a value between 0.0 and 1.0, momentum, and a last-reinforced timestamp
+- Background evaluation emits per-trait deltas (clamped to ±0.15); **momentum** smooths changes so the personality shifts gradually
+- Each trait maps to a **tier** (low / mid / high) that selects the phrasing injected into the system prompt
+- **Growth events** record what caused each trait change (last 10 kept)
 
 ### Conversation Flow
 

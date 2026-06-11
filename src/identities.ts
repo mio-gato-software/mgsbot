@@ -14,7 +14,7 @@ export interface PersonIdentity {
 	lastSeen: number;
 }
 
-type IdentityStore = Record<string, PersonIdentity>;
+export type IdentityStore = Record<string, PersonIdentity>;
 
 let identityCache: IdentityStore | null = null;
 
@@ -49,12 +49,13 @@ export async function initIdentities(): Promise<void> {
  * If the display name changed, the old normalized name is added to aliases.
  * Returns the canonical name for this user.
  */
-export async function registerIdentity(
+export function applyIdentityUpdate(
+	store: IdentityStore,
 	userId: number,
 	displayName: string,
 	username?: string,
-): Promise<string> {
-	const store = await loadIdentities();
+	now = Date.now(),
+): string {
 	const key = String(userId);
 	const normalized = normalizeName(displayName);
 
@@ -74,8 +75,7 @@ export async function registerIdentity(
 		}
 		existing.canonicalName = displayName;
 		if (username) existing.username = username;
-		existing.lastSeen = Date.now();
-		await saveIdentities(store);
+		existing.lastSeen = now;
 		return existing.canonicalName;
 	}
 
@@ -85,9 +85,8 @@ export async function registerIdentity(
 		canonicalName: displayName,
 		aliases: [normalized],
 		username,
-		lastSeen: Date.now(),
+		lastSeen: now,
 	};
-	await saveIdentities(store);
 
 	if (isDev)
 		console.log(
@@ -96,13 +95,26 @@ export async function registerIdentity(
 	return displayName;
 }
 
+export async function registerIdentity(
+	userId: number,
+	displayName: string,
+	username?: string,
+): Promise<string> {
+	const store = await loadIdentities();
+	const canonical = applyIdentityUpdate(store, userId, displayName, username);
+	await saveIdentities(store);
+	return canonical;
+}
+
 /**
  * Given an LLM-extracted subject name, find the best matching canonical name.
  * Checks: exact alias match, then prefix match (e.g., "Juan" matches "Juan Pérez").
  * Falls back to raw name if no match.
  */
-export async function resolveCanonicalName(rawName: string): Promise<string> {
-	const store = await loadIdentities();
+export function resolveCanonicalNameInStore(
+	store: IdentityStore,
+	rawName: string,
+): string {
 	const normalized = normalizeName(rawName);
 
 	// Exact alias match
@@ -124,14 +136,19 @@ export async function resolveCanonicalName(rawName: string): Promise<string> {
 	return rawName;
 }
 
+export async function resolveCanonicalName(rawName: string): Promise<string> {
+	const store = await loadIdentities();
+	return resolveCanonicalNameInStore(store, rawName);
+}
+
 /**
  * Returns all normalized aliases for a given canonical name.
  * Used by getFactsForSubjects() to expand search.
  */
-export async function getAllAliasesForCanonical(
+export function getAliasesForCanonicalInStore(
+	store: IdentityStore,
 	canonicalName: string,
-): Promise<string[]> {
-	const store = await loadIdentities();
+): string[] {
 	const normalized = normalizeName(canonicalName);
 
 	for (const identity of Object.values(store)) {
@@ -146,10 +163,17 @@ export async function getAllAliasesForCanonical(
 	return [normalized];
 }
 
-export async function findMentionedCanonicalNames(
-	text: string,
+export async function getAllAliasesForCanonical(
+	canonicalName: string,
 ): Promise<string[]> {
 	const store = await loadIdentities();
+	return getAliasesForCanonicalInStore(store, canonicalName);
+}
+
+export function findMentionedCanonicalNamesInStore(
+	store: IdentityStore,
+	text: string,
+): string[] {
 	const normalizedText = ` ${normalizeName(text).replace(/[^\p{L}\p{N}_@]+/gu, " ")} `;
 	const mentioned = new Set<string>();
 
@@ -174,4 +198,11 @@ export async function findMentionedCanonicalNames(
 	}
 
 	return [...mentioned];
+}
+
+export async function findMentionedCanonicalNames(
+	text: string,
+): Promise<string[]> {
+	const store = await loadIdentities();
+	return findMentionedCanonicalNamesInStore(store, text);
 }
