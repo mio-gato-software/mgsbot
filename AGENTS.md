@@ -2,6 +2,8 @@
 
 This file provides guidance to AI coding agents working with this repository.
 
+**Pending work:** [TODO.md](./TODO.md) tracks known pending tasks with their context and prerequisites. Check it before starting maintenance work; when you finish an item, delete it; when you discover follow-up work you aren't doing now, add it there.
+
 ## Project Overview
 
 MGS Bot is a conversational Telegram bot built with **grammY** + **Google Gemini**, running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, voice notes, audio files, photos/images, and YouTube links. It can also generate images of its character and respond with TTS voice notes.
