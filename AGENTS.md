@@ -42,7 +42,7 @@ bun run format       # Format only
 
 **Rule: Always run `bun run lint:fix` and `bun run typecheck` after making changes.**
 
-Biome config (`biome.json`): tabs for indentation, double quotes, recommended lint rules, auto-organized imports. Runtime data folders (`memory/`, `audios/`, `logs/`) are excluded.
+Biome uses its defaults (tabs for indentation, double quotes, recommended lint rules, auto-organized imports). `biome.json` only enables git-ignore integration (`vcs.useIgnoreFile`) so runtime data folders (`memory/`, `audios/`, `logs/`) are skipped — don't delete it, or lint will scan runtime JSON.
 
 ## Architecture
 
@@ -284,10 +284,10 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 
 - **Runtime:** Bun v1.3.14 (pinned in CI)
 - **Bot framework:** grammY (`grammy` ^1.42.0)
-- **AI:** Google GenAI (`@google/genai` ^1) — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen), gemini-embedding-2 (embeddings)
+- **AI:** Google GenAI (`@google/genai` ^2) — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen), gemini-embedding-2 (embeddings)
 - **Language:** TypeScript (strict mode incl. `noUncheckedIndexedAccess`, ESNext target, bundler module resolution; checked via `bun run typecheck`)
 - **Source code language:** English (variables, functions, comments, file names)
-- **Linter/Formatter:** Biome (`@biomejs/biome` 2.4.13, config in `biome.json`)
+- **Linter/Formatter:** Biome (`@biomejs/biome` 2.4.16, config in `biome.json`)
 - **Tests:** `bun test` (tests/ folder)
 - **CI:** GitHub Actions (`ci.yml`: lint + typecheck + test on every push/PR; `release.yml`: cross-platform binaries on `v*` tags)
 - **Bot conversational language:** Adapts to user (default Spanish, configured during setup)
