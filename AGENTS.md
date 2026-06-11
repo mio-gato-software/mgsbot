@@ -4,7 +4,7 @@ This file provides guidance to AI coding agents working with this repository.
 
 ## Project Overview
 
-MGS Bot is a conversational Telegram bot built with **grammY** + **Google Gemini**, running on **Bun**. It features a 4-tier memory system (permanent, semantic, episodes, sensory), vector embeddings for semantic search, an emergent personality system, proactive follow-ups, and responds naturally to text, voice notes, audio files, photos/images, and YouTube links. It can also generate images of its character and respond with TTS voice notes.
+MGS Bot is a conversational Telegram bot built with **grammY** + **Google Gemini**, running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, voice notes, audio files, photos/images, and YouTube links. It can also generate images of its character and respond with TTS voice notes.
 
 ## Commands
 
@@ -12,9 +12,25 @@ MGS Bot is a conversational Telegram bot built with **grammY** + **Google Gemini
 bun install          # Install dependencies
 bun run start        # Run the bot
 bun run dev          # Run the bot in watch mode
+bun test             # Run the test suite (tests/)
+bun run typecheck    # TypeScript type check (tsc --noEmit)
+bun run build        # Compile to a single executable (./mgsbot)
+bun run build:linux  # Cross-compile for Linux x64
 ```
 
-TypeScript is executed directly by Bun (no emit).
+Headless profile/rules management (no chat setup needed):
+
+```bash
+bun run profile:init   # Write memory/bot_profile.json template
+bun run profile:show   # Show current profile status
+bun run profile:sync   # Apply bot_profile.json to bot config
+bun run rules:init     # Write memory/bot_rules.json template
+bun run rules:show     # Show current rules status
+```
+
+Releases: `bun run release:patch|minor|major` bumps the version, tags, and pushes (CI builds the binaries).
+
+TypeScript is executed directly by Bun (no emit) — which means type errors do NOT fail at runtime. CI runs `bun run typecheck`; run it locally before committing.
 
 ## Lint & Format
 
@@ -24,35 +40,67 @@ bun run lint:fix     # Auto-fix lint + format issues
 bun run format       # Format only
 ```
 
-**Rule: Always run `bun run lint:fix` after making changes to ensure code passes all Biome checks.**
+**Rule: Always run `bun run lint:fix` and `bun run typecheck` after making changes.**
 
-Biome config: tabs for indentation, double quotes, recommended lint rules, auto-organized imports.
+Biome config (`biome.json`): tabs for indentation, double quotes, recommended lint rules, auto-organized imports. Runtime data folders (`memory/`, `audios/`, `logs/`) are excluded.
 
 ## Architecture
 
 ```
-index.ts                     ← Entry point: bot setup, handler registration, bot.start()
+index.ts                     ← Entry point: env loading, CLI flags (--setup, --init-profile, --init-rules, ...),
+                               handler registration, periodic jobs (follow-ups/check-ins), graceful shutdown
 src/
-  types.ts                   ← TypeScript interfaces for all memory/data structures
-  ai.ts                      ← GoogleGenAI instance, transcribeAudio(), describeImage(), analyzeYouTube(),
-                               evaluateMemory(), generateImage()
-  tts.ts                     ← TTS provider abstraction: ElevenLabs + LemonFox, random voice responses on voice messages
-  memory.ts                  ← Read/write for all memory tiers + promotion/decay logic
-  prompt.ts                  ← Prompt assembly: buildSystemPrompt(), buildMessages(), activity/time context
+  types.ts                   ← TypeScript interfaces for all memory/data structures (incl. TRAIT_NAMES)
   handlers.ts                ← grammY handlers: voice, audio, photo, text (catch-all), YouTube detection,
-                               /provider command, security middleware (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
+                               group routing (mention/continuation/spontaneous), security middleware
+                               (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
+  conversation.ts            ← Main turn pipeline: sensory append, memory retrieval, prompt assembly,
+                               provider call, response send, episode promotion, background evaluation
+  response-processor.ts      ← Response marker handling ([SILENCE], [REACT], [IMAGE], [TTS], [QUOTE_REPLY]),
+                               image/TTS sending, Markdown fallback
+  media-handlers.ts          ← Telegram media download and preprocessing (voice, audio, photo)
+  commands.ts                ← Telegram commands: /provider, /allowphotorequest, /help, /on, /off, /optimize
+  provider-options.ts        ← Provider metadata, env validation, /provider runtime status formatting
   embeddings.ts              ← Gemini embedding generation (gemini-embedding-2) with disk-persisted LRU cache
-  personality.ts             ← Emergent personality traits: growth events, trait decay, AI description regen
+  personality.ts             ← Emergent personality: 8 fixed traits with momentum, growth events, prompt tiers
   identities.ts              ← User identity tracking: canonical names, aliases, name change handling
   check-ins.ts               ← Proactive check-in messages: cadence-driven weekly scheduling, strategy rotation
-  follow-ups.ts              ← Proactive follow-up detection, scheduling, and delivery (DR timezone-aware)
-  config.ts                  ← Bot configuration state (name, birth year, setup completion)
-  setup.ts                   ← Interactive bot personality setup conversation (4-step)
+  follow-ups.ts              ← Proactive follow-up detection, scheduling, and delivery (timezone-aware)
+  image-scheduler.ts         ← Weekly character image schedule (week start, random target date/time)
+  config.ts                  ← Bot configuration state (bot_config.json, bot_profile.json, legacy permanent.md migration)
+  setup.ts                   ← Interactive in-chat personality setup conversation
+  wizard.ts                  ← Browser-based .env setup wizard (--setup flag / missing credentials)
+  bot-state.ts               ← Runtime on/off state (/on, /off) and sleep-hour check
+  bot-rules.ts               ← Optional headless behavior/style rules (memory/bot_rules.json)
   appearance.ts              ← Locates base character image for image generation
-  holidays.ts                ← Dominican Republic holidays (hardcoded for current year, needs annual update)
+  holidays.ts                ← Holiday calendar (hardcoded per year, needs annual update)
   daily-weather.ts           ← Fetches weather from Open-Meteo API, cached daily in memory/daily-weather.json
-  chat-logger.ts              ← Daily conversation log to text files (logs/ folder), toggled via ENABLE_CHAT_LOG
+  chat-logger.ts             ← Daily conversation log to text files (logs/ folder), toggled via ENABLE_CHAT_LOG
   bot-time.ts                ← Centralized timezone utilities via dayjs (BOT_TIMEZONE env var, default: America/Santo_Domingo)
+  utils.ts                   ← atomicWriteFile(), withRetry(), env file parsing, misc helpers
+  ai/
+    core.ts                  ← GoogleGenAI instance, generateResponse() delegation to chat provider
+    classifiers.ts           ← Lightweight LLM classifiers (routing decisions)
+    evaluation.ts            ← Background memory evaluation: semantic facts, personality signals, follow-ups
+    vision.ts                ← Image description, YouTube analysis
+  prompt/
+    pipeline.ts              ← Section pipeline: ordered, mode-aware prompt assembly
+    assemble.ts              ← buildSystemPrompt() entry point
+    context.ts               ← PromptContext construction from memory/state
+    history.ts               ← buildMessages(): sensory buffer → ChatMessage[] with time-gap markers
+    modes.ts                 ← SIMPLE_ASSISTANT_MODE / full-access mode checks
+    types.ts                 ← Prompt section interfaces
+    sections/                ← One file per prompt section: header, identity, personality, memory,
+                               activity, mention, image, voice, rules
+  memory/
+    index.ts                 ← Re-exports + store initialization
+    sensory.ts               ← Per-chat recent messages buffer (max 10, FIFO, overflow promotion)
+    episodes.ts              ← Per-chat episode summaries with embeddings (max 20)
+    semantic.ts              ← Global semantic facts: dedup, confidence decay, permanent facts
+    relationships.ts         ← Per-chat relationship memory (summary, tone, dynamics, open threads)
+    chapters.ts              ← Per-chat monthly narrative chapters built from episodes
+    queries.ts               ← normalizeName(), computeTextScore(), query embeddings
+    locks.ts                 ← withChatLock(): per-chat async serialization
   providers/
     types.ts                 ← ChatProvider interface and ChatMessage type
     index.ts                 ← Provider factory: createChatProvider(), switchChatProvider(), getChatProviderInfo()
@@ -65,19 +113,28 @@ src/
     openai.ts                ← OpenAI provider implementation
     deepseek.ts              ← DeepSeek provider implementation
     fal.ts                   ← fal.ai provider implementation
-memory/
-  permanent.md               ← Bot personality and rules (auto-generated by setup or manually edited)
+  stt/                       ← Speech-to-text providers: gemini, fal, lemonfox (+ index factory)
+  image/                     ← Image generation providers: gemini, fal (+ index factory)
+  tts/                       ← Text-to-speech providers: elevenlabs, inworld, lemonfox, fal (+ index factory)
+scripts/                     ← One-off maintenance utilities: migrate-memory, reembed-memory, merge-person-facts
+tests/                       ← bun test suite (config, handlers, locks, memory, prompt, provider-options,
+                               response-markers, sensory, utils)
+memory/                      ← Runtime data (gitignored)
+  bot_config.json            ← Bot setup state (name, birthYear, gender, personality, isConfigured)
+  bot_profile.json           ← Optional manual profile (headless alternative to chat setup)
+  bot_rules.json             ← Optional manual behavior/style rules
+  permanent.md               ← Legacy personality file (migration source only)
   semantic.json              ← Global semantic facts with embeddings, categories, confidence decay
   identities.json            ← User ID → canonical name + alias tracking
-  personality.json            ← Evolving personality traits and growth events
+  personality.json           ← Evolving personality traits and growth events
+  follow-ups.json            ← Pending/sent proactive follow-ups
   check-ins.json             ← Proactive check-in weekly slots and state per DM chat
   embedding-cache.json       ← LRU cache of vector embeddings (max 5000, SHA256-keyed)
   daily-weather.json         ← Cached daily weather data
-  bot_config.json            ← Bot setup state (name, birthYear, isConfigured)
-  episodes/
-    <chat_id>.json           ← Per-chat episode summaries with embeddings (max 20)
-  sensory/
-    <chat_id>.json           ← Per-chat recent messages (max 10) + image scheduling
+  episodes/<chat_id>.json    ← Per-chat episode summaries with embeddings (max 20)
+  sensory/<chat_id>.json     ← Per-chat recent messages (max 10) + image scheduling
+  relationships/<chat_id>.json ← Per-chat relationship memory
+  chapters/<chat_id>.json    ← Per-chat monthly chapters
   base.{png,jpg,jpeg}        ← Optional reference image for character image generation
 audios/                      ← Downloaded audio files and generated TTS
 logs/
@@ -101,12 +158,17 @@ There are four independent provider axes:
 
 ### Memory System
 
-The memory system uses 4 tiers with vector embeddings for semantic search:
+The memory system uses multiple tiers with vector embeddings for semantic search (`src/memory/`):
 
-- **Permanent** (`memory/permanent.md`): Bot personality and rules. Auto-generated during setup or manually edited. Cached with 1-minute refresh.
 - **Semantic Store** (`memory/semantic.json`): Global knowledge base of `SemanticFact` objects with 768-dim embeddings. Categories: "person", "group", "rule", "event". Facts have `importance`, `confidence` (decays 0.02/day, min 0.1), and `subject`. Deduplication via cosine similarity at 0.85 threshold. Facts can be marked `permanent: true` for immutable biographical data (birthplace, family, marriage) — these never decay and are always included in prompts (max 25).
 - **Episodes** (`memory/episodes/<chat_id>.json`): Per-chat summarized conversations (max 20). Each episode has `summary`, `participants`, `timestamp`, `importance`, and an `embedding` for similarity search. Top 3 most relevant episodes selected for prompts.
 - **Sensory Buffer** (`memory/sensory/<chat_id>.json`): Per-chat recent messages (max 10, FIFO). Tracks `lastActivity`, `messageCountSincePromotion`. When overflow, oldest 5 are promoted to an episode via AI summarization. Inactive chats (>3 days) clear messages but keep summary.
+- **Relationships** (`memory/relationships/<chat_id>.json`): Per-chat relationship memory — an evolving summary of the relationship dynamic (tone, notable dynamics, open threads, interaction count).
+- **Chapters** (`memory/chapters/<chat_id>.json`): Per-chat monthly narrative chapters built from episodes (id `chapter_<chatId>_<YYYY-MM>`, title, compact summary, importance 1–5).
+
+The bot's own identity/personality prompt comes from `bot_config.json` (chat setup) or `bot_profile.json` (headless manual profile) — `memory/permanent.md` is legacy and only used as a one-time migration source.
+
+Per-chat writes are serialized with `withChatLock()` (`src/memory/locks.ts`); state files are saved via `atomicWriteFile()` to avoid corruption on crash.
 
 **Embeddings** (`src/embeddings.ts`): Uses `gemini-embedding-2` model. Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, auto-persisted every 60 seconds. Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
 
@@ -116,11 +178,11 @@ The memory system uses 4 tiers with vector embeddings for semantic search:
 
 The bot develops emergent personality traits that evolve over conversations (`src/personality.ts`):
 
-- **Traits**: Key-value pairs with `value` (0.0–1.0), `momentum`, and `lastReinforced` timestamp.
+- **Traits**: A fixed set of 8 traits (`TRAIT_NAMES` in `src/types.ts`): warmth, humor, patience, curiosity, assertiveness, energy, vulnerability, playfulness. Each has `value` (0.0–1.0), `momentum`, and `lastReinforced` timestamp.
+- **Updates**: Background evaluation emits per-trait deltas; momentum smooths changes (`momentum = momentum * 0.7 + delta`) and values are clamped to [0, 1].
 - **Growth events**: Records what caused trait changes (max 10 recent events kept).
-- **Trait decay**: Traits drift toward neutral (0.5) at 0.005/day. Inactive neutral traits pruned after 14 days. Max 15 traits.
-- **Description regeneration**: Every 10 evaluations, AI generates a 100–150 word personality narrative.
-- Stored in `memory/personality.json`.
+- **Prompt rendering**: Each trait maps to a tier (low ≤ 0.33, mid, high ≥ 0.67) that selects the phrasing injected into the system prompt.
+- Stored in `memory/personality.json` (legacy free-form trait files are migrated to the fixed set on load).
 
 ### Follow-Up System
 
@@ -141,7 +203,7 @@ Proactive check-in feature (`src/check-ins.ts`), enabled via `ENABLE_CHECK_INS=t
 - Weekly slot scheduling: at the start of each Monday-based week, generates N random time slots with minimum 2-day gap.
 - Time slots weighted toward morning (10-12) and evening (17-20) windows, clamped to 8am–9:30pm.
 - If bot starts mid-week, only schedules slots for remaining days.
-- Check-in strategies rotate to avoid repetition: `general`, `memory_callback`, `weather_comment`, `curiosity`, `activity_sharing`.
+- Check-in strategies rotate to avoid repetition: `random_thought`, `memory_callback`, `sharing_moment`, `reaction`, `weather_vibe`, `curiosity`.
 - Full context generation: loads sensory buffer, relevant episodes, semantic facts, and builds system prompt for natural messages.
 - Guards: won't send if bot is off/sleeping, active conversation in last 15 min (postpones by 1 hour), or follow-up was sent today.
 - Only targets DM chats (chatId == OWNER_USER_ID).
@@ -150,12 +212,12 @@ Proactive check-in feature (`src/check-ins.ts`), enabled via `ENABLE_CHECK_INS=t
 
 ### Bot Setup System
 
-Interactive setup flow (`src/setup.ts` + `src/config.ts`):
+Three setup paths:
 
-- First-run setup asks for: bot name, birth year, gender, personality description.
-- Auto-generates `memory/permanent.md` with personality prompt.
-- Saves config to `memory/bot_config.json`. Bot won't respond normally until setup completes.
-- Migration: if `permanent.md` exists but config doesn't, auto-migrates.
+- **Env wizard** (`src/wizard.ts`): browser-based form for `.env` credentials. Runs on `--setup` or when `BOT_TOKEN` / `GOOGLE_API_KEY` are missing. Writes `.env` atomically, preserving unmanaged keys.
+- **In-chat setup** (`src/setup.ts` + `src/config.ts`): first-run conversation asks for bot name, birth year, gender, personality description. Saves to `memory/bot_config.json`. Bot won't respond normally until setup completes.
+- **Headless profile/rules** (`src/config.ts` + `src/bot-rules.ts`): `profile:init`/`profile:sync` manage `memory/bot_profile.json` (overrides chat setup); `rules:init` manages `memory/bot_rules.json` for behavior/style rules.
+- Migration: if legacy `memory/permanent.md` exists but config doesn't, it is auto-migrated into `bot_config.json`.
 
 ### Conversation Flow
 
@@ -163,7 +225,7 @@ Interactive setup flow (`src/setup.ts` + `src/config.ts`):
 2. If not configured, enter interactive setup flow
 3. Load sensory buffer for the chat; register/update user identity
 4. In groups: detect mention type (reply/tag/name/none). Text generally responds when directly addressed, but the group router may allow natural continuations/spontaneous replies.
-5. Assemble prompt: permanent.md + personality description + relevant semantic facts + relevant episodes + sensory messages + activity/time context
+5. Assemble prompt via the section pipeline (`src/prompt/`): bot identity/personality + relevant semantic facts + relevant episodes + relationship memory + sensory messages + activity/time context
 6. Call chat provider, save exchange, reply (with Markdown, falling back to plain text)
 7. Special response markers: `[SILENCE]` (no response), `[REACT:emoji]` (emoji reaction), `[IMAGE: prompt]` (generate character image), `[TTS]text[/TTS]` (voice reply via TTS provider)
 8. Voice messages in DMs or direct group mentions are transcribed and processed normally. Passive group voice notes are transcribed only when `ENABLE_GROUP_VOICE_CONTEXT` is not `false` and duration is within `GROUP_PASSIVE_VOICE_MAX_SECONDS`; transcripts stored in sensory memory are capped by `GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS`. The bot only routes passive group voice for a response when the transcript addresses the bot by name or continues an open bot conversation.
@@ -187,6 +249,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `GOOGLE_API_KEY`: Always required — used for embeddings, image analysis, YouTube analysis, and image generation regardless of chat provider (also used for audio transcription when `STT_PROVIDER=gemini`)
 - `GEMINI_MODEL`: Gemini chat model (default: `gemini-3-flash-preview`)
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/claude-3.5-sonnet`)
+- `OPENROUTER_HTTP_REFERER` / `OPENROUTER_TITLE`: Optional attribution headers for OpenRouter requests
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `claude-sonnet-4-5-20250929`)
 - `AZURE_API_KEY` / `AZURE_ENDPOINT` / `AZURE_MODEL`: Required if using Azure (default model: `Kimi-K2.5`)
 - `DASHSCOPE_API_KEY` / `DASHSCOPE_MODEL`: Required if using Alibaba (default model: `qwen3.5-plus`)
@@ -214,14 +277,17 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `ENABLE_CHAT_LOG`: Set `true` to enable daily conversation logging to `logs/` folder
 - `ENABLE_SLEEP_SCHEDULE`: Set `false` to disable sleep schedule (default: `true`)
 - `BOT_TIMEZONE`: IANA timezone for the bot (default: `America/Santo_Domingo`). Affects sleep schedule, time awareness, follow-ups, and weather.
+- `SHOW_TRANSCRIPTION`: Set `true` to echo voice/audio transcriptions back as a `📝` reply (debug aid)
 - `NODE_ENV`: Set `development` for verbose logging
 
 ## Tech Stack
 
-- **Runtime:** Bun v1.3.8
-- **Bot framework:** grammY (`grammy` ^1.40.0)
+- **Runtime:** Bun v1.3.14 (pinned in CI)
+- **Bot framework:** grammY (`grammy` ^1.42.0)
 - **AI:** Google GenAI (`@google/genai` ^1) — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen), gemini-embedding-2 (embeddings)
-- **Language:** TypeScript (strict mode, ESNext target, bundler module resolution)
+- **Language:** TypeScript (strict mode incl. `noUncheckedIndexedAccess`, ESNext target, bundler module resolution; checked via `bun run typecheck`)
 - **Source code language:** English (variables, functions, comments, file names)
-- **Linter/Formatter:** Biome (`@biomejs/biome` 2.4.4)
-- **Bot conversational language:** Adapts to user (default Spanish, configured in `memory/permanent.md`)
+- **Linter/Formatter:** Biome (`@biomejs/biome` 2.4.13, config in `biome.json`)
+- **Tests:** `bun test` (tests/ folder)
+- **CI:** GitHub Actions (`ci.yml`: lint + typecheck + test on every push/PR; `release.yml`: cross-platform binaries on `v*` tags)
+- **Bot conversational language:** Adapts to user (default Spanish, configured during setup)

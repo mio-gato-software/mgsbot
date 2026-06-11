@@ -16,7 +16,7 @@ interface FalResponse {
 }
 
 export class FalChatProvider implements ChatProvider {
-	readonly name = "fal";
+	readonly name: string = "fal";
 	model: string;
 
 	private readonly apiKey: string;

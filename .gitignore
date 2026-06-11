@@ -47,7 +47,4 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 mgsbot
 mgsbot.exe
 
-# Bun lockfile
-bun.lock
-
 update.sh

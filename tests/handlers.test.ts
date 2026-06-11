@@ -67,7 +67,7 @@ describe("image-scheduler", () => {
 	test("getWeekStart returns a Monday", async () => {
 		const { getWeekStart } = await import("../src/image-scheduler.ts");
 		const weekStart = getWeekStart();
-		const [year, month, day] = weekStart.split("-").map(Number);
+		const [year = 1970, month = 1, day = 1] = weekStart.split("-").map(Number);
 		const date = new Date(year, month - 1, day);
 		expect(date.getDay()).toBe(1); // Monday
 	});

@@ -1,4 +1,5 @@
 import { BOT_TZ, getBotHour, getDateString } from "./bot-time.ts";
+import { atomicWriteFile, withRetry } from "./utils.ts";
 
 interface DailyWeather {
 	date: string; // "2026-02-03" (Dominican timezone)
@@ -86,7 +87,7 @@ async function loadCachedWeather(): Promise<DailyWeather | null> {
 async function saveWeather(weather: DailyWeather): Promise<void> {
 	cachedWeather = weather;
 	try {
-		await Bun.write(WEATHER_FILE, JSON.stringify(weather, null, 2));
+		await atomicWriteFile(WEATHER_FILE, JSON.stringify(weather, null, 2));
 		if (isDev)
 			console.log(
 				"[daily-weather] Saved to cache:",
@@ -112,7 +113,9 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 		const url = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=${BOT_TZ}`;
 
 		if (isDev) console.log("[daily-weather] Fetching from Open-Meteo...");
-		const res = await fetch(url);
+		const res = await withRetry(() =>
+			fetch(url, { signal: AbortSignal.timeout(10_000) }),
+		);
 		if (!res.ok) {
 			console.error("[daily-weather] Fetch failed:", res.status);
 			return null;

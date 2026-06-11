@@ -360,7 +360,7 @@ export async function processConversation(
 
 	// Save bot response to sensory buffer (only if non-silenced and non-empty)
 	const didRespond = !!result?.cleanedText.trim();
-	if (didRespond) {
+	if (result && didRespond) {
 		const botMessage: ConversationMessage = {
 			role: "model",
 			content: result.cleanedText,

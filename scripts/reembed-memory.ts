@@ -34,6 +34,7 @@ async function reembedSemanticFacts(): Promise<number> {
 
 	for (let i = 0; i < facts.length; i++) {
 		const fact = facts[i];
+		if (!fact) continue;
 		fact.embedding = await generateEmbedding(fact.content);
 		if ((i + 1) % 10 === 0 || i === facts.length - 1) {
 			console.log(`[reembed]   ${i + 1}/${facts.length} facts done`);

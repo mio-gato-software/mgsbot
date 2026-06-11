@@ -60,13 +60,13 @@ describe("sensory buffer", () => {
 		const overflow = await addMessageToSensory(buf, userMsg("msg10", 10));
 		expect(overflow).not.toBeNull();
 		expect(overflow).toHaveLength(5);
-		expect(overflow?.[0].content).toBe("msg0");
-		expect(overflow?.[4].content).toBe("msg4");
+		expect(overflow?.[0]?.content).toBe("msg0");
+		expect(overflow?.[4]?.content).toBe("msg4");
 
 		// Buffer keeps the newer 6 messages (10 - 5 + 1)
 		expect(buf.messages).toHaveLength(6);
-		expect(buf.messages[0].content).toBe("msg5");
-		expect(buf.messages[5].content).toBe("msg10");
+		expect(buf.messages[0]?.content).toBe("msg5");
+		expect(buf.messages[5]?.content).toBe("msg10");
 	});
 
 	test("media messages are compacted once they are not among the most recent 2", async () => {
@@ -84,6 +84,7 @@ describe("sensory buffer", () => {
 		await addMessageToSensory(buf, userMsg("vale", 2));
 
 		const first = buf.messages[0];
+		if (!first) throw new Error("expected a first message");
 		expect(first.content.startsWith("[Audio from tester]:")).toBe(true);
 		expect(first.content).toContain("[Previous transcription compacted]");
 		expect(first.content.length).toBeLessThan(longTranscript.length);

@@ -607,7 +607,9 @@ export function registerHandlers(bot: Bot): void {
 					.reply(`📝 ${transcription}`, {
 						reply_to_message_id: ctx.message?.message_id,
 					})
-					.catch(() => {});
+					.catch((err) =>
+						console.error("[voice] Failed to show transcription:", err),
+					);
 			}
 			if (isGroup) {
 				await routeGroupTranscribedVoice(
@@ -667,7 +669,9 @@ export function registerHandlers(bot: Bot): void {
 					.reply(`📝 ${transcription}`, {
 						reply_to_message_id: ctx.message?.message_id,
 					})
-					.catch(() => {});
+					.catch((err) =>
+						console.error("[audio] Failed to show transcription:", err),
+					);
 			}
 			const content = `[Audio from ${userName}]: ${transcription}`;
 			await processConversationAndTrackGroupContinuation(

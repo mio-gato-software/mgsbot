@@ -14,6 +14,7 @@ import {
 	loadSensory,
 	withChatLock,
 } from "./memory/index.ts";
+import type { ChatMessage } from "./providers/types.ts";
 import type { ConversationMessage, FollowUp } from "./types.ts";
 import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
@@ -167,7 +168,7 @@ export async function checkAndCancelResolvedFollowUps(
 async function generateFollowUpMessage(followUp: FollowUp): Promise<string> {
 	const systemPrompt =
 		"You are a casual friend. Generate a natural, brief variation of the given question, in the same language as the question. Don't explain anything — respond only with the varied question.";
-	const messages: ConversationMessage[] = [
+	const messages: ChatMessage[] = [
 		{ role: "user", content: followUp.followUpQuestion },
 	];
 	return generateResponse(systemPrompt, messages);
@@ -199,10 +200,9 @@ export async function checkAndSendFollowUps(
 		(fu) => fu.status === "pending" && fu.scheduledFor <= now,
 	);
 
-	if (ready.length === 0) return;
-
 	// Process first ready follow-up
 	const followUp = ready[0];
+	if (!followUp) return;
 
 	// Check if there's an active conversation (don't interrupt)
 	const buffer = await loadSensory(followUp.chatId);

@@ -1,6 +1,5 @@
-import { writeFileSync } from "node:fs";
 import { type BotLanguage, loadConfig, saveConfig } from "./config.ts";
-import { parseEnvFile } from "./utils.ts";
+import { atomicWriteFileSync, parseEnvFile } from "./utils.ts";
 
 interface WizardData {
 	botToken: string;
@@ -77,7 +76,7 @@ function writeEnvFile(data: WizardData): void {
 		lines.push(`${key}=${value}`);
 	}
 
-	writeFileSync("./.env", `${lines.join("\n")}\n`, "utf-8");
+	atomicWriteFileSync("./.env", `${lines.join("\n")}\n`);
 
 	// Save language to bot config
 	const currentConfig = loadConfig();
@@ -622,7 +621,7 @@ export async function runSetupWizard(): Promise<void> {
 	const url = `http://127.0.0.1:${port}/`;
 
 	// Load existing values for pre-filling (--setup re-run)
-	const existing = loadExistingEnv();
+	const existing = parseEnvFile();
 	const existingConfig = loadConfig();
 	const prefilled: Record<string, string> = {
 		botToken: existing.BOT_TOKEN ?? "",
