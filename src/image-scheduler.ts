@@ -14,7 +14,7 @@ export function getTodayDate(): string {
 
 export function getWeekStart(): string {
 	const rdDate = getTodayDate();
-	const [year, month, day] = rdDate.split("-").map(Number);
+	const [year = 1970, month = 1, day = 1] = rdDate.split("-").map(Number);
 	const date = new Date(year, month - 1, day);
 	const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ...6=Sat
 	const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
@@ -27,7 +27,7 @@ export function getWeekStart(): string {
 
 export function generateRandomWeeklyTargetTime(): string {
 	const rdDate = getTodayDate();
-	const [year, month, day] = rdDate.split("-").map(Number);
+	const [year = 1970, month = 1, day = 1] = rdDate.split("-").map(Number);
 	const today = new Date(year, month - 1, day);
 	const todayDayOfWeek = today.getDay();
 

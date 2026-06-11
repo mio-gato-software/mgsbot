@@ -1,6 +1,7 @@
 import { unlink } from "node:fs/promises";
 import type { Context } from "grammy";
 import { InputFile } from "grammy";
+import type { ReactionTypeEmoji } from "grammy/types";
 import { getBaseImagePath } from "./appearance.ts";
 import { getBotName } from "./config.ts";
 import { editImage, generateImage } from "./image/index.ts";
@@ -116,12 +117,16 @@ export async function sendResponse(
 	// Check for [REACT:emoji] marker
 	const reactionMatch = responseText.match(REACTION_MARKER_REGEX);
 	if (reactionMatch) {
-		const emoji = reactionMatch[1].trim();
-		if (isDev) console.log("[response] Bot reacting with emoji:", emoji);
-		try {
-			await ctx.react(emoji);
-		} catch (error) {
-			console.error("[reaction] Error reacting:", error);
+		const emoji = reactionMatch[1]?.trim();
+		if (emoji) {
+			if (isDev) console.log("[response] Bot reacting with emoji:", emoji);
+			try {
+				// Telegram only accepts a fixed emoji set; invalid ones are
+				// rejected by the API and handled by the catch below.
+				await ctx.react(emoji as ReactionTypeEmoji["emoji"]);
+			} catch (error) {
+				console.error("[reaction] Error reacting:", error);
+			}
 		}
 		responseText = responseText
 			.replace(REACTION_MARKER_REGEX, "")
@@ -142,7 +147,7 @@ export async function sendResponse(
 	// in the closing tag since the model occasionally emits that variant.
 	const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/?TTS\]/;
 	const ttsMatch = isSimpleAssistantMode ? null : responseText.match(TTS_REGEX);
-	const ttsText = ttsMatch ? ttsMatch[1].trim() : null;
+	const ttsText = ttsMatch?.[1]?.trim() ?? null;
 	if (ttsText) {
 		responseText = responseText.replace(TTS_REGEX, ttsText).trim();
 	}
@@ -173,7 +178,7 @@ export async function sendResponse(
 	let bufferDirty = false;
 
 	if (imageMatch) {
-		const extractedPrompt = imageMatch[1].trim();
+		const extractedPrompt = imageMatch[1]?.trim() ?? "";
 		responseText = responseText
 			.replace(IMAGE_SELF_MARKER_REGEX, "")
 			.replace(IMAGE_MARKER_REGEX, "")
@@ -243,16 +248,26 @@ export async function sendResponse(
 				if (isDev) console.log("[TTS] Audio saved to:", audioPath);
 				await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
 				if (showTranscription) {
-					await ctx.reply(`📝 ${ttsText}`, replyOptions).catch(() => {});
+					await ctx
+						.reply(`📝 ${ttsText}`, replyOptions)
+						.catch((err) =>
+							console.error("[TTS] Failed to show transcription:", err),
+						);
 				}
 				// Cleanup TTS file after sending
-				unlink(audioPath).catch(() => {});
+				unlink(audioPath).catch((err) => {
+					if (isDev) console.error("[TTS] Failed to clean up audio file:", err);
+				});
 			} catch (error) {
 				console.error("[TTS] Error generating speech:", error);
 				try {
 					await ctx.reply(ttsText, replyOptions);
-				} catch {
-					// ignore fallback failure
+				} catch (fallbackError) {
+					// The user got no response at all — make sure that is visible
+					console.error(
+						"[TTS] Fallback text reply also failed:",
+						fallbackError,
+					);
 				}
 			}
 		} else {

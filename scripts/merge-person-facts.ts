@@ -9,7 +9,7 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { cosineSimilarity } from "../src/embeddings.ts";
-import { normalizeName } from "../src/memory.ts";
+import { normalizeName } from "../src/memory/index.ts";
 import type { SemanticFact } from "../src/types.ts";
 
 const SEMANTIC_PATH = "./memory/semantic.json";
@@ -44,6 +44,7 @@ async function main() {
 		for (let j = i + 1; j < allNormalized.length; j++) {
 			const a = allNormalized[i];
 			const b = allNormalized[j];
+			if (!a || !b) continue;
 			if (a.startsWith(b) || b.startsWith(a)) {
 				// Merge shorter into longer
 				const shorter = a.length < b.length ? a : b;
@@ -93,27 +94,30 @@ async function main() {
 
 	for (let i = 0; i < facts.length; i++) {
 		if (toRemove.has(i)) continue;
+		const factI = facts[i];
+		if (!factI) continue;
 		for (let j = i + 1; j < facts.length; j++) {
 			if (toRemove.has(j)) continue;
+			const factJ = facts[j];
+			if (!factJ) continue;
 			if (
-				facts[i].category === "person" &&
-				facts[j].category === "person" &&
-				facts[i].subject &&
-				facts[j].subject &&
-				normalizeName(facts[i].subject as string) ===
-					normalizeName(facts[j].subject as string)
+				factI.category === "person" &&
+				factJ.category === "person" &&
+				factI.subject &&
+				factJ.subject &&
+				normalizeName(factI.subject) === normalizeName(factJ.subject)
 			) {
-				const sim = cosineSimilarity(facts[i].embedding, facts[j].embedding);
+				const sim = cosineSimilarity(factI.embedding, factJ.embedding);
 				if (sim >= dedupThreshold) {
 					// Keep the one with higher importance, or more recent
 					const keepI =
-						facts[i].importance > facts[j].importance ||
-						(facts[i].importance === facts[j].importance &&
-							facts[i].lastConfirmed >= facts[j].lastConfirmed);
-					const removeIdx = keepI ? j : i;
-					toRemove.add(removeIdx);
+						factI.importance > factJ.importance ||
+						(factI.importance === factJ.importance &&
+							factI.lastConfirmed >= factJ.lastConfirmed);
+					const removed = keepI ? factJ : factI;
+					toRemove.add(keepI ? j : i);
 					console.log(
-						`  Dedup (sim=${sim.toFixed(2)}): removing "${facts[removeIdx].content.slice(0, 60)}"`,
+						`  Dedup (sim=${sim.toFixed(2)}): removing "${removed.content.slice(0, 60)}"`,
 					);
 				}
 			}
@@ -153,7 +157,8 @@ async function main() {
 	// Also add standalone subjects
 	for (const [normalized, variants] of normalizedGroups) {
 		if (!mergeMap.has(normalized)) {
-			const canonical = canonicalDisplayNames.get(normalized) ?? variants[0];
+			const canonical =
+				canonicalDisplayNames.get(normalized) ?? variants[0] ?? normalized;
 			const aliases = canonicalAliases.get(canonical) ?? new Set<string>();
 			aliases.add(normalized);
 			canonicalAliases.set(canonical, aliases);

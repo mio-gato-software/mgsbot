@@ -106,9 +106,9 @@ export async function downloadImage(
 	botToken: string,
 ): Promise<{ filePath: string; mimeType: string }> {
 	const photos = ctx.message?.photo;
-	if (!photos) throw new Error("No photo in message");
 	// Telegram sends multiple sizes; pick the largest
-	const photo = photos[photos.length - 1];
+	const photo = photos?.[photos.length - 1];
+	if (!photo) throw new Error("No photo in message");
 	const file = await ctx.api.getFile(photo.file_id);
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
 	if (isDev) console.log("[downloadImage] Downloading from:", url);

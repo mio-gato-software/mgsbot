@@ -130,7 +130,7 @@ function generateWeeklySlots(checkInsPerWeek: number): CheckInSlot[] {
 	const slots: CheckInSlot[] = [];
 	for (const dayOffset of selectedDays) {
 		const hour =
-			weightedHours[Math.floor(Math.random() * weightedHours.length)];
+			weightedHours[Math.floor(Math.random() * weightedHours.length)] ?? 10;
 		const minute = Math.floor(Math.random() * 60);
 		const slotTime = monday
 			.add(dayOffset, "day")
@@ -237,7 +237,7 @@ function pickStrategy(recentStrategies: string[]): CheckInStrategy {
 		(s) => !recentStrategies.slice(-3).includes(s),
 	);
 	const pool = available.length > 0 ? available : [...CHECK_IN_STRATEGIES];
-	return pool[Math.floor(Math.random() * pool.length)];
+	return pool[Math.floor(Math.random() * pool.length)] ?? "random_thought";
 }
 
 function getStrategyInstruction(strategy: CheckInStrategy): string {

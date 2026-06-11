@@ -148,9 +148,11 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 	let normB = 0;
 
 	for (let i = 0; i < a.length; i++) {
-		dotProduct += a[i] * b[i];
-		normA += a[i] * a[i];
-		normB += b[i] * b[i];
+		const x = a[i] ?? 0;
+		const y = b[i] ?? 0;
+		dotProduct += x * y;
+		normA += x * x;
+		normB += y * y;
 	}
 
 	const denominator = Math.sqrt(normA) * Math.sqrt(normB);

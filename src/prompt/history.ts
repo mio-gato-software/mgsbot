@@ -1,5 +1,5 @@
-import type { ChatMessage, MediaAttachment } from "./providers/types.ts";
-import type { ConversationMessage, SensoryBuffer } from "./types.ts";
+import type { ChatMessage, MediaAttachment } from "../providers/types.ts";
+import type { ConversationMessage, SensoryBuffer } from "../types.ts";
 
 function formatTimeGap(diffMs: number): string {
 	const diffHours = diffMs / (1000 * 60 * 60);
@@ -47,6 +47,7 @@ export function buildMessages(
 
 	for (let i = buffer.messages.length - 1; i >= 0; i--) {
 		const original = buffer.messages[i];
+		if (!original) continue;
 		const preserveFull =
 			buffer.messages.length - i <= PROMPT_HISTORY_ALWAYS_KEEP_FULL;
 		const formatted = formatConversationMessage(original, preserveFull);
@@ -67,12 +68,13 @@ export function buildMessages(
 
 	for (let i = 0; i < selected.length; i++) {
 		const entry = selected[i];
+		if (!entry) continue;
 		const msg = entry.original;
 
 		// Insert time gap marker when significant time has passed between messages
-		if (i > 0) {
-			const prevMsg = selected[i - 1].original;
-			const gap = msg.timestamp - prevMsg.timestamp;
+		const prevEntry = i > 0 ? selected[i - 1] : undefined;
+		if (prevEntry) {
+			const gap = msg.timestamp - prevEntry.original.timestamp;
 			if (gap >= TIME_GAP_THRESHOLD_MS) {
 				messages.push({
 					role: "user",
@@ -87,8 +89,9 @@ export function buildMessages(
 	// Attach media to the last user message (transient, not persisted)
 	if (mediaAttachment && messages.length > 0) {
 		for (let i = messages.length - 1; i >= 0; i--) {
-			if (messages[i].role === "user") {
-				messages[i] = { ...messages[i], mediaAttachment };
+			const message = messages[i];
+			if (message?.role === "user") {
+				messages[i] = { ...message, mediaAttachment };
 				break;
 			}
 		}
