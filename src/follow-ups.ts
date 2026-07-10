@@ -25,6 +25,10 @@ const EXPIRATION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const MAX_ATTEMPTS = 3;
 export const ACTIVE_CONVERSATION_MS = 15 * 60 * 1000; // 15 minutes
 const TOPIC_RESOLVED_THRESHOLD = 0.3;
+// A detected event similar to any follow-up tracked within this window is a
+// rehash, not news — without this the same topic gets re-detected from memory
+// for weeks (e.g. the same dinner plan resurfacing in every conversation).
+export const EVENT_DEDUP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 // --- Storage ---
 
@@ -47,6 +51,38 @@ export async function saveFollowUps(followUps: FollowUp[]): Promise<void> {
 	);
 }
 
+/**
+ * True when the event matches any follow-up tracked in the recent window,
+ * regardless of status — a sent, cancelled, or expired follow-up on the same
+ * topic means bringing it up again would feel like nagging, not interest.
+ */
+export function isDuplicateOfRecentFollowUp(
+	all: FollowUp[],
+	event: string,
+	now = Date.now(),
+): boolean {
+	const cutoff = now - EVENT_DEDUP_WINDOW_MS;
+	return all.some(
+		(fu) =>
+			Math.max(fu.detectedAt, fu.sentAt ?? 0) >= cutoff &&
+			computeTextScore(fu.event, event) >= TOPIC_RESOLVED_THRESHOLD,
+	);
+}
+
+/**
+ * Events of any follow-up tracked in the window — used by check-ins as
+ * stale topics the proactive generator must not bring up again.
+ */
+export async function getRecentFollowUpEvents(
+	windowMs = EVENT_DEDUP_WINDOW_MS,
+): Promise<string[]> {
+	const all = await loadFollowUps();
+	const cutoff = Date.now() - windowMs;
+	return all
+		.filter((fu) => Math.max(fu.detectedAt, fu.sentAt ?? 0) >= cutoff)
+		.map((fu) => fu.event);
+}
+
 export async function addFollowUp(
 	followUp: Omit<FollowUp, "id" | "status" | "attempts">,
 ): Promise<boolean> {
@@ -56,6 +92,13 @@ export async function addFollowUp(
 
 		if (pending.length >= MAX_PENDING) {
 			log.debug("[follow-ups] Max pending reached, skipping new follow-up");
+			return false;
+		}
+
+		if (isDuplicateOfRecentFollowUp(all, followUp.event)) {
+			log.debug(
+				`[follow-ups] Skipping duplicate of recent topic: "${followUp.event}"`,
+			);
 			return false;
 		}
 

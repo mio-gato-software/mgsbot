@@ -3,7 +3,11 @@ import type { Api } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { botNow, clampToReasonableHours, getWeekStart } from "./bot-time.ts";
 import { generateEmbedding } from "./embeddings.ts";
-import { ACTIVE_CONVERSATION_MS, wasFollowUpSentToday } from "./follow-ups.ts";
+import {
+	ACTIVE_CONVERSATION_MS,
+	getRecentFollowUpEvents,
+	wasFollowUpSentToday,
+} from "./follow-ups.ts";
 import { log } from "./logger.ts";
 import {
 	addMessageToSensory,
@@ -33,6 +37,12 @@ const CHECK_INS_PATH = "./memory/check-ins.json";
 const SENSORY_DIR = "./memory/sensory";
 
 const POSTPONE_MS = 60 * 60 * 1000; // 1 hour
+
+// Silence-aware backoff: once this many consecutive proactive messages get no
+// reply, drop to at most one check-in per week until the user writes again —
+// a real friend backs off instead of insisting.
+const UNANSWERED_BACKOFF_THRESHOLD = 2;
+const RECENT_MESSAGES_KEPT = 5;
 
 const CHECK_IN_STRATEGIES = [
 	"random_thought",
@@ -191,13 +201,30 @@ async function getEligibleChatIds(): Promise<number[]> {
 
 // --- Strategy Selection ---
 
-function pickStrategy(recentStrategies: string[]): CheckInStrategy {
+export function pickStrategy(
+	recentStrategies: string[],
+	exclude: readonly string[] = [],
+): CheckInStrategy {
 	// Filter out recently used strategies to avoid repetition
 	const available = CHECK_IN_STRATEGIES.filter(
-		(s) => !recentStrategies.slice(-3).includes(s),
+		(s) => !recentStrategies.slice(-3).includes(s) && !exclude.includes(s),
 	);
-	const pool = available.length > 0 ? available : [...CHECK_IN_STRATEGIES];
-	return pool[Math.floor(Math.random() * pool.length)] ?? "random_thought";
+	const pool =
+		available.length > 0
+			? available
+			: CHECK_IN_STRATEGIES.filter((s) => !exclude.includes(s));
+	const finalPool = pool.length > 0 ? pool : [...CHECK_IN_STRATEGIES];
+	return (
+		finalPool[Math.floor(Math.random() * finalPool.length)] ?? "random_thought"
+	);
+}
+
+/** True if the user has written anything after the given timestamp. */
+export function hasUserMessageSince(
+	messages: ConversationMessage[],
+	since: number,
+): boolean {
+	return messages.some((m) => m.role === "user" && m.timestamp > since);
 }
 
 function getStrategyInstruction(strategy: CheckInStrategy): string {
@@ -222,6 +249,7 @@ function getStrategyInstruction(strategy: CheckInStrategy): string {
 async function generateCheckInMessage(
 	chatId: number,
 	strategy: CheckInStrategy,
+	options?: { avoidTopics?: string[]; unanswered?: boolean },
 ): Promise<string> {
 	const buffer = await loadSensory(chatId);
 
@@ -275,10 +303,25 @@ async function generateCheckInMessage(
 	);
 
 	const strategyInstruction = getStrategyInstruction(strategy);
+
+	const avoidTopics = (options?.avoidTopics ?? []).filter((t) => t.trim());
+	const freshnessBlock = avoidTopics.length
+		? `\n\nTopics you ALREADY brought up in recent proactive messages or follow-ups. Do NOT mention any of them again — not even as a joke, callback, or reproach. Pick something completely different:\n${avoidTopics
+				.map((t) => `- "${t.slice(0, 150)}"`)
+				.join("\n")}`
+		: "";
+
+	const unansweredBlock = options?.unanswered
+		? `\n\nIMPORTANT: your recent proactive messages got NO reply. Act like a considerate friend:
+- Do NOT mention the silence, do NOT reproach, do NOT ask why they haven't answered
+- Do NOT revisit the topics of those unanswered messages
+- Send something fresh, light, and self-contained that reads fine even if they never reply`
+		: "";
+
 	const checkInBlock = `\n\n## Special instruction: Proactive message
 You are STARTING the conversation. The user didn't write to you — it just occurred to you to message them because that's how you are with people you care about.
 
-${strategyInstruction}
+${strategyInstruction}${freshnessBlock}${unansweredBlock}
 
 How your message should sound:
 - Like an impulsive WhatsApp message, 1-3 sentences max
@@ -380,11 +423,41 @@ export async function checkAndSendCheckIns(
 				continue;
 			}
 
-			// Pick strategy and generate message
-			const strategy = pickStrategy(state.recentStrategies);
+			// Silence detection: has the user written since our last proactive send?
+			const unansweredStreak =
+				state.lastSentTimestamp > 0 &&
+				!hasUserMessageSince(buffer.messages, state.lastSentTimestamp)
+					? (state.unansweredStreak ?? 0) + 1
+					: 0;
+
+			// Backoff: while the user stays silent, cap at one check-in per week.
+			const sentThisWeek = state.slots.some((s) => s.status === "sent");
+			if (unansweredStreak >= UNANSWERED_BACKOFF_THRESHOLD && sentThisWeek) {
+				pendingSlot.status = "skipped";
+				changed = true;
+				log.debug(
+					`[check-ins] User silent (streak=${unansweredStreak}), skipping extra weekly slot for chat ${chatId}`,
+				);
+				continue;
+			}
+
+			// Freshness: never re-raise topics from recent proactive messages or
+			// tracked follow-ups. Once the user goes quiet, also drop
+			// memory_callback — it's the strategy that recycles old shared topics.
+			const avoidTopics = [
+				...(state.recentMessages ?? []).map((m) => m.text),
+				...(await getRecentFollowUpEvents()),
+			];
+			const strategy = pickStrategy(
+				state.recentStrategies,
+				unansweredStreak >= 1 ? ["memory_callback"] : [],
+			);
 
 			try {
-				const message = await generateCheckInMessage(chatId, strategy);
+				const message = await generateCheckInMessage(chatId, strategy, {
+					avoidTopics,
+					unanswered: unansweredStreak >= 1,
+				});
 
 				if (!message.trim()) {
 					log.debug("[check-ins] Empty message generated, skipping");
@@ -402,10 +475,15 @@ export async function checkAndSendCheckIns(
 
 				pendingSlot.status = "sent";
 				state.lastSentTimestamp = now;
+				state.unansweredStreak = unansweredStreak;
 				state.recentStrategies.push(strategy);
 				if (state.recentStrategies.length > 5) {
 					state.recentStrategies = state.recentStrategies.slice(-5);
 				}
+				state.recentMessages = [
+					...(state.recentMessages ?? []),
+					{ text: message.slice(0, 200), sentAt: now },
+				].slice(-RECENT_MESSAGES_KEPT);
 				changed = true;
 
 				log.debug(

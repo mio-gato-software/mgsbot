@@ -151,6 +151,8 @@ export interface CheckInState {
 	slots: CheckInSlot[]; // N slots per week
 	lastSentTimestamp: number; // When the last check-in was sent
 	recentStrategies: string[]; // Last 5 strategies used (anti-repetition)
+	recentMessages?: Array<{ text: string; sentAt: number }>; // Last 5 proactive messages sent (topic anti-repetition)
+	unansweredStreak?: number; // Consecutive proactive sends without a user reply (as of the last send)
 }
 
 export interface PersonalitySignals {
