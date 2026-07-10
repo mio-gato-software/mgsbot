@@ -1,6 +1,5 @@
+import { log } from "../logger.ts";
 import type { TtsProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 export class InworldTtsProvider implements TtsProvider {
 	readonly name = "inworld";
@@ -17,8 +16,7 @@ export class InworldTtsProvider implements TtsProvider {
 	}
 
 	async synthesize(text: string): Promise<string> {
-		if (isDev)
-			console.log("[TTS:inworld] Generating speech, voice:", this.voiceId);
+		log.debug("[TTS:inworld] Generating speech, voice:", this.voiceId);
 
 		const response = await fetch("https://api.inworld.ai/tts/v1/voice", {
 			method: "POST",
@@ -39,7 +37,7 @@ export class InworldTtsProvider implements TtsProvider {
 			signal: AbortSignal.timeout(15000),
 		});
 
-		if (isDev) console.log("[TTS:inworld] Response status:", response.status);
+		log.debug("[TTS:inworld] Response status:", response.status);
 
 		if (!response.ok) {
 			const errorBody = await response.text().catch(() => "");
@@ -51,8 +49,8 @@ export class InworldTtsProvider implements TtsProvider {
 			usage?: { processedCharactersCount: number; modelId: string };
 		};
 
-		if (isDev && data.usage)
-			console.log(
+		if (data.usage)
+			log.debug(
 				"[TTS:inworld] Processed chars:",
 				data.usage.processedCharactersCount,
 			);
@@ -60,8 +58,7 @@ export class InworldTtsProvider implements TtsProvider {
 		const audioBuffer = Buffer.from(data.audioContent, "base64");
 		const filePath = `./audios/tts_${Date.now()}.mp3`;
 		await Bun.write(filePath, audioBuffer);
-		if (isDev)
-			console.log("[TTS:inworld] Saved bytes:", audioBuffer.byteLength);
+		log.debug("[TTS:inworld] Saved bytes:", audioBuffer.byteLength);
 		return filePath;
 	}
 }

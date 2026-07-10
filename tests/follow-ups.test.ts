@@ -80,11 +80,17 @@ describe("getSendsToday", () => {
 		const now = Date.now();
 		const twoDaysAgo = now - 2 * 24 * 60 * 60 * 1000;
 		const all = [
-			makeFollowUp({ status: "sent", detectedAt: now }),
-			makeFollowUp({ status: "sent", detectedAt: twoDaysAgo }),
+			makeFollowUp({ status: "sent", sentAt: now }),
+			makeFollowUp({ status: "sent", sentAt: twoDaysAgo }),
 			makeFollowUp({ status: "pending", detectedAt: now }),
 			makeFollowUp({ status: "cancelled", detectedAt: now }),
 		];
+		expect(getSendsToday(all)).toBe(1);
+	});
+
+	test("falls back to scheduledFor for legacy entries without sentAt", () => {
+		const now = Date.now();
+		const all = [makeFollowUp({ status: "sent", scheduledFor: now })];
 		expect(getSendsToday(all)).toBe(1);
 	});
 
@@ -94,10 +100,18 @@ describe("getSendsToday", () => {
 });
 
 describe("getLastSendTime", () => {
-	test("returns the scheduled time of the most recent sent follow-up", () => {
+	test("returns the send time of the most recent sent follow-up", () => {
+		const all = [
+			makeFollowUp({ status: "sent", scheduledFor: 150, sentAt: 180 }),
+			makeFollowUp({ status: "sent", scheduledFor: 90, sentAt: 120 }),
+			makeFollowUp({ status: "pending", detectedAt: 999, scheduledFor: 999 }),
+		];
+		expect(getLastSendTime(all)).toBe(180);
+	});
+
+	test("falls back to scheduledFor for legacy entries without sentAt", () => {
 		const all = [
 			makeFollowUp({ status: "sent", detectedAt: 100, scheduledFor: 150 }),
-			makeFollowUp({ status: "pending", detectedAt: 999, scheduledFor: 999 }),
 		];
 		expect(getLastSendTime(all)).toBe(150);
 	});

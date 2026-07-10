@@ -1,6 +1,8 @@
 import { readFile } from "node:fs/promises";
+import { log } from "../logger.ts";
 import type { ConversationMessage, SensoryBuffer } from "../types.ts";
 import { atomicWriteFile, isFileNotFound } from "../utils.ts";
+import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
 
 export const SENSORY_DIR = "./memory/sensory";
 
@@ -84,7 +86,7 @@ export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 		return buffer;
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error(`[memory] Error loading sensory buffer ${chatId}:`, err);
+			log.error(`[memory] Error loading sensory buffer ${chatId}:`, err);
 		}
 		return {
 			chatId,
@@ -97,6 +99,7 @@ export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 
 export async function saveSensory(buffer: SensoryBuffer): Promise<void> {
 	buffer.lastActivity = Date.now();
+	buffer.schemaVersion = CURRENT_SCHEMA_VERSION;
 	await atomicWriteFile(
 		sensoryPath(buffer.chatId),
 		JSON.stringify(buffer, null, 2),

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { log } from "./logger.ts";
 import { atomicWriteFileSync } from "./utils.ts";
 
 export interface BotRules {
@@ -59,7 +60,7 @@ export function loadBotRules(): BotRules {
 		const data = readFileSync(BOT_RULES_PATH, "utf-8");
 		return parseBotRules(JSON.parse(data));
 	} catch (error) {
-		console.error(`[rules] Error loading ${BOT_RULES_PATH}:`, error);
+		log.error(`[rules] Error loading ${BOT_RULES_PATH}:`, error);
 		return {};
 	}
 }

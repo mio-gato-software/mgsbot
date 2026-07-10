@@ -1,3 +1,4 @@
+import { log } from "../logger.ts";
 import { resolveSttProviderOrder } from "../provider-options.ts";
 import { FalSttProvider } from "./fal.ts";
 import { GeminiSttProvider } from "./gemini.ts";
@@ -13,7 +14,7 @@ function tryBuild(name: string, build: () => SttProvider): SttProvider | null {
 	try {
 		return build();
 	} catch (error) {
-		console.warn(`[stt] Could not initialize ${name}:`, error);
+		log.warn(`[stt] Could not initialize ${name}:`, error);
 		return null;
 	}
 }
@@ -36,7 +37,7 @@ function createSttProvider(): SttProvider | null {
 	}
 
 	if (cachedProvider) {
-		console.log(`[stt] Using provider: ${cachedProvider.name}`);
+		log.info(`[stt] Using provider: ${cachedProvider.name}`);
 	}
 
 	return cachedProvider;
@@ -56,13 +57,13 @@ export async function transcribeAudio(
 ): Promise<string> {
 	const provider = createSttProvider();
 	if (!provider) {
-		console.error("[stt] No STT provider available");
+		log.error("[stt] No STT provider available");
 		return "[transcription failed]";
 	}
 	try {
 		return await provider.transcribe(filePath, mimeType);
 	} catch (error) {
-		console.error(`[stt:${provider.name}] Error:`, error);
+		log.error(`[stt:${provider.name}] Error:`, error);
 		return "[transcription failed]";
 	}
 }

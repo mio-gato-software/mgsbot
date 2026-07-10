@@ -1,6 +1,5 @@
+import { log } from "../logger.ts";
 import type { TtsProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 export class LemonFoxTtsProvider implements TtsProvider {
 	readonly name = "lemonfox";
@@ -13,7 +12,7 @@ export class LemonFoxTtsProvider implements TtsProvider {
 	}
 
 	async synthesize(text: string): Promise<string> {
-		if (isDev) console.log("[TTS:lemonfox] Generating speech");
+		log.debug("[TTS:lemonfox] Generating speech");
 
 		const response = await fetch("https://api.lemonfox.ai/v1/audio/speech", {
 			method: "POST",
@@ -29,7 +28,7 @@ export class LemonFoxTtsProvider implements TtsProvider {
 			signal: AbortSignal.timeout(15000),
 		});
 
-		if (isDev) console.log("[TTS:lemonfox] Response status:", response.status);
+		log.debug("[TTS:lemonfox] Response status:", response.status);
 
 		if (!response.ok) {
 			const errorBody = await response.text().catch(() => "");
@@ -38,8 +37,7 @@ export class LemonFoxTtsProvider implements TtsProvider {
 
 		const filePath = `./audios/tts_${Date.now()}.mp3`;
 		const arrayBuffer = await response.arrayBuffer();
-		if (isDev)
-			console.log("[TTS:lemonfox] Received bytes:", arrayBuffer.byteLength);
+		log.debug("[TTS:lemonfox] Received bytes:", arrayBuffer.byteLength);
 		await Bun.write(filePath, new Uint8Array(arrayBuffer));
 		return filePath;
 	}

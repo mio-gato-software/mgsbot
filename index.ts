@@ -1,4 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
+import { alertOwner, errorSummary, setAlertSink } from "./src/alerts.ts";
+import { log } from "./src/logger.ts";
 import {
 	formatProviderConfigurationFailure,
 	formatProviderStartupSummary,
@@ -111,8 +113,10 @@ if (needsSetup) {
 
 // --- Bot imports (after env vars are confirmed present) ---
 
+const { unlink } = await import("node:fs/promises");
 const { Bot } = await import("grammy");
 const { flushEmbeddingCache } = await import("./src/embeddings.ts");
+const { runMemoryBackup } = await import("./src/memory-backup.ts");
 const { checkAndSendFollowUps, initFollowUps } = await import(
 	"./src/follow-ups.ts"
 );
@@ -133,27 +137,39 @@ if (!process.env.GOOGLE_API_KEY) {
 }
 
 if (!process.env.ALLOWED_GROUP_ID) {
-	console.warn(
+	log.warn(
 		"[startup] ALLOWED_GROUP_ID not set — bot will ignore all group chats",
 	);
 }
 if (!process.env.OWNER_USER_ID) {
-	console.warn("[startup] OWNER_USER_ID not set — bot will ignore all DMs");
+	log.warn("[startup] OWNER_USER_ID not set — bot will ignore all DMs");
 }
 
 const providerValidation = validateProviderConfiguration();
 if (providerValidation.errors.length > 0) {
-	console.error(formatProviderConfigurationFailure(providerValidation));
+	log.error(formatProviderConfigurationFailure(providerValidation));
 	process.exit(1);
 }
 for (const warning of providerValidation.warnings) {
-	console.warn(`[startup] ${warning}`);
+	log.warn(`[startup] ${warning}`);
 }
 for (const line of formatProviderStartupSummary()) {
-	console.log(line);
+	log.info(line);
 }
 
 const bot = new Bot(token);
+
+// Owner alert delivery: plain-text DM to OWNER_USER_ID (no-op if unset)
+const ownerUserId = process.env.OWNER_USER_ID;
+if (ownerUserId) {
+	setAlertSink(async (text) => {
+		try {
+			await bot.api.sendMessage(ownerUserId, text);
+		} catch (err) {
+			log.error("[alerts] Failed to send owner alert:", err);
+		}
+	});
+}
 
 // Initialize directories
 if (!existsSync("./audios")) mkdirSync("./audios", { recursive: true });
@@ -166,27 +182,43 @@ await initPersonality();
 registerHandlers(bot);
 
 bot.catch((err) => {
-	console.error("[bot.catch] Error in middleware:", err.error);
+	log.error("[bot.catch] Error in middleware:", err.error);
+	alertOwner("bot-middleware", `Middleware error: ${errorSummary(err.error)}`);
 });
 
 bot.start();
 
+const intervals: ReturnType<typeof setInterval>[] = [];
+
 // Liveness heartbeat for container healthchecks (see docker-compose.yml)
 const HEARTBEAT_FILE = "/tmp/mgsbot-heartbeat";
-setInterval(() => {
-	Bun.write(HEARTBEAT_FILE, String(Date.now())).catch((err) => {
-		if (process.env.NODE_ENV === "development")
-			console.error("[heartbeat] Failed to write heartbeat:", err);
-	});
-}, 30_000);
+intervals.push(
+	setInterval(() => {
+		Bun.write(HEARTBEAT_FILE, String(Date.now())).catch((err) => {
+			log.debug("[heartbeat] Failed to write heartbeat:", err);
+		});
+	}, 30_000),
+);
+
+// Daily memory snapshot (runs at startup, then re-checks hourly for rollover)
+runMemoryBackup().catch((err) => {
+	log.error("[backup] Memory backup failed:", err);
+});
+intervals.push(
+	setInterval(() => {
+		runMemoryBackup().catch((err) => {
+			log.error("[backup] Memory backup failed:", err);
+		});
+	}, 3_600_000),
+);
 
 // Follow-up checker (only if enabled)
 if (process.env.ENABLE_FOLLOW_UPS === "true") {
-	setInterval(() => {
-		checkAndSendFollowUps(bot.api, isBotOff, isSleepingHour).catch(
-			console.error,
-		);
-	}, 60_000);
+	intervals.push(
+		setInterval(() => {
+			checkAndSendFollowUps(bot.api, isBotOff, isSleepingHour).catch(log.error);
+		}, 60_000),
+	);
 }
 
 // Check-in proactive messages (only if enabled)
@@ -195,26 +227,48 @@ if (process.env.ENABLE_CHECK_INS === "true") {
 		"./src/check-ins.ts"
 	);
 	await initCheckIns();
-	setInterval(() => {
-		checkAndSendCheckIns(bot.api, isBotOff, isSleepingHour).catch(
-			console.error,
-		);
-	}, 60_000);
+	intervals.push(
+		setInterval(() => {
+			checkAndSendCheckIns(bot.api, isBotOff, isSleepingHour).catch(log.error);
+		}, 60_000),
+	);
 }
 
 // --- Graceful shutdown ---
 
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+let shuttingDown = false;
+
 async function shutdown(signal: string): Promise<void> {
-	console.log(`[shutdown] Received ${signal}, shutting down gracefully...`);
-	bot.stop();
-	await flushEmbeddingCache();
-	console.log("[shutdown] Embedding cache flushed. Goodbye.");
-	process.exit(0);
+	if (shuttingDown) return;
+	shuttingDown = true;
+	log.info(`[shutdown] Received ${signal}, shutting down gracefully...`);
+
+	// Watchdog: if any step below hangs, force-exit instead of waiting for
+	// the supervisor's SIGKILL.
+	const watchdog = setTimeout(() => {
+		log.error("[shutdown] Timed out, forcing exit");
+		process.exit(1);
+	}, SHUTDOWN_TIMEOUT_MS);
+
+	for (const interval of intervals) clearInterval(interval);
+
+	try {
+		await bot.stop();
+		await flushEmbeddingCache();
+		await unlink(HEARTBEAT_FILE).catch(() => {});
+		log.info("[shutdown] Embedding cache flushed. Goodbye.");
+		clearTimeout(watchdog);
+		process.exit(0);
+	} catch (err) {
+		log.error("[shutdown] Error during shutdown:", err);
+		process.exit(1);
+	}
 }
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 
 if (process.env.NODE_ENV === "development") {
-	console.log("[startup] Bot started (NODE_ENV=development)");
+	log.debug("[startup] Bot started (NODE_ENV=development)");
 }

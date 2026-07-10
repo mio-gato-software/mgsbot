@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
+import { log } from "./logger.ts";
 import { normalizeName } from "./memory/queries.ts";
+import { unwrapVersioned, wrapVersioned } from "./memory/versioning.ts";
 import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
 const IDENTITIES_PATH = "./memory/identities.json";
-const isDev = process.env.NODE_ENV === "development";
 
 export interface PersonIdentity {
 	userId: number;
@@ -22,11 +23,11 @@ async function loadIdentities(): Promise<IdentityStore> {
 	if (identityCache) return identityCache;
 	try {
 		const data = await readFile(IDENTITIES_PATH, "utf-8");
-		identityCache = JSON.parse(data) as IdentityStore;
+		identityCache = unwrapVersioned<IdentityStore>(JSON.parse(data));
 		return identityCache;
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[identities] Error loading identities.json:", err);
+			log.error("[identities] Error loading identities.json:", err);
 		}
 		identityCache = {};
 		return {};
@@ -35,12 +36,18 @@ async function loadIdentities(): Promise<IdentityStore> {
 
 async function saveIdentities(store: IdentityStore): Promise<void> {
 	identityCache = store;
-	await atomicWriteFile(IDENTITIES_PATH, JSON.stringify(store, null, 2));
+	await atomicWriteFile(
+		IDENTITIES_PATH,
+		JSON.stringify(wrapVersioned(store), null, 2),
+	);
 }
 
 export async function initIdentities(): Promise<void> {
 	if (!existsSync(IDENTITIES_PATH)) {
-		await writeFile(IDENTITIES_PATH, "{}");
+		await writeFile(
+			IDENTITIES_PATH,
+			JSON.stringify(wrapVersioned({}), null, 2),
+		);
 	}
 }
 
@@ -88,10 +95,7 @@ export function applyIdentityUpdate(
 		lastSeen: now,
 	};
 
-	if (isDev)
-		console.log(
-			`[identities] Registered new identity: ${displayName} (${userId})`,
-		);
+	log.debug(`[identities] Registered new identity: ${displayName} (${userId})`);
 	return displayName;
 }
 

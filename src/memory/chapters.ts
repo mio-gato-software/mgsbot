@@ -1,11 +1,14 @@
 import { readFile } from "node:fs/promises";
+import { log } from "../logger.ts";
 import type { MemoryChapter } from "../types.ts";
 import { atomicWriteFile, isFileNotFound } from "../utils.ts";
 import { withChapterLock } from "./locks.ts";
+import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
 
 export const CHAPTERS_DIR = "./memory/chapters";
 
 interface ChapterStore {
+	schemaVersion?: number; // absent in legacy files; stamped on save
 	chatId: number;
 	chapters: MemoryChapter[];
 }
@@ -22,13 +25,14 @@ export async function loadChapterStore(chatId: number): Promise<ChapterStore> {
 		return JSON.parse(data) as ChapterStore;
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error(`[memory] Error loading chapters ${chatId}:`, err);
+			log.error(`[memory] Error loading chapters ${chatId}:`, err);
 		}
 		return { chatId, chapters: [] };
 	}
 }
 
 export async function saveChapterStore(store: ChapterStore): Promise<void> {
+	store.schemaVersion = CURRENT_SCHEMA_VERSION;
 	await atomicWriteFile(
 		chaptersPath(store.chatId),
 		JSON.stringify(store, null, 2),
@@ -54,11 +58,23 @@ export async function getChapterForMonth(
 	return store.chapters.find((chapter) => chapter.month === month) ?? null;
 }
 
-export async function upsertChapter(chapter: MemoryChapter): Promise<void> {
-	await withChapterLock(chapter.chatId, async () => {
-		const store = await loadChapterStore(chapter.chatId);
+/**
+ * Read-modify-write under the chapter lock. The builder receives the freshly
+ * loaded chapter for the month (or null) so merges (participants, episodeIds,
+ * importance) can't be computed from a stale pre-lock snapshot.
+ */
+export async function upsertChapter(
+	chatId: number,
+	month: string,
+	build: (existing: MemoryChapter | null) => MemoryChapter,
+): Promise<void> {
+	await withChapterLock(chatId, async () => {
+		const store = await loadChapterStore(chatId);
 		const existingIndex = store.chapters.findIndex(
-			(existing) => existing.month === chapter.month,
+			(existing) => existing.month === month,
+		);
+		const chapter = build(
+			existingIndex >= 0 ? (store.chapters[existingIndex] ?? null) : null,
 		);
 
 		if (existingIndex >= 0) {

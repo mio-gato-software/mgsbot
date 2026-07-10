@@ -18,6 +18,7 @@ export interface ConversationMessage {
 // --- New Memory Architecture ---
 
 export interface SensoryBuffer {
+	schemaVersion?: number; // absent in legacy files; stamped on save
 	chatId: number;
 	messages: ConversationMessage[]; // max 10, FIFO
 	lastActivity: number;
@@ -41,11 +42,13 @@ export interface Episode {
 }
 
 export interface WorkingMemory {
+	schemaVersion?: number; // absent in legacy files; stamped on save
 	chatId: number;
 	episodes: Episode[]; // max 20
 }
 
 export interface RelationshipMemory {
+	schemaVersion?: number; // absent in legacy files; stamped on save
 	chatId: number;
 	summary: string; // 80-140 words about the relationship dynamic
 	tone: string; // e.g. "warm, playful, direct"
@@ -96,6 +99,7 @@ export interface FollowUp {
 	followUpQuestion: string; // Pre-generated fallback question
 	detectedAt: number;
 	scheduledFor: number; // When to ask
+	sentAt?: number; // Actual send moment (absent on legacy entries)
 	status: "pending" | "sent" | "cancelled" | "expired";
 	attempts: number;
 }

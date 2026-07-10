@@ -1,4 +1,5 @@
 import {
+	chmodSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
@@ -26,12 +27,18 @@ export async function atomicWriteFile(
 /**
  * Synchronous version of atomicWriteFile.
  */
-export function atomicWriteFileSync(filePath: string, data: string): void {
+export function atomicWriteFileSync(
+	filePath: string,
+	data: string,
+	mode?: number,
+): void {
 	const dir = dirname(filePath);
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 	const tmpPath = `${filePath}.tmp`;
-	writeFileSync(tmpPath, data);
+	writeFileSync(tmpPath, data, mode !== undefined ? { mode } : undefined);
 	renameSync(tmpPath, filePath);
+	// rename preserves the temp file's mode, which may predate the mode option
+	if (mode !== undefined) chmodSync(filePath, mode);
 }
 
 /**
@@ -139,3 +146,6 @@ export function safeMediaExtension(
 	if (!clean) return fallback;
 	return SAFE_MEDIA_EXTENSIONS.has(clean) ? clean : fallback;
 }
+
+/** Verbose dev logging gate (NODE_ENV=development). */
+export const isDev = process.env.NODE_ENV === "development";

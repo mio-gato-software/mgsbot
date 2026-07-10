@@ -2,10 +2,12 @@ import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { cosineSimilarity, EMBEDDING_MODEL } from "../embeddings.ts";
 import { getAllAliasesForCanonical } from "../identities.ts";
+import { log } from "../logger.ts";
 import type { SemanticFact } from "../types.ts";
 import { atomicWriteFile, isFileNotFound } from "../utils.ts";
 import { withSemanticLock } from "./locks.ts";
 import { computeTextScore, normalizeName } from "./queries.ts";
+import { unwrapVersioned, wrapVersioned } from "./versioning.ts";
 
 export const SEMANTIC_PATH = "./memory/semantic.json";
 
@@ -14,8 +16,6 @@ const CONFIDENCE_DECAY_RATE = 0.02; // Per day
 const MIN_CONFIDENCE = 0.1;
 const MAX_PERMANENT_FACTS = 25;
 const MAX_DEDUP_FACTS = 30;
-
-const isDev = process.env.NODE_ENV === "development";
 
 let semanticCache: SemanticFact[] | null = null;
 let semanticLastMtimeMs = 0;
@@ -112,14 +112,14 @@ export async function loadSemanticStore(): Promise<SemanticFact[]> {
 			return semanticCache;
 		}
 		const data = await readFile(SEMANTIC_PATH, "utf-8");
-		semanticCache = (JSON.parse(data) as SemanticFact[]).map(
+		semanticCache = unwrapVersioned<SemanticFact[]>(JSON.parse(data)).map(
 			normalizeFactShape,
 		);
 		semanticLastMtimeMs = stat.mtimeMs;
 		return semanticCache;
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[memory] Error loading semantic store:", err);
+			log.error("[memory] Error loading semantic store:", err);
 		}
 		semanticCache = [];
 		return [];
@@ -128,7 +128,10 @@ export async function loadSemanticStore(): Promise<SemanticFact[]> {
 
 export async function saveSemanticStore(facts: SemanticFact[]): Promise<void> {
 	semanticCache = facts;
-	await atomicWriteFile(SEMANTIC_PATH, JSON.stringify(facts, null, 2));
+	await atomicWriteFile(
+		SEMANTIC_PATH,
+		JSON.stringify(wrapVersioned(facts), null, 2),
+	);
 	// Update mtime to match what we just wrote
 	try {
 		semanticLastMtimeMs = statSync(SEMANTIC_PATH).mtimeMs;
@@ -188,17 +191,15 @@ export async function addSemanticFacts(
 						const permanentCount = store.filter((f) => f.permanent).length;
 						if (permanentCount < MAX_PERMANENT_FACTS) {
 							existing.permanent = true;
-							if (isDev)
-								console.log(
-									`[semantic] Promoted to permanent: "${existing.content.slice(0, 60)}"`,
-								);
+							log.debug(
+								`[semantic] Promoted to permanent: "${existing.content.slice(0, 60)}"`,
+							);
 						}
 					}
 					merged = true;
-					if (isDev)
-						console.log(
-							`[semantic] Merged duplicate (similarity=${similarity.toFixed(2)}): "${newFact.content.slice(0, 60)}"`,
-						);
+					log.debug(
+						`[semantic] Merged duplicate (similarity=${similarity.toFixed(2)}): "${newFact.content.slice(0, 60)}"`,
+					);
 					break;
 				}
 			}
@@ -208,19 +209,17 @@ export async function addSemanticFacts(
 				if (newFact.permanent) {
 					const permanentCount = store.filter((f) => f.permanent).length;
 					if (permanentCount >= MAX_PERMANENT_FACTS) {
-						if (isDev)
-							console.log(
-								`[semantic] Permanent fact cap reached (${MAX_PERMANENT_FACTS}), skipping: "${newFact.content.slice(0, 60)}"`,
-							);
+						log.debug(
+							`[semantic] Permanent fact cap reached (${MAX_PERMANENT_FACTS}), skipping: "${newFact.content.slice(0, 60)}"`,
+						);
 						continue;
 					}
 				}
 				store.push(newFact);
 				applySupersession(store, newFact, newFact.id, now);
-				if (isDev)
-					console.log(
-						`[semantic] Added new ${newFact.permanent ? "permanent " : ""}fact: "${newFact.content.slice(0, 60)}"`,
-					);
+				log.debug(
+					`[semantic] Added new ${newFact.permanent ? "permanent " : ""}fact: "${newFact.content.slice(0, 60)}"`,
+				);
 			}
 		}
 
@@ -421,8 +420,8 @@ export async function decayConfidence(): Promise<{
 		);
 		const removed = totalBefore - filtered.length;
 
-		if (removed > 0 && isDev) {
-			console.log(`[semantic] Decayed confidence: removed ${removed} facts`);
+		if (removed > 0) {
+			log.debug(`[semantic] Decayed confidence: removed ${removed} facts`);
 		}
 
 		await saveSemanticStore(filtered);

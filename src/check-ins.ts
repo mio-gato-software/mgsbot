@@ -1,8 +1,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import type { Api } from "grammy";
 import { generateResponse } from "./ai/core.ts";
-import { botNow, clampToReasonableHours } from "./bot-time.ts";
+import { botNow, clampToReasonableHours, getWeekStart } from "./bot-time.ts";
 import { generateEmbedding } from "./embeddings.ts";
+import { ACTIVE_CONVERSATION_MS, wasFollowUpSentToday } from "./follow-ups.ts";
+import { log } from "./logger.ts";
 import {
 	addMessageToSensory,
 	getFactsForSubjects,
@@ -14,7 +16,9 @@ import {
 	loadRelationshipMemory,
 	loadSensory,
 	withChatLock,
+	withCheckInsLock,
 } from "./memory/index.ts";
+import { unwrapVersioned, wrapVersioned } from "./memory/versioning.ts";
 import { assembleSystemPrompt } from "./prompt/assemble.ts";
 import { buildPromptContext } from "./prompt/context.ts";
 import { buildMessages } from "./prompt/history.ts";
@@ -25,13 +29,9 @@ import type {
 } from "./types.ts";
 import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
-const isDev = process.env.NODE_ENV === "development";
-
 const CHECK_INS_PATH = "./memory/check-ins.json";
 const SENSORY_DIR = "./memory/sensory";
-const FOLLOW_UPS_PATH = "./memory/follow-ups.json";
 
-const ACTIVE_CONVERSATION_MS = 15 * 60 * 1000; // 15 minutes
 const POSTPONE_MS = 60 * 60 * 1000; // 1 hour
 
 const CHECK_IN_STRATEGIES = [
@@ -50,30 +50,25 @@ type CheckInStrategy = (typeof CHECK_IN_STRATEGIES)[number];
 async function loadCheckIns(): Promise<CheckInState[]> {
 	try {
 		const data = await readFile(CHECK_INS_PATH, "utf-8");
-		return JSON.parse(data) as CheckInState[];
+		return unwrapVersioned<CheckInState[]>(JSON.parse(data));
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[check-ins] Error loading check-ins.json:", err);
+			log.error("[check-ins] Error loading check-ins.json:", err);
 		}
 		return [];
 	}
 }
 
 async function saveCheckIns(states: CheckInState[]): Promise<void> {
-	await atomicWriteFile(CHECK_INS_PATH, JSON.stringify(states, null, 2));
+	await atomicWriteFile(
+		CHECK_INS_PATH,
+		JSON.stringify(wrapVersioned(states), null, 2),
+	);
 }
 
 // --- Scheduling ---
 
-export function getWeekStart(date?: Date | number): string {
-	const d = botNow(date);
-	// Monday-based week: dayOfWeek 0=Sun, 1=Mon...6=Sat
-	const dayOfWeek = d.day();
-	const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-	return d.subtract(daysFromMonday, "day").format("YYYY-MM-DD");
-}
-
-export { clampToReasonableHours } from "./bot-time.ts";
+export { clampToReasonableHours, getWeekStart } from "./bot-time.ts";
 
 /**
  * Generate random time slots for the week with weighted hour distribution.
@@ -188,27 +183,9 @@ async function getEligibleChatIds(): Promise<number[]> {
 		return chatIds;
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[check-ins] Error reading sensory dir:", err);
+			log.error("[check-ins] Error reading sensory dir:", err);
 		}
 		return [];
-	}
-}
-
-// --- Follow-up cross-check ---
-
-async function followUpSentToday(): Promise<boolean> {
-	try {
-		const data = await readFile(FOLLOW_UPS_PATH, "utf-8");
-		const followUps = JSON.parse(data) as Array<{
-			status: string;
-			scheduledFor: number;
-		}>;
-		const todayStart = botNow().startOf("day").valueOf();
-		return followUps.some(
-			(fu) => fu.status === "sent" && fu.scheduledFor >= todayStart,
-		);
-	} catch {
-		return false;
 	}
 }
 
@@ -344,117 +321,116 @@ export async function checkAndSendCheckIns(
 		Number.parseInt(process.env.CHECK_INS_PER_WEEK ?? "2", 10) || 2,
 	);
 
-	const states = await loadCheckIns();
-	const currentWeekStart = getWeekStart();
-	let changed = false;
+	// Hold the check-ins lock for the whole cycle so overlapping ticks (or any
+	// future writer) can't clobber slot status changes with a stale array.
+	await withCheckInsLock(async () => {
+		const states = await loadCheckIns();
+		const currentWeekStart = getWeekStart();
+		let changed = false;
 
-	for (const chatId of chatIds) {
-		let state = states.find((s) => s.chatId === chatId);
+		for (const chatId of chatIds) {
+			let state = states.find((s) => s.chatId === chatId);
 
-		// Create state if missing
-		if (!state) {
-			state = {
-				chatId,
-				weekStart: currentWeekStart,
-				slots: generateWeeklySlots(checkInsPerWeek),
-				lastSentTimestamp: 0,
-				recentStrategies: [],
-			};
-			states.push(state);
-			changed = true;
-			if (isDev)
-				console.log(
+			// Create state if missing
+			if (!state) {
+				state = {
+					chatId,
+					weekStart: currentWeekStart,
+					slots: generateWeeklySlots(checkInsPerWeek),
+					lastSentTimestamp: 0,
+					recentStrategies: [],
+				};
+				states.push(state);
+				changed = true;
+				log.debug(
 					`[check-ins] Created state for chat ${chatId} with ${state.slots.length} slots`,
 				);
-		}
+			}
 
-		// New week? Regenerate slots
-		if (state.weekStart !== currentWeekStart) {
-			state.weekStart = currentWeekStart;
-			state.slots = generateWeeklySlots(checkInsPerWeek);
-			changed = true;
-			if (isDev)
-				console.log(
+			// New week? Regenerate slots
+			if (state.weekStart !== currentWeekStart) {
+				state.weekStart = currentWeekStart;
+				state.slots = generateWeeklySlots(checkInsPerWeek);
+				changed = true;
+				log.debug(
 					`[check-ins] New week for chat ${chatId}, generated ${state.slots.length} slots`,
 				);
-		}
+			}
 
-		// Find the next pending slot that's due
-		const now = Date.now();
-		const pendingSlot = state.slots.find(
-			(s) => s.status === "pending" && s.scheduledFor <= now,
-		);
-		if (!pendingSlot) continue;
+			// Find the next pending slot that's due
+			const now = Date.now();
+			const pendingSlot = state.slots.find(
+				(s) => s.status === "pending" && s.scheduledFor <= now,
+			);
+			if (!pendingSlot) continue;
 
-		// Guard: follow-up already sent today
-		if (await followUpSentToday()) {
-			if (isDev)
-				console.log("[check-ins] Follow-up sent today, skipping check-in");
-			continue;
-		}
-
-		// Guard: active conversation
-		const buffer = await loadSensory(chatId);
-		if (now - buffer.lastActivity < ACTIVE_CONVERSATION_MS) {
-			// Postpone by 1 hour
-			pendingSlot.scheduledFor = clampToReasonableHours(now + POSTPONE_MS);
-			changed = true;
-			if (isDev)
-				console.log("[check-ins] Active conversation, postponed check-in");
-			continue;
-		}
-
-		// Pick strategy and generate message
-		const strategy = pickStrategy(state.recentStrategies);
-
-		try {
-			const message = await generateCheckInMessage(chatId, strategy);
-
-			if (!message.trim()) {
-				if (isDev) console.log("[check-ins] Empty message generated, skipping");
-				pendingSlot.status = "skipped";
-				changed = true;
+			// Guard: follow-up already sent today
+			if (await wasFollowUpSentToday()) {
+				log.debug("[check-ins] Follow-up sent today, skipping check-in");
 				continue;
 			}
 
-			// Send the message
+			// Guard: active conversation
+			const buffer = await loadSensory(chatId);
+			if (now - buffer.lastActivity < ACTIVE_CONVERSATION_MS) {
+				// Postpone by 1 hour
+				pendingSlot.scheduledFor = clampToReasonableHours(now + POSTPONE_MS);
+				changed = true;
+				log.debug("[check-ins] Active conversation, postponed check-in");
+				continue;
+			}
+
+			// Pick strategy and generate message
+			const strategy = pickStrategy(state.recentStrategies);
+
 			try {
-				await api.sendMessage(chatId, message, { parse_mode: "Markdown" });
-			} catch {
-				await api.sendMessage(chatId, message);
-			}
+				const message = await generateCheckInMessage(chatId, strategy);
 
-			pendingSlot.status = "sent";
-			state.lastSentTimestamp = now;
-			state.recentStrategies.push(strategy);
-			if (state.recentStrategies.length > 5) {
-				state.recentStrategies = state.recentStrategies.slice(-5);
-			}
-			changed = true;
+				if (!message.trim()) {
+					log.debug("[check-ins] Empty message generated, skipping");
+					pendingSlot.status = "skipped";
+					changed = true;
+					continue;
+				}
 
-			if (isDev)
-				console.log(
+				// Send the message
+				try {
+					await api.sendMessage(chatId, message, { parse_mode: "Markdown" });
+				} catch {
+					await api.sendMessage(chatId, message);
+				}
+
+				pendingSlot.status = "sent";
+				state.lastSentTimestamp = now;
+				state.recentStrategies.push(strategy);
+				if (state.recentStrategies.length > 5) {
+					state.recentStrategies = state.recentStrategies.slice(-5);
+				}
+				changed = true;
+
+				log.debug(
 					`[check-ins] Sent check-in (strategy=${strategy}) to chat ${chatId}`,
 				);
 
-			// Save bot message to sensory buffer for continuity
-			const botMessage: ConversationMessage = {
-				role: "model",
-				content: message,
-				timestamp: Date.now(),
-			};
-			await withChatLock(chatId, async () => {
-				const fresh = await loadSensory(chatId);
-				await addMessageToSensory(fresh, botMessage);
-			});
-		} catch (error) {
-			console.error("[check-ins] Error sending check-in:", error);
-			pendingSlot.status = "skipped";
-			changed = true;
+				// Save bot message to sensory buffer for continuity
+				const botMessage: ConversationMessage = {
+					role: "model",
+					content: message,
+					timestamp: Date.now(),
+				};
+				await withChatLock(chatId, async () => {
+					const fresh = await loadSensory(chatId);
+					await addMessageToSensory(fresh, botMessage);
+				});
+			} catch (error) {
+				log.error("[check-ins] Error sending check-in:", error);
+				pendingSlot.status = "skipped";
+				changed = true;
+			}
 		}
-	}
 
-	if (changed) await saveCheckIns(states);
+		if (changed) await saveCheckIns(states);
+	});
 }
 
 // --- Initialization ---
@@ -464,9 +440,12 @@ export async function initCheckIns(): Promise<void> {
 		await readFile(CHECK_INS_PATH, "utf-8");
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[check-ins] Error reading check-ins.json:", err);
+			log.error("[check-ins] Error reading check-ins.json:", err);
 		}
-		await atomicWriteFile(CHECK_INS_PATH, "[]");
-		if (isDev) console.log("[check-ins] Created check-ins.json");
+		await atomicWriteFile(
+			CHECK_INS_PATH,
+			JSON.stringify(wrapVersioned([]), null, 2),
+		);
+		log.debug("[check-ins] Created check-ins.json");
 	}
 }

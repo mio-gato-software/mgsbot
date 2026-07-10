@@ -1,9 +1,8 @@
 import { getBaseImagePath } from "./appearance.ts";
-import { getDateString } from "./bot-time.ts";
+import { getDateString, getWeekStart } from "./bot-time.ts";
 import { isImageGenAvailable } from "./image/index.ts";
+import { log } from "./logger.ts";
 import type { SensoryBuffer } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 const IMAGE_EARLIEST_HOUR = 8;
 const IMAGE_LATEST_HOUR = 23;
@@ -12,18 +11,9 @@ export function getTodayDate(): string {
 	return getDateString();
 }
 
-export function getWeekStart(): string {
-	const rdDate = getTodayDate();
-	const [year = 1970, month = 1, day = 1] = rdDate.split("-").map(Number);
-	const date = new Date(year, month - 1, day);
-	const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ...6=Sat
-	const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-	date.setDate(date.getDate() + mondayOffset);
-	const y = date.getFullYear();
-	const m = String(date.getMonth() + 1).padStart(2, "0");
-	const d = String(date.getDate()).padStart(2, "0");
-	return `${y}-${m}-${d}`;
-}
+// Canonical Monday-week definition lives in bot-time.ts; re-exported here for
+// existing importers (response-processor, tests).
+export { getWeekStart } from "./bot-time.ts";
 
 export function generateRandomWeeklyTargetTime(): string {
 	const rdDate = getTodayDate();
@@ -60,12 +50,7 @@ export function shouldGenerateImageNow(buffer: SensoryBuffer): boolean {
 	if (buffer.imageTargetDate !== currentWeek || !buffer.imageTargetTime) {
 		buffer.imageTargetTime = generateRandomWeeklyTargetTime();
 		buffer.imageTargetDate = currentWeek;
-		if (isDev) {
-			console.log(
-				"[image] New weekly target generated:",
-				buffer.imageTargetTime,
-			);
-		}
+		log.debug("[image] New weekly target generated:", buffer.imageTargetTime);
 	}
 
 	// Check if current time passed target

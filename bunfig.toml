@@ -1,0 +1,4 @@
+[test]
+# Coverage floor enforced by `bun test --coverage` (used in CI).
+# Raise as coverage grows — 22% funcs / 36% lines as of 2026-07-10.
+coverageThreshold = 0.2

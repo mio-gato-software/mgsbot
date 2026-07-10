@@ -1,9 +1,9 @@
-import type { Bot, Context } from "grammy";
-import {
-	classifyEditIntent,
-	classifyGroupMessageIntent,
-	classifyGroupSocialIntent,
-} from "./ai/classifiers.ts";
+// Core handler module: security middleware, text catch-all handler, and
+// registerHandlers(). The voice/audio and photo handlers live in
+// src/handlers/, sharing the routing helpers from src/handlers/routing.ts
+// (re-exported here to keep existing import paths working).
+import type { Bot, Context, MiddlewareFn } from "grammy";
+import { classifyGroupMessageIntent } from "./ai/classifiers.ts";
 import { analyzeYouTube, describeImage } from "./ai/vision.ts";
 import { isBotOff, isSleepingHour } from "./bot-state.ts";
 import { registerCommands } from "./commands.ts";
@@ -12,21 +12,32 @@ import {
 	getUserDisplayName,
 	isGroupChat,
 	observeConversationTurn,
-	processConversation,
 } from "./conversation.ts";
 import {
 	canAutoReplyInGroup,
 	canEvaluateSpontaneousReplyInGroup,
 	claimGroupContinuationSlot,
-	openGroupContinuationWindow,
 	registerGroupAutoReply,
 	registerSpontaneousReplyEvaluation,
 } from "./group-state.ts";
+import { registerPhotoHandler } from "./handlers/photo.ts";
+import {
+	buildReplyAwareTextContent,
+	detectMentionType,
+	getLastBotMessageBeforeLatest,
+	getTelegramReplyContext,
+	hasEditIntent,
+	isIgnorableGroupMessage,
+	processConversationAndTrackGroupContinuation,
+	routeGroupNameMention,
+	sanitizeBracketText,
+	toClassifierReplyContext,
+} from "./handlers/routing.ts";
+import { registerVoiceHandlers } from "./handlers/voice.ts";
+import { log } from "./logger.ts";
 import {
 	cleanupFile,
-	downloadAndTranscribe,
 	downloadAndTranscribeByFileId,
-	downloadImage,
 	extractYouTubeUrl,
 } from "./media-handlers.ts";
 import { decayConfidence, loadSensory } from "./memory/index.ts";
@@ -34,675 +45,100 @@ import { isSimpleAssistantMode } from "./prompt/modes.ts";
 import { createChatProvider } from "./providers/index.ts";
 import { supportsInlineImages } from "./providers/types.ts";
 import { processSetupConversation } from "./setup.ts";
-import type { ConversationMessage, MentionType } from "./types.ts";
-import { safeMediaExtension } from "./utils.ts";
+import { isDev, safeMediaExtension } from "./utils.ts";
 
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
 const OWNER_USER_ID = Number(process.env.OWNER_USER_ID);
-const isDev = process.env.NODE_ENV === "development";
-const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
-const groupVoiceContextEnabled =
-	process.env.ENABLE_GROUP_VOICE_CONTEXT !== "false";
-const GROUP_PASSIVE_VOICE_MAX_SECONDS = readNonNegativeEnvNumber(
-	"GROUP_PASSIVE_VOICE_MAX_SECONDS",
-	120,
-);
-const GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS = readNonNegativeEnvNumber(
-	"GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS",
-	1200,
-);
 
-export interface TelegramReplyContext {
-	senderName: string;
-	content: string;
-	isBot: boolean;
-}
-
-interface ClassifierReplyContext {
-	speaker: string;
-	message: string;
-	isBot: boolean;
-}
-
-/**
- * Regex fallback for edit intent detection when the LLM classifier is unavailable.
- */
-const EDIT_INTENT_REGEX =
-	/\b(edit|change|modify|add|remove|make it|turn it|turn this|transform|replace|paint|convert|crop|resize|edita|edítala|edítalo|cambia|cámbiale|modifica|modifícala|modifícalo|ponle|pónle|agrégale|agregale|añádele|añadele|quítale|quitale|hazla|hazlo|haz que|conviértela|conviertela|conviértelo|conviertelo|transforma|pinta|píntala|pintalo|reemplaza|sustituye)\b/i;
-
-function readNonNegativeEnvNumber(name: string, fallback: number): number {
-	const raw = process.env[name];
-	if (!raw) return fallback;
-	const value = Number(raw);
-	return Number.isFinite(value) && value >= 0 ? value : fallback;
-}
-
-function getTelegramUserName(user?: {
-	first_name?: string;
-	last_name?: string;
-	username?: string;
-}): string {
-	if (!user) return "Unknown";
-	if (user.first_name && user.last_name) {
-		return `${user.first_name} ${user.last_name}`;
-	}
-	return user.first_name ?? user.username ?? "Unknown";
-}
-
-function getReplyMessageContent(ctx: Context): string | undefined {
-	const replyMsg = ctx.message?.reply_to_message;
-	if (!replyMsg) return undefined;
-	if (replyMsg.text?.trim()) return replyMsg.text.trim();
-	if (replyMsg.caption?.trim()) return replyMsg.caption.trim();
-	if (replyMsg.photo?.length) return "[photo]";
-	if (replyMsg.voice) return "[voice message]";
-	if (replyMsg.audio) return "[audio file]";
-	return "[message]";
-}
-
-function truncateReplyContext(text: string): string {
-	const maxChars = 500;
-	if (text.length <= maxChars) return text;
-	return `${text.slice(0, maxChars - 12).trimEnd()} [truncated]`;
-}
-
-function getTelegramReplyContext(
-	ctx: Context,
-	botId: number,
-): TelegramReplyContext | undefined {
-	const replyMsg = ctx.message?.reply_to_message;
-	if (!replyMsg) return undefined;
-	const content = getReplyMessageContent(ctx);
-	if (!content) return undefined;
-	return {
-		senderName: getTelegramUserName(replyMsg.from),
-		content,
-		isBot: replyMsg.from?.id === botId,
-	};
-}
-
-function toClassifierReplyContext(
-	replyContext?: TelegramReplyContext,
-): ClassifierReplyContext | undefined {
-	if (!replyContext) return undefined;
-	return {
-		speaker: replyContext.senderName,
-		message: replyContext.content,
-		isBot: replyContext.isBot,
-	};
-}
-
-export function buildReplyAwareTextContent(
-	text: string,
-	replyContext?: TelegramReplyContext,
-): string {
-	if (!replyContext) return text;
-	const botMarker = replyContext.isBot ? " (bot)" : "";
-	return `[Replying to ${replyContext.senderName}${botMarker}: "${truncateReplyContext(replyContext.content)}"]\n\n${text}`;
-}
-
-/**
- * Does the caption express intent to edit/modify the image?
- * When true, we can skip describeImage since the model will likely emit
- * [IMAGE: ...] and the edit provider uses the raw image directly.
- *
- * Uses an LLM classifier for nuance; falls back to a regex if the classifier
- * fails or is inconclusive.
- */
-async function hasEditIntent(caption?: string): Promise<boolean> {
-	if (!caption) return false;
-	const classification = await classifyEditIntent(caption);
-	if (classification !== null) return classification;
-	return EDIT_INTENT_REGEX.test(caption);
-}
+// User ids already told they lack access; reply once per id per process.
+const notifiedUnauthorizedUsers = new Set<number>();
+const MAX_NOTIFIED_UNAUTHORIZED_USERS = 1000;
 
 export { isBotOff, isSleepingHour } from "./bot-state.ts";
+export {
+	buildPassiveVoiceContent,
+	buildReplyAwareTextContent,
+	buildUntranscribedVoiceContent,
+	buildVoiceContent,
+	detectMentionType,
+	detectTranscribedMentionType,
+	getLastBotMessageBeforeLatest,
+	getTelegramReplyContext,
+	isIgnorableGroupMessage,
+	isUsableTranscription,
+	shouldTranscribePassiveGroupVoice,
+	type TelegramReplyContext,
+} from "./handlers/routing.ts";
 export type { MentionType } from "./types.ts";
 
-function normalizeForLooseMatch(text: string): string {
-	return text
-		.normalize("NFD")
-		.replace(/\p{Diacritic}/gu, "")
-		.toLowerCase();
-}
-
-function textMentionsBotName(text: string): boolean {
-	const botName = normalizeForLooseMatch(getBotName());
-	if (!botName.trim()) return false;
-	const escaped = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const nameRegex = new RegExp(`\\b${escaped}\\b`, "i");
-	return nameRegex.test(normalizeForLooseMatch(text));
-}
-
-export function detectMentionType(ctx: Context, botId: number): MentionType {
-	// Check if replied to the bot - always respond
-	if (ctx.message?.reply_to_message?.from?.id === botId) return "reply";
-
-	const text = ctx.message?.text ?? ctx.message?.caption ?? "";
-	const entities =
-		ctx.message?.text !== undefined
-			? (ctx.message.entities ?? [])
-			: (ctx.message?.caption_entities ?? []);
-
-	// Check if @mentioned - always respond
-	for (const entity of entities) {
-		if (entity.type === "mention") {
-			const mention = text.slice(entity.offset, entity.offset + entity.length);
-			if (mention === `@${ctx.me?.username}`) return "tag";
+// Security: only allow the owner (DMs) and the permitted group
+export const securityMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
+	const chatId = ctx.chat?.id;
+	if (isGroupChat(ctx)) {
+		if (chatId !== ALLOWED_GROUP_ID) {
+			log.info(`[guard] Unauthorized group ${chatId}, leaving...`);
+			if (chatId) {
+				await ctx.api
+					.leaveChat(chatId)
+					.catch((e) => log.error("[guard] Failed to leave:", e));
+			}
+			return;
 		}
-	}
-
-	// Check if called by name - AI decides if addressed or just mentioned
-	if (textMentionsBotName(text)) return "name";
-
-	return "none";
-}
-
-function detectTranscribedMentionType(
-	ctx: Context,
-	botId: number,
-	transcription: string,
-): MentionType {
-	if (ctx.message?.reply_to_message?.from?.id === botId) return "reply";
-	if (textMentionsBotName(transcription)) return "name";
-	return "none";
-}
-
-function isIgnorableGroupMessage(text: string): boolean {
-	const trimmed = text.trim();
-	if (!trimmed) return true;
-	if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u.test(trimmed)) {
-		return true;
-	}
-	return false;
-}
-
-function getLastBotMessageBeforeLatest(
-	messages: ConversationMessage[],
-): string | undefined {
-	for (let i = messages.length - 2; i >= 0; i--) {
-		const message = messages[i];
-		if (message?.role === "model") return message.content;
-	}
-	return undefined;
-}
-
-function isUsableTranscription(transcription: string): boolean {
-	const trimmed = transcription.trim();
-	return !!trimmed && trimmed !== "[transcription failed]";
-}
-
-function shouldTranscribePassiveGroupVoice(duration?: number): boolean {
-	if (!groupVoiceContextEnabled) return false;
-	if (GROUP_PASSIVE_VOICE_MAX_SECONDS <= 0) return false;
-	return duration === undefined || duration <= GROUP_PASSIVE_VOICE_MAX_SECONDS;
-}
-
-function formatVoiceDuration(duration?: number): string {
-	if (duration === undefined) return "";
-	return `, ${duration}s`;
-}
-
-function truncateForPassiveVoiceContext(text: string): string {
-	if (text.length <= GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS) return text;
-	return `${text
-		.slice(0, GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS)
-		.trimEnd()} [truncated]`;
-}
-
-function buildVoiceContent(userName: string, transcription: string): string {
-	return `[Audio from ${userName}]: ${transcription}`;
-}
-
-function buildPassiveVoiceContent(
-	userName: string,
-	transcription: string,
-): string {
-	return `[Voice message from ${userName}]: ${truncateForPassiveVoiceContext(transcription)}`;
-}
-
-function buildUntranscribedVoiceContent(
-	userName: string,
-	duration?: number,
-): string {
-	if (!groupVoiceContextEnabled) {
-		return `[Voice message from ${userName}${formatVoiceDuration(duration)}, not transcribed because group voice context is disabled]`;
-	}
-	return `[Voice message from ${userName}${formatVoiceDuration(duration)}, not transcribed because it exceeds the passive group limit of ${GROUP_PASSIVE_VOICE_MAX_SECONDS}s]`;
-}
-
-async function processConversationAndTrackGroupContinuation(
-	...args: Parameters<typeof processConversation>
-): Promise<boolean> {
-	const [ctx] = args;
-	const didRespond = await processConversation(...args);
-	const chatId = ctx.chat?.id;
-	if (didRespond && chatId && isGroupChat(ctx)) {
-		openGroupContinuationWindow(chatId);
-	}
-	return didRespond;
-}
-
-async function routeGroupNameMention(
-	ctx: Context,
-	text: string,
-	userName: string,
-	options?: {
-		conversationContent?: string;
-		isVoiceMessage?: boolean;
-	},
-): Promise<"full" | "handled"> {
-	const chatId = ctx.chat?.id;
-	if (!chatId) return "handled";
-	const replyContext = getTelegramReplyContext(ctx, ctx.me.id);
-	const conversationContent = buildReplyAwareTextContent(
-		options?.conversationContent ?? text,
-		replyContext,
-	);
-
-	const buffer = await loadSensory(chatId);
-	const currentTurn: ConversationMessage = {
-		role: "user",
-		name: userName,
-		content: conversationContent,
-		timestamp: Date.now(),
-	};
-	const recentMessages = [...buffer.messages, currentTurn];
-	const lastBotMessage = getLastBotMessageBeforeLatest(recentMessages);
-	const decision = await classifyGroupSocialIntent({
-		mode: "name",
-		botName: getBotName(),
-		currentSpeaker: userName,
-		currentMessage: text,
-		recentMessages,
-		lastBotMessage,
-		replyContext: toClassifierReplyContext(replyContext),
-	});
-
-	if (decision?.addressing === "direct") {
-		return "full";
-	}
-
-	if (replyContext && !replyContext.isBot) {
-		await observeConversationTurn(ctx, conversationContent, userName);
-		return "handled";
-	}
-
-	await observeConversationTurn(ctx, conversationContent, userName);
-	if (decision?.action !== "respond") {
-		return "handled";
-	}
-
-	await processConversationAndTrackGroupContinuation(
-		ctx,
-		conversationContent,
-		userName,
-		"name",
-		isBotOff(),
-		isSleepingHour(),
-		undefined,
-		options?.isVoiceMessage,
-		undefined,
-		{
-			skipHistoricalContext: true,
-			userTurnAlreadyRecorded: true,
-			groupAutoReply: decision.addressing !== "continuation",
-			groupContinuation: decision.addressing === "continuation",
-		},
-	);
-
-	return "handled";
-}
-
-async function routeGroupTranscribedVoice(
-	ctx: Context,
-	transcription: string,
-	userName: string,
-	initialMentionType: MentionType,
-): Promise<void> {
-	const chatId = ctx.chat?.id;
-	if (!chatId) return;
-
-	const replyContext = getTelegramReplyContext(ctx, ctx.me.id);
-	const content = buildVoiceContent(userName, transcription);
-	if (initialMentionType !== "none") {
-		await processConversationAndTrackGroupContinuation(
-			ctx,
-			buildReplyAwareTextContent(content, replyContext),
-			userName,
-			initialMentionType,
-			isBotOff(),
-			isSleepingHour(),
-			undefined,
-			true,
-		);
+	} else if (ctx.from?.id !== OWNER_USER_ID) {
+		log.info(`[guard] Unauthorized DM from user ${ctx.from?.id}, ignoring`);
+		const userId = ctx.from?.id;
+		if (
+			userId &&
+			ctx.message &&
+			!notifiedUnauthorizedUsers.has(userId) &&
+			notifiedUnauthorizedUsers.size < MAX_NOTIFIED_UNAUTHORIZED_USERS
+		) {
+			notifiedUnauthorizedUsers.add(userId);
+			await ctx.reply(
+				`⚠️ No tienes acceso a este bot.\n\nTu ID de usuario es: \`${userId}\`\n\nComparte este ID con la persona que administra el bot para que te dé acceso.`,
+				{ parse_mode: "Markdown" },
+			);
+		}
 		return;
 	}
 
-	if (!isUsableTranscription(transcription)) {
-		await observeConversationTurn(
-			ctx,
-			`[Voice message from ${userName}: transcription failed]`,
-			userName,
-		);
+	if (!isBotConfigured()) {
+		if (ctx.from?.id === OWNER_USER_ID && !isGroupChat(ctx)) {
+			const text = ctx.message?.text;
+			if (text) {
+				const userName = getUserDisplayName(ctx);
+				await processSetupConversation(ctx, text, userName);
+			} else {
+				const lang = loadConfig().language ?? "es";
+				await ctx.reply(
+					lang === "en"
+						? "Please use text to configure the bot."
+						: "Por favor, usa texto para configurar el bot.",
+				);
+			}
+		}
 		return;
 	}
 
-	const transcribedMentionType = detectTranscribedMentionType(
-		ctx,
-		ctx.me.id,
-		transcription,
-	);
-	if (transcribedMentionType === "name") {
-		const route = await routeGroupNameMention(ctx, transcription, userName, {
-			conversationContent: content,
-			isVoiceMessage: true,
-		});
-		if (route === "handled") return;
-
-		await processConversationAndTrackGroupContinuation(
-			ctx,
-			buildReplyAwareTextContent(content, replyContext),
-			userName,
-			"name",
-			isBotOff(),
-			isSleepingHour(),
-			undefined,
-			true,
-		);
-		return;
-	}
-
-	const passiveContent = buildReplyAwareTextContent(
-		buildPassiveVoiceContent(userName, transcription),
-		replyContext,
-	);
-	await observeConversationTurn(ctx, passiveContent, userName);
-	if (replyContext && !replyContext.isBot) return;
-	if (isIgnorableGroupMessage(transcription)) return;
-
-	if (!claimGroupContinuationSlot(chatId)) return;
-
-	const buffer = await loadSensory(chatId);
-	const lastBotMessage = getLastBotMessageBeforeLatest(buffer.messages);
-	const decision = await classifyGroupMessageIntent({
-		mode: "continuation",
-		botName: getBotName(),
-		currentSpeaker: userName,
-		currentMessage: transcription,
-		recentMessages: buffer.messages,
-		lastBotMessage,
-		replyContext: toClassifierReplyContext(replyContext),
-	});
-
-	if (decision !== "respond") return;
-
-	await processConversationAndTrackGroupContinuation(
-		ctx,
-		passiveContent,
-		userName,
-		"none",
-		isBotOff(),
-		isSleepingHour(),
-		undefined,
-		true,
-		undefined,
-		{
-			skipHistoricalContext: true,
-			userTurnAlreadyRecorded: true,
-			groupContinuation: true,
-		},
-	);
-}
+	await next();
+};
 
 export function registerHandlers(bot: Bot): void {
 	const botToken = bot.token;
 
 	// Run confidence decay on startup
-	decayConfidence().catch(console.error);
+	decayConfidence().catch(log.error);
 
-	// Security: only allow the owner (DMs) and the permitted group
-	bot.use(async (ctx, next) => {
-		const chatId = ctx.chat?.id;
-		if (isGroupChat(ctx)) {
-			if (chatId !== ALLOWED_GROUP_ID) {
-				console.log(`[guard] Unauthorized group ${chatId}, leaving...`);
-				if (chatId) {
-					await ctx.api
-						.leaveChat(chatId)
-						.catch((e) => console.error("[guard] Failed to leave:", e));
-				}
-				return;
-			}
-		} else if (ctx.from?.id !== OWNER_USER_ID) {
-			console.log(
-				`[guard] Unauthorized DM from user ${ctx.from?.id}, ignoring`,
-			);
-			const userId = ctx.from?.id;
-			if (userId && ctx.message) {
-				await ctx.reply(
-					`⚠️ No tienes acceso a este bot.\n\nTu ID de usuario es: \`${userId}\`\n\nComparte este ID con la persona que administra el bot para que te dé acceso.`,
-					{ parse_mode: "Markdown" },
-				);
-			}
-			return;
-		}
-
-		if (!isBotConfigured()) {
-			if (ctx.from?.id === OWNER_USER_ID && !isGroupChat(ctx)) {
-				const text = ctx.message?.text;
-				if (text) {
-					const userName = getUserDisplayName(ctx);
-					await processSetupConversation(ctx, text, userName);
-				} else {
-					const lang = loadConfig().language ?? "es";
-					await ctx.reply(
-						lang === "en"
-							? "Please use text to configure the bot."
-							: "Por favor, usa texto para configurar el bot.",
-					);
-				}
-			}
-			return;
-		}
-
-		await next();
-	});
+	bot.use(securityMiddleware);
 
 	// Slash commands
 	registerCommands(bot);
 
-	// Voice messages
-	bot.on("message:voice", async (ctx) => {
-		const mentionType = detectMentionType(ctx, ctx.me.id);
-		const userName = getUserDisplayName(ctx);
-		const isGroup = isGroupChat(ctx);
-		const duration = ctx.message.voice.duration;
-		if (
-			isGroup &&
-			mentionType === "none" &&
-			!shouldTranscribePassiveGroupVoice(duration)
-		) {
-			await observeConversationTurn(
-				ctx,
-				buildUntranscribedVoiceContent(userName, duration),
-				userName,
-			);
-			return;
-		}
-		try {
-			const transcription = await downloadAndTranscribe(
-				ctx,
-				botToken,
-				"audio/ogg",
-				"ogg",
-				"voice",
-			);
-			if (showTranscription && (!isGroup || mentionType !== "none")) {
-				await ctx
-					.reply(`📝 ${transcription}`, {
-						reply_to_message_id: ctx.message?.message_id,
-					})
-					.catch((err) =>
-						console.error("[voice] Failed to show transcription:", err),
-					);
-			}
-			if (isGroup) {
-				await routeGroupTranscribedVoice(
-					ctx,
-					transcription,
-					userName,
-					mentionType,
-				);
-				return;
-			}
+	// Voice messages and audio files
+	registerVoiceHandlers(bot, botToken);
 
-			const content = buildVoiceContent(userName, transcription);
-			await processConversationAndTrackGroupContinuation(
-				ctx,
-				content,
-				userName,
-				mentionType,
-				isBotOff(),
-				isSleepingHour(),
-				undefined,
-				true,
-			);
-		} catch (error) {
-			console.error("[voice handler] Error:", error);
-			if (isDev)
-				await ctx.reply(`[Dev] Voice handler error: ${error}`).catch(() => {});
-		}
-	});
-
-	// Audio files
-	bot.on("message:audio", async (ctx) => {
-		const mentionType = detectMentionType(ctx, ctx.me.id);
-		const userName = getUserDisplayName(ctx);
-		if (isGroupChat(ctx) && mentionType === "none") {
-			await observeConversationTurn(
-				ctx,
-				`[Audio file from ${userName}]`,
-				userName,
-			);
-			return;
-		}
-		try {
-			const ext = safeMediaExtension(
-				ctx.message.audio.mime_type?.split("/")[1],
-				"mp3",
-			);
-			const mimeType = ctx.message.audio.mime_type ?? "audio/mp3";
-			const transcription = await downloadAndTranscribe(
-				ctx,
-				botToken,
-				mimeType,
-				ext,
-				"audio",
-			);
-			if (showTranscription) {
-				await ctx
-					.reply(`📝 ${transcription}`, {
-						reply_to_message_id: ctx.message?.message_id,
-					})
-					.catch((err) =>
-						console.error("[audio] Failed to show transcription:", err),
-					);
-			}
-			const content = `[Audio from ${userName}]: ${transcription}`;
-			await processConversationAndTrackGroupContinuation(
-				ctx,
-				content,
-				userName,
-				mentionType,
-				isBotOff(),
-				isSleepingHour(),
-			);
-		} catch (error) {
-			console.error("[audio handler] Error:", error);
-			if (isDev)
-				await ctx.reply(`[Dev] Audio handler error: ${error}`).catch(() => {});
-		}
-	});
-
-	// Photos (disabled in simple assistant mode)
-	bot.on("message:photo", async (ctx) => {
-		if (isSimpleAssistantMode) return;
-		const mentionType = detectMentionType(ctx, ctx.me.id);
-		const userName = getUserDisplayName(ctx);
-		if (isGroupChat(ctx) && mentionType === "none") {
-			const caption = ctx.message.caption;
-			const observedContent = caption
-				? `[Image from ${userName}, caption: "${caption}"]`
-				: `[Image from ${userName}]`;
-			await observeConversationTurn(ctx, observedContent, userName);
-			return;
-		}
-		try {
-			const { filePath, mimeType } = await downloadImage(ctx, botToken);
-			const caption = ctx.message.caption;
-			const provider = createChatProvider();
-
-			try {
-				if (supportsInlineImages(provider)) {
-					// Pass raw image inline (Gemini can see it)
-					const imageBuffer = await Bun.file(filePath).arrayBuffer();
-					const data = Buffer.from(imageBuffer).toString("base64");
-					const content = caption
-						? `[Image from ${userName}, caption: "${caption}"]`
-						: `[Image from ${userName}]`;
-					await processConversationAndTrackGroupContinuation(
-						ctx,
-						content,
-						userName,
-						mentionType,
-						isBotOff(),
-						isSleepingHour(),
-						{ data, mimeType },
-						undefined,
-						filePath,
-					);
-				} else {
-					// Non-vision provider. Skip describeImage only when the caption
-					// clearly expresses edit intent (the edit provider uses the raw
-					// image directly). Otherwise describe so the bot can comment.
-					const skipDescribe = await hasEditIntent(caption);
-					let content: string;
-					if (skipDescribe) {
-						content = caption
-							? `[Image from ${userName}, caption: "${caption}"]`
-							: `[Image from ${userName}]`;
-					} else {
-						const description = await describeImage(
-							filePath,
-							mimeType,
-							caption,
-						);
-						content = caption
-							? `[Image from ${userName}, caption: "${caption}"]: ${description}`
-							: `[Image from ${userName}]: ${description}`;
-					}
-					await processConversationAndTrackGroupContinuation(
-						ctx,
-						content,
-						userName,
-						mentionType,
-						isBotOff(),
-						isSleepingHour(),
-						undefined,
-						undefined,
-						filePath,
-					);
-				}
-			} finally {
-				await cleanupFile(filePath);
-			}
-		} catch (error) {
-			console.error("[photo handler] Error:", error);
-			if (isDev)
-				await ctx.reply(`[Dev] Photo handler error: ${error}`).catch(() => {});
-		}
-	});
+	// Photos
+	registerPhotoHandler(bot, botToken);
 
 	// Text messages (catch-all)
 	bot.on("message", async (ctx) => {
@@ -762,9 +198,9 @@ export function registerHandlers(bot: Bot): void {
 				}
 
 				try {
-					const fileId = replyVoice
-						? replyVoice.file_id
-						: (replyAudio?.file_id as string);
+					const fileId = replyVoice ? replyVoice.file_id : replyAudio?.file_id;
+					const replyMessageId = replyMsg?.message_id;
+					if (!fileId || replyMessageId === undefined) return;
 					const mimeType = replyVoice
 						? "audio/ogg"
 						: (replyAudio?.mime_type ?? "audio/mp3");
@@ -772,7 +208,6 @@ export function registerHandlers(bot: Bot): void {
 						? "ogg"
 						: safeMediaExtension(mimeType.split("/")[1], "mp3");
 					const prefix = replyVoice ? "voice_reply" : "audio_reply";
-					const replyMessageId = replyMsg?.message_id as number;
 
 					const transcription = await downloadAndTranscribeByFileId(
 						ctx.api,
@@ -785,15 +220,18 @@ export function registerHandlers(bot: Bot): void {
 					);
 
 					const audioSenderUser = replyMsg?.from;
-					const audioSender = audioSenderUser
-						? (audioSenderUser.first_name ??
-							audioSenderUser.username ??
-							"Unknown")
-						: "Unknown";
+					const audioSender = sanitizeBracketText(
+						audioSenderUser
+							? (audioSenderUser.first_name ??
+									audioSenderUser.username ??
+									"Unknown")
+							: "Unknown",
+					);
 
+					const safeName = sanitizeBracketText(userName);
 					const content = text
-						? `[Audio from ${audioSender}, transcription requested by ${userName}]: ${transcription}\n\n${userName}'s message: "${text}"`
-						: `[Audio from ${audioSender}, transcription requested by ${userName}]: ${transcription}`;
+						? `[Audio from ${audioSender}, transcription requested by ${safeName}]: ${transcription}\n\n${safeName}'s message: "${text}"`
+						: `[Audio from ${audioSender}, transcription requested by ${safeName}]: ${transcription}`;
 
 					await processConversationAndTrackGroupContinuation(
 						ctx,
@@ -804,7 +242,7 @@ export function registerHandlers(bot: Bot): void {
 						isSleepingHour(),
 					);
 				} catch (error) {
-					console.error("[reply-to-audio handler] Error:", error);
+					log.error("[reply-to-audio handler] Error:", error);
 					if (isDev)
 						await ctx
 							.reply(`[Dev] Reply-to-audio error: ${error}`)
@@ -827,9 +265,11 @@ export function registerHandlers(bot: Bot): void {
 				try {
 					const photo = replyPhoto[replyPhoto.length - 1];
 					if (!photo) throw new Error("No photo found in replied message");
+					const replyMessageId = replyMsg?.message_id;
+					if (replyMessageId === undefined) return;
 					const file = await ctx.api.getFile(photo.file_id);
 					const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
-					if (isDev) console.log("[reply-to-photo] Downloading from:", url);
+					log.debug("[reply-to-photo] Downloading file:", file.file_path);
 
 					const response = await fetch(url, {
 						signal: AbortSignal.timeout(30_000),
@@ -845,23 +285,24 @@ export function registerHandlers(bot: Bot): void {
 						"jpg",
 					);
 					const mimeType = ext === "png" ? "image/png" : "image/jpeg";
-					const replyMessageId = replyMsg?.message_id as number;
 					const filePath = `./audios/photo_reply_${replyMessageId}.${ext}`;
 					const imageBuffer = Buffer.from(await response.arrayBuffer());
 					await Bun.write(filePath, imageBuffer);
-					if (isDev)
-						console.log(
-							"[reply-to-photo] Saved to:",
-							filePath,
-							`(${imageBuffer.length} bytes)`,
-						);
+					log.debug(
+						"[reply-to-photo] Saved to:",
+						filePath,
+						`(${imageBuffer.length} bytes)`,
+					);
 
 					const photoSenderUser = replyMsg?.from;
-					const photoSender = photoSenderUser
-						? (photoSenderUser.first_name ??
-							photoSenderUser.username ??
-							"Unknown")
-						: "Unknown";
+					const photoSender = sanitizeBracketText(
+						photoSenderUser
+							? (photoSenderUser.first_name ??
+									photoSenderUser.username ??
+									"Unknown")
+							: "Unknown",
+					);
+					const safeName = sanitizeBracketText(userName);
 
 					const provider = createChatProvider();
 
@@ -870,7 +311,7 @@ export function registerHandlers(bot: Bot): void {
 							// Pass raw image inline (Gemini can see it)
 							const data = imageBuffer.toString("base64");
 							const content = text
-								? `[Image from ${photoSender}]\n\n${userName}'s message: "${text}"`
+								? `[Image from ${photoSender}]\n\n${safeName}'s message: "${text}"`
 								: `[Image from ${photoSender}]`;
 							await processConversationAndTrackGroupContinuation(
 								ctx,
@@ -890,7 +331,7 @@ export function registerHandlers(bot: Bot): void {
 							let content: string;
 							if (skipDescribe) {
 								content = text
-									? `[Image from ${photoSender}]\n\n${userName}'s message: "${text}"`
+									? `[Image from ${photoSender}]\n\n${safeName}'s message: "${text}"`
 									: `[Image from ${photoSender}]`;
 							} else {
 								const replyCaption = replyMsg?.caption;
@@ -900,7 +341,7 @@ export function registerHandlers(bot: Bot): void {
 									replyCaption ?? undefined,
 								);
 								content = text
-									? `[Image from ${photoSender}]: ${description}\n\n${userName}'s message: "${text}"`
+									? `[Image from ${photoSender}]: ${description}\n\n${safeName}'s message: "${text}"`
 									: `[Image from ${photoSender}]: ${description}`;
 							}
 							await processConversationAndTrackGroupContinuation(
@@ -919,7 +360,7 @@ export function registerHandlers(bot: Bot): void {
 						await cleanupFile(filePath);
 					}
 				} catch (error) {
-					console.error("[reply-to-photo handler] Error:", error);
+					log.error("[reply-to-photo handler] Error:", error);
 					if (isDev)
 						await ctx
 							.reply(`[Dev] Reply-to-photo error: ${error}`)

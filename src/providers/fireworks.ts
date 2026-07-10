@@ -1,9 +1,9 @@
+import { describeImagePrompt } from "../ai/vision.ts";
+import { log } from "../logger.ts";
 import {
 	OpenAiCompatibleChatProvider,
 	requireEnv,
 } from "./openai-compatible.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 interface FireworksVisionContentPart {
 	type: "text" | "image_url";
@@ -43,9 +43,7 @@ export class FireworksChatProvider extends OpenAiCompatibleChatProvider {
 		mimeType: string,
 		caption?: string,
 	): Promise<string> {
-		const prompt = caption
-			? `The user sent this image with the caption: "${caption}". Describe what you see briefly so you can reference it in conversation.`
-			: "The user sent this image. Describe what you see briefly so you can reference it in conversation.";
+		const prompt = describeImagePrompt(caption);
 
 		const content: FireworksVisionContentPart[] = [
 			{ type: "text", text: prompt },
@@ -55,17 +53,13 @@ export class FireworksChatProvider extends OpenAiCompatibleChatProvider {
 			},
 		];
 
-		if (isDev) {
-			console.log("[fireworks] describeImage using model", this.model);
-		}
+		log.debug("[fireworks] describeImage using model", this.model);
 
 		const text = await this.chatCompletion(
 			[{ role: "user", content }],
 			":vision",
 		);
-		if (isDev) {
-			console.log("[fireworks] describeImage result:", text.slice(0, 200));
-		}
+		log.debug("[fireworks] describeImage result:", text.slice(0, 200));
 		return text;
 	}
 }

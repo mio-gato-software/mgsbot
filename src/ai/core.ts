@@ -1,3 +1,4 @@
+import { alertOwner, errorSummary } from "../alerts.ts";
 import { type ChatMessage, createChatProvider } from "../providers/index.ts";
 
 export async function generateResponse(
@@ -5,5 +6,13 @@ export async function generateResponse(
 	messages: ChatMessage[],
 ): Promise<string> {
 	const provider = createChatProvider();
-	return provider.generateResponse(systemPrompt, messages);
+	try {
+		return await provider.generateResponse(systemPrompt, messages);
+	} catch (error) {
+		await alertOwner(
+			"chat-provider",
+			`${provider.name} request failed: ${errorSummary(error)}`,
+		);
+		throw error;
+	}
 }

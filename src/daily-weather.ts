@@ -1,4 +1,5 @@
 import { BOT_TZ, getBotHour, getDateString } from "./bot-time.ts";
+import { log } from "./logger.ts";
 import { atomicWriteFile, withRetry } from "./utils.ts";
 
 interface DailyWeather {
@@ -12,11 +13,18 @@ interface DailyWeather {
 }
 
 const WEATHER_FILE = "./memory/daily-weather.json";
-const isDev = process.env.NODE_ENV === "development";
 
-// Santo Domingo coordinates
-const LATITUDE = 18.4861;
-const LONGITUDE = -69.9312;
+function readEnvNumber(name: string, fallback: number): number {
+	const raw = process.env[name];
+	if (!raw) return fallback;
+	const value = Number(raw);
+	return Number.isFinite(value) ? value : fallback;
+}
+
+// Defaults: Santo Domingo
+const LATITUDE = readEnvNumber("WEATHER_LATITUDE", 18.4861);
+const LONGITUDE = readEnvNumber("WEATHER_LONGITUDE", -69.9312);
+const CITY = process.env.WEATHER_CITY || "Santo Domingo";
 
 let cachedWeather: DailyWeather | null = null;
 
@@ -79,7 +87,7 @@ async function loadCachedWeather(): Promise<DailyWeather | null> {
 			return cachedWeather;
 		}
 	} catch (error) {
-		if (isDev) console.error("[daily-weather] Error loading cache:", error);
+		log.debug("[daily-weather] Error loading cache:", error);
 	}
 	return null;
 }
@@ -88,14 +96,9 @@ async function saveWeather(weather: DailyWeather): Promise<void> {
 	cachedWeather = weather;
 	try {
 		await atomicWriteFile(WEATHER_FILE, JSON.stringify(weather, null, 2));
-		if (isDev)
-			console.log(
-				"[daily-weather] Saved to cache:",
-				weather.date,
-				weather.period,
-			);
+		log.debug("[daily-weather] Saved to cache:", weather.date, weather.period);
 	} catch (error) {
-		console.error("[daily-weather] Error saving cache:", error);
+		log.error("[daily-weather] Error saving cache:", error);
 	}
 }
 
@@ -112,12 +115,12 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 	try {
 		const url = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=${BOT_TZ}`;
 
-		if (isDev) console.log("[daily-weather] Fetching from Open-Meteo...");
+		log.debug("[daily-weather] Fetching from Open-Meteo...");
 		const res = await withRetry(() =>
 			fetch(url, { signal: AbortSignal.timeout(10_000) }),
 		);
 		if (!res.ok) {
-			console.error("[daily-weather] Fetch failed:", res.status);
+			log.error("[daily-weather] Fetch failed:", res.status);
 			return null;
 		}
 
@@ -135,16 +138,15 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 		};
 
 		await saveWeather(weather);
-		if (isDev)
-			console.log(
-				"[daily-weather] Fetched:",
-				weather.description,
-				`${weather.temperature}°C`,
-				`period=${weather.period}`,
-			);
+		log.debug(
+			"[daily-weather] Fetched:",
+			weather.description,
+			`${weather.temperature}°C`,
+			`period=${weather.period}`,
+		);
 		return weather;
 	} catch (error) {
-		console.error("[daily-weather] Error fetching weather:", error);
+		log.error("[daily-weather] Error fetching weather:", error);
 		return null;
 	}
 }
@@ -155,8 +157,7 @@ async function getWeather(): Promise<DailyWeather | null> {
 	const cached = await loadCachedWeather();
 
 	if (cached && cached.date === today && cached.period === period) {
-		if (isDev)
-			console.log("[daily-weather] Using cached weather:", today, period);
+		log.debug("[daily-weather] Using cached weather:", today, period);
 		return cached;
 	}
 
@@ -167,7 +168,7 @@ export async function getCurrentWeatherContext(): Promise<string | null> {
 	const weather = await getWeather();
 	if (!weather) return null;
 
-	return `Current weather in Santo Domingo: ${weather.description}, ${Math.round(weather.temperature)}°C, ${Math.round(weather.humidity)}% humidity, wind ${Math.round(weather.windSpeed)} km/h`;
+	return `Current weather in ${CITY}: ${weather.description}, ${Math.round(weather.temperature)}°C, ${Math.round(weather.humidity)}% humidity, wind ${Math.round(weather.windSpeed)} km/h`;
 }
 
 export async function getDailyWeatherForImage(): Promise<string | null> {
