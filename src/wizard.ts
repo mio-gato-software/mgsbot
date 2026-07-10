@@ -76,7 +76,7 @@ function writeEnvFile(data: WizardData): void {
 		lines.push(`${key}=${value}`);
 	}
 
-	atomicWriteFileSync("./.env", `${lines.join("\n")}\n`);
+	atomicWriteFileSync("./.env", `${lines.join("\n")}\n`, 0o600);
 
 	// Save language to bot config
 	const currentConfig = loadConfig();
@@ -95,13 +95,22 @@ function parseFormBody(body: string): Record<string, string> {
 
 function buildWizardHtml(
 	port: number,
+	csrfToken: string,
 	errors?: Record<string, string>,
 	prefilled?: Record<string, string>,
+	configuredSecrets?: Record<string, boolean>,
 ): string {
 	const v = (key: string) => escapeHtml(prefilled?.[key] ?? "");
 	const e = (key: string) =>
 		errors?.[key] ? `<div class="error">${escapeHtml(errors[key])}</div>` : "";
 	const initLang = prefilled?.language ?? "es";
+	// Secret fields are never prefilled with stored values; show a hint instead
+	const sp = (key: string, fallback: string) =>
+		configuredSecrets?.[key]
+			? initLang === "es"
+				? "(configurado — dejar en blanco para mantener)"
+				: "(configured — leave blank to keep)"
+			: fallback;
 
 	return `<!DOCTYPE html>
 <html lang="${initLang}">
@@ -269,6 +278,7 @@ function buildWizardHtml(
   ${errors && Object.keys(errors).length > 0 ? '<div class="global-error" data-i18n="globalError">Please fix the errors below and try again.</div>' : ""}
 
   <form method="POST" action="http://127.0.0.1:${port}/" id="wizardForm">
+    <input type="hidden" name="csrfToken" value="${escapeHtml(csrfToken)}">
 
     <!-- Step 0: Welcome + Language -->
     <div class="step active" data-step="0">
@@ -310,7 +320,7 @@ function buildWizardHtml(
         Open <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> in Telegram, send <strong>/newbot</strong>, follow the prompts, then copy the token it gives you.
       </p>
       <label for="botToken" data-i18n="tokenLabel">Bot Token</label>
-      <input type="text" id="botToken" name="botToken" placeholder="123456789:ABCdef..." value="${v("botToken")}" class="${errors?.botToken ? "has-error" : ""}" autocomplete="off" spellcheck="false">
+      <input type="text" id="botToken" name="botToken" placeholder="${sp("botToken", "123456789:ABCdef...")}" value="${v("botToken")}" class="${errors?.botToken ? "has-error" : ""}" autocomplete="off" spellcheck="false">
       <div class="format-hint" data-i18n="tokenFormat">Format: 123456789:ABCdefGHIjklMNO...</div>
       ${e("botToken")}
       <div class="btn-row">
@@ -326,7 +336,7 @@ function buildWizardHtml(
         Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, sign in, and create an API key. This is used for the AI model, embeddings, audio, images, and more.
       </p>
       <label for="googleApiKey" data-i18n="apiKeyLabel">API Key</label>
-      <input type="text" id="googleApiKey" name="googleApiKey" placeholder="AIza..." value="${v("googleApiKey")}" class="${errors?.googleApiKey ? "has-error" : ""}" autocomplete="off" spellcheck="false">
+      <input type="text" id="googleApiKey" name="googleApiKey" placeholder="${sp("googleApiKey", "AIza...")}" value="${v("googleApiKey")}" class="${errors?.googleApiKey ? "has-error" : ""}" autocomplete="off" spellcheck="false">
       ${e("googleApiKey")}
 
       <label style="margin-top: 20px;" data-i18n="modelLabel">AI Model</label>
@@ -620,41 +630,86 @@ export async function runSetupWizard(): Promise<void> {
 	const port = await findAvailablePort(3000);
 	const url = `http://127.0.0.1:${port}/`;
 
-	// Load existing values for pre-filling (--setup re-run)
+	// Load existing values for pre-filling (--setup re-run).
+	// Secret values are never sent to the browser; blank submissions keep them.
 	const existing = parseEnvFile();
 	const existingConfig = loadConfig();
 	const prefilled: Record<string, string> = {
-		botToken: existing.BOT_TOKEN ?? "",
-		googleApiKey: existing.GOOGLE_API_KEY ?? "",
+		botToken: "",
+		googleApiKey: "",
 		geminiModel: existing.GEMINI_MODEL ?? "gemini-3-flash-preview",
 		ownerUserId: existing.OWNER_USER_ID ?? "",
 		allowedGroupId: existing.ALLOWED_GROUP_ID ?? "",
 		language: existingConfig.language ?? "es",
 	};
+	const configuredSecrets: Record<string, boolean> = {
+		botToken: Boolean(existing.BOT_TOKEN),
+		googleApiKey: Boolean(existing.GOOGLE_API_KEY),
+	};
+
+	// Per-run CSRF token; also validate Host/Origin against loopback origins
+	const csrfToken = crypto.randomUUID();
 
 	return new Promise<void>((resolve) => {
 		const server = Bun.serve({
 			hostname: "127.0.0.1",
 			port,
 			async fetch(req) {
+				// The listen port is fixed (findAvailablePort ran before serve), so
+				// validate against it directly instead of reading server.port.
+				const serverPort = port;
+				const host = req.headers.get("host");
+				if (
+					host !== `127.0.0.1:${serverPort}` &&
+					host !== `localhost:${serverPort}`
+				) {
+					return new Response("Forbidden", { status: 403 });
+				}
+
 				const reqUrl = new URL(req.url);
 				if (reqUrl.pathname !== "/") {
 					return new Response("Not found", { status: 404 });
 				}
 
 				if (req.method === "GET") {
-					return new Response(buildWizardHtml(port, undefined, prefilled), {
-						headers: { "Content-Type": "text/html; charset=utf-8" },
-					});
+					return new Response(
+						buildWizardHtml(
+							serverPort,
+							csrfToken,
+							undefined,
+							prefilled,
+							configuredSecrets,
+						),
+						{
+							headers: { "Content-Type": "text/html; charset=utf-8" },
+						},
+					);
 				}
 
 				if (req.method === "POST") {
+					const origin = req.headers.get("origin");
+					if (
+						origin !== null &&
+						origin !== `http://127.0.0.1:${serverPort}` &&
+						origin !== `http://localhost:${serverPort}`
+					) {
+						return new Response("Forbidden", { status: 403 });
+					}
+
 					const body = await req.text();
 					const fields = parseFormBody(body);
 
+					if (fields.csrfToken !== csrfToken) {
+						return new Response("Forbidden", { status: 403 });
+					}
+
+					// Blank secret fields keep the previously configured values
+					const submittedBotToken = (fields.botToken ?? "").trim();
+					const submittedApiKey = (fields.googleApiKey ?? "").trim();
+
 					const data: WizardData = {
-						botToken: fields.botToken ?? "",
-						googleApiKey: fields.googleApiKey ?? "",
+						botToken: submittedBotToken || (existing.BOT_TOKEN ?? ""),
+						googleApiKey: submittedApiKey || (existing.GOOGLE_API_KEY ?? ""),
 						geminiModel: fields.geminiModel ?? "gemini-3-flash-preview",
 						ownerUserId: fields.ownerUserId ?? "",
 						allowedGroupId: fields.allowedGroupId ?? "",
@@ -665,19 +720,29 @@ export async function runSetupWizard(): Promise<void> {
 
 					if (!result.valid) {
 						// Re-render form with errors and entered values
+						// (secrets echo only what the user typed, never stored values)
 						const filled: Record<string, string> = {
-							botToken: data.botToken,
-							googleApiKey: data.googleApiKey,
+							botToken: submittedBotToken,
+							googleApiKey: submittedApiKey,
 							geminiModel: data.geminiModel,
 							ownerUserId: data.ownerUserId,
 							allowedGroupId: data.allowedGroupId ?? "",
 							language: data.language,
 						};
-						return new Response(buildWizardHtml(port, result.errors, filled), {
-							headers: {
-								"Content-Type": "text/html; charset=utf-8",
+						return new Response(
+							buildWizardHtml(
+								serverPort,
+								csrfToken,
+								result.errors,
+								filled,
+								configuredSecrets,
+							),
+							{
+								headers: {
+									"Content-Type": "text/html; charset=utf-8",
+								},
 							},
-						});
+						);
 					}
 
 					// Write .env and signal completion

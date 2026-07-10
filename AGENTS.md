@@ -194,8 +194,9 @@ Proactive follow-up feature (`src/follow-ups.ts`), enabled via `ENABLE_FOLLOW_UP
 
 - Detects planned events/activities from conversations and schedules follow-up questions.
 - DR timezone-aware scheduling (8am–9:30pm reasonable hours).
-- Rate limited: max 2 sends/day, 2-hour cooldown between sends.
+- Rate limited: max 2 sends/day, 2-hour cooldown between sends (based on recorded `sentAt`).
 - Expiration after 3 days. Cancelled if user already mentioned the topic.
+- Topic dedup: a newly detected event similar to any follow-up tracked in the last 14 days (any status) is skipped, so the same topic can't resurface week after week.
 - Won't interrupt active conversations (15-min cooldown).
 - Stored in `memory/follow-ups.json` (gitignored).
 
@@ -209,6 +210,8 @@ Proactive check-in feature (`src/check-ins.ts`), enabled via `ENABLE_CHECK_INS=t
 - If bot starts mid-week, only schedules slots for remaining days.
 - Check-in strategies rotate to avoid repetition: `random_thought`, `memory_callback`, `sharing_moment`, `reaction`, `weather_vibe`, `curiosity`.
 - Full context generation: loads sensory buffer, relevant episodes, semantic facts, and builds system prompt for natural messages.
+- Topic freshness: the last 5 proactive messages plus recent follow-up events are injected into the prompt as topics NOT to bring up again.
+- Silence-aware backoff: tracks consecutive proactive sends with no user reply (`unansweredStreak`). After 1 unanswered send, `memory_callback` is excluded and the prompt instructs a fresh, no-pressure, self-contained message (never mention the silence); after 2+, cadence drops to at most one check-in per week until the user writes again.
 - Guards: won't send if bot is off/sleeping, active conversation in last 15 min (postpones by 1 hour), or follow-up was sent today.
 - Only targets DM chats (chatId == OWNER_USER_ID).
 - Configurable frequency via `CHECK_INS_PER_WEEK` env var (default: 2).

@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { cosineSimilarity } from "../embeddings.ts";
+import { log } from "../logger.ts";
 import type { Episode, WorkingMemory } from "../types.ts";
 import { atomicWriteFile, isFileNotFound } from "../utils.ts";
 import { withEpisodeLock } from "./locks.ts";
 import { computeTextScore } from "./queries.ts";
+import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
 
 export const EPISODES_DIR = "./memory/episodes";
 
@@ -25,13 +27,14 @@ export async function loadWorkingMemory(
 		return JSON.parse(data) as WorkingMemory;
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error(`[memory] Error loading episodes ${chatId}:`, err);
+			log.error(`[memory] Error loading episodes ${chatId}:`, err);
 		}
 		return { chatId, episodes: [] };
 	}
 }
 
 export async function saveWorkingMemory(wm: WorkingMemory): Promise<void> {
+	wm.schemaVersion = CURRENT_SCHEMA_VERSION;
 	await atomicWriteFile(episodesPath(wm.chatId), JSON.stringify(wm, null, 2));
 }
 

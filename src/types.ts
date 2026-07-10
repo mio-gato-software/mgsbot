@@ -18,6 +18,7 @@ export interface ConversationMessage {
 // --- New Memory Architecture ---
 
 export interface SensoryBuffer {
+	schemaVersion?: number; // absent in legacy files; stamped on save
 	chatId: number;
 	messages: ConversationMessage[]; // max 10, FIFO
 	lastActivity: number;
@@ -41,11 +42,13 @@ export interface Episode {
 }
 
 export interface WorkingMemory {
+	schemaVersion?: number; // absent in legacy files; stamped on save
 	chatId: number;
 	episodes: Episode[]; // max 20
 }
 
 export interface RelationshipMemory {
+	schemaVersion?: number; // absent in legacy files; stamped on save
 	chatId: number;
 	summary: string; // 80-140 words about the relationship dynamic
 	tone: string; // e.g. "warm, playful, direct"
@@ -96,6 +99,7 @@ export interface FollowUp {
 	followUpQuestion: string; // Pre-generated fallback question
 	detectedAt: number;
 	scheduledFor: number; // When to ask
+	sentAt?: number; // Actual send moment (absent on legacy entries)
 	status: "pending" | "sent" | "cancelled" | "expired";
 	attempts: number;
 }
@@ -147,6 +151,8 @@ export interface CheckInState {
 	slots: CheckInSlot[]; // N slots per week
 	lastSentTimestamp: number; // When the last check-in was sent
 	recentStrategies: string[]; // Last 5 strategies used (anti-repetition)
+	recentMessages?: Array<{ text: string; sentAt: number }>; // Last 5 proactive messages sent (topic anti-repetition)
+	unansweredStreak?: number; // Consecutive proactive sends without a user reply (as of the last send)
 }
 
 export interface PersonalitySignals {

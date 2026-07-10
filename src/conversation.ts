@@ -17,6 +17,7 @@ import {
 	resolveCanonicalName,
 } from "./identities.ts";
 import { shouldGenerateImageNow } from "./image-scheduler.ts";
+import { log } from "./logger.ts";
 import {
 	addEpisode,
 	addMessageToSensory,
@@ -31,7 +32,7 @@ import {
 	getRelevantFacts,
 	loadRelationshipMemory,
 	loadSensory,
-	saveRelationshipMemory,
+	updateRelationshipMemory,
 	upsertChapter,
 	withChatLock,
 } from "./memory/index.ts";
@@ -49,7 +50,6 @@ import type {
 	SemanticFact,
 } from "./types.ts";
 
-const isDev = process.env.NODE_ENV === "development";
 const ACTIVE_NAME_WINDOW_MESSAGES = 6;
 const MAX_RELEVANT_EPISODES = 3;
 const MAX_RELEVANT_FACTS = 8;
@@ -102,38 +102,40 @@ async function updateNarrativeMemory(input: {
 	});
 	const now = Date.now();
 
+	// The pre-read snapshots above only feed the LLM. All merge arithmetic
+	// (interactionCount, participants, episodeIds, importance) runs against the
+	// fresh state re-read inside each store's lock, so concurrent promotions
+	// can't lose each other's increments/appends.
 	await Promise.all([
-		saveRelationshipMemory({
+		updateRelationshipMemory(input.chatId, (existing) => ({
 			chatId: input.chatId,
 			summary: update.relationship.summary,
 			tone: update.relationship.tone,
 			notableDynamics: update.relationship.notableDynamics,
 			openThreads: update.relationship.openThreads,
 			updatedAt: now,
-			interactionCount: (existingRelationship?.interactionCount ?? 0) + 1,
-		}),
-		upsertChapter({
-			id: existingChapter?.id ?? `chapter_${input.chatId}_${month}`,
+			interactionCount: (existing?.interactionCount ?? 0) + 1,
+		})),
+		upsertChapter(input.chatId, month, (existing) => ({
+			id: existing?.id ?? `chapter_${input.chatId}_${month}`,
 			chatId: input.chatId,
 			month,
 			title: update.chapter.title,
 			summary: update.chapter.summary,
 			participants: uniqueNames([
-				...(existingChapter?.participants ?? []),
+				...(existing?.participants ?? []),
 				...input.episode.participants,
 			]),
 			importance: Math.max(
-				existingChapter?.importance ?? 1,
+				existing?.importance ?? 1,
 				update.chapter.importance,
 			),
 			episodeIds: [
-				...(existingChapter?.episodeIds ?? []).filter(
-					(id) => id !== input.episode.id,
-				),
+				...(existing?.episodeIds ?? []).filter((id) => id !== input.episode.id),
 				input.episode.id,
 			].slice(-30),
 			updatedAt: now,
-		}),
+		})),
 	]);
 }
 
@@ -183,7 +185,7 @@ export async function processConversation(
 		try {
 			await ctx.react("😴");
 		} catch (error) {
-			if (isDev) console.error("[off] Error reacting:", error);
+			log.debug("[off] Error reacting:", error);
 		}
 		return false;
 	}
@@ -216,29 +218,24 @@ export async function processConversation(
 		},
 	);
 	if (!userTurnAlreadyRecorded) {
-		logUserMessage(userName, userContent).catch(console.error);
+		logUserMessage(userName, userContent).catch(log.error);
 	}
 
 	// Promote overflow to memory in background
 	if (overflow) {
 		promoteToMemory(chatId, overflow).catch((err) => {
-			console.error(
-				`[promote] Failed for chat ${chatId} (user overflow):`,
-				err,
-			);
+			log.error(`[promote] Failed for chat ${chatId} (user overflow):`, err);
 		});
 	}
 
 	// Follow-up detection and cancellation (DMs only, background)
 	if (!isGroupChat(ctx)) {
-		checkAndCancelResolvedFollowUps(chatId, userContent).catch(console.error);
+		checkAndCancelResolvedFollowUps(chatId, userContent).catch(log.error);
 		const recentText = buffer.messages
 			.filter((m) => m.role === "user")
 			.map((m) => m.content)
 			.join("\n");
-		detectAndStoreFollowUps(chatId, recentText, userContent).catch(
-			console.error,
-		);
+		detectAndStoreFollowUps(chatId, recentText, userContent).catch(log.error);
 	}
 
 	// Build prompt and messages
@@ -373,15 +370,12 @@ export async function processConversation(
 			const fresh = await loadSensory(chatId);
 			return addMessageToSensory(fresh, botMessage);
 		});
-		logBotMessage(result.cleanedText).catch(console.error);
+		logBotMessage(result.cleanedText).catch(log.error);
 
 		// Promote bot overflow too
 		if (botOverflow) {
 			promoteToMemory(chatId, botOverflow).catch((err) => {
-				console.error(
-					`[promote] Failed for chat ${chatId} (bot overflow):`,
-					err,
-				);
+				log.error(`[promote] Failed for chat ${chatId} (bot overflow):`, err);
 			});
 		}
 	}
@@ -416,18 +410,18 @@ export async function observeConversationTurn(
 		};
 		return addMessageToSensory(buffer, userMessage);
 	});
-	logUserMessage(userName, userContent).catch(console.error);
+	logUserMessage(userName, userContent).catch(log.error);
 
 	if (overflow) {
 		if (options?.promoteOverflow === true) {
 			promoteToMemory(chatId, overflow).catch((err) => {
-				console.error(
+				log.error(
 					`[promote] Failed for chat ${chatId} (observer overflow):`,
 					err,
 				);
 			});
-		} else if (isDev) {
-			console.log(
+		} else {
+			log.debug(
 				`[observer] Discarded ${overflow.length} passive overflow messages for chat ${chatId}`,
 			);
 		}
@@ -471,10 +465,9 @@ export async function promoteToMemory(
 		existingFactSummary,
 	);
 
-	if (isDev)
-		console.log(
-			`[promote] Summary: "${result.summary}", importance: ${result.importance}, facts: ${result.facts.length}`,
-		);
+	log.debug(
+		`[promote] Summary: "${result.summary}", importance: ${result.importance}, facts: ${result.facts.length}`,
+	);
 
 	// Downstream gate: skip if the LLM judged the chunk uninteresting. The heuristic
 	// pre-filter is intentionally loose so transient activity mentions don't get
@@ -485,7 +478,7 @@ export async function promoteToMemory(
 		result.facts.length === 0 &&
 		!result.personalitySignals?.traitChanges?.length;
 	if (isTrivial) {
-		if (isDev) console.log("[promote] Skipped: LLM judged chunk trivial");
+		log.debug("[promote] Skipped: LLM judged chunk trivial");
 		return;
 	}
 
@@ -546,6 +539,6 @@ export async function promoteToMemory(
 	}
 
 	updateNarrativeMemory({ chatId, episode, recentText }).catch((err) => {
-		console.error(`[long-term-memory] Failed for chat ${chatId}:`, err);
+		log.error(`[long-term-memory] Failed for chat ${chatId}:`, err);
 	});
 }

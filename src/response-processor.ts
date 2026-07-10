@@ -6,12 +6,12 @@ import { getBaseImagePath } from "./appearance.ts";
 import { getBotName } from "./config.ts";
 import { editImage, generateImage } from "./image/index.ts";
 import { getWeekStart } from "./image-scheduler.ts";
-import { saveSensory } from "./memory/index.ts";
+import { log } from "./logger.ts";
+import { loadSensory, saveSensory, withChatLock } from "./memory/index.ts";
 import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
 import { textToSpeech } from "./tts/index.ts";
 import type { SensoryBuffer } from "./types.ts";
 
-const isDev = process.env.NODE_ENV === "development";
 const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
 
 export const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
@@ -93,24 +93,23 @@ export async function sendResponse(
 
 	// Guard against empty responses
 	if (!responseText.trim()) {
-		if (isDev) console.log("[response] Empty response from model, skipping");
+		log.debug("[response] Empty response from model, skipping");
 		return null;
 	}
 
 	// Check for [SILENCE] marker - bot chose not to respond
 	if (responseText.trim() === SILENCE_MARKER) {
-		if (isDev) console.log("[response] Bot chose to stay silent");
+		log.debug("[response] Bot chose to stay silent");
 		return null;
 	}
 
 	// Handle [SILENCE] mixed with text - send the text part, strip the marker
 	if (responseText.includes(SILENCE_MARKER)) {
 		responseText = responseText.replace(SILENCE_MARKER, "").trim();
-		if (isDev)
-			console.log(
-				"[response] Stripped [SILENCE] marker, remaining text:",
-				responseText,
-			);
+		log.debug(
+			"[response] Stripped [SILENCE] marker, remaining text:",
+			responseText,
+		);
 		if (!responseText) return null;
 	}
 
@@ -119,13 +118,13 @@ export async function sendResponse(
 	if (reactionMatch) {
 		const emoji = reactionMatch[1]?.trim();
 		if (emoji) {
-			if (isDev) console.log("[response] Bot reacting with emoji:", emoji);
+			log.debug("[response] Bot reacting with emoji:", emoji);
 			try {
 				// Telegram only accepts a fixed emoji set; invalid ones are
 				// rejected by the API and handled by the catch below.
 				await ctx.react(emoji as ReactionTypeEmoji["emoji"]);
 			} catch (error) {
-				console.error("[reaction] Error reacting:", error);
+				log.error("[reaction] Error reacting:", error);
 			}
 		}
 		responseText = responseText
@@ -195,13 +194,12 @@ export async function sendResponse(
 		if (isEdit || basePath || isFullAccessActive()) {
 			try {
 				await ctx.replyWithChatAction("upload_photo");
-				if (isDev)
-					console.log(
-						`[image] ${isEdit ? "Edit" : "Generate"} prompt:`,
-						extractedPrompt.slice(0, 300),
-					);
-				const imageBuffer = isEdit
-					? await editImage(extractedPrompt, userImagePath as string)
+				log.debug(
+					`[image] ${isEdit ? "Edit" : "Generate"} prompt:`,
+					extractedPrompt.slice(0, 300),
+				);
+				const imageBuffer = userImagePath
+					? await editImage(extractedPrompt, userImagePath)
 					: await generateImage(extractedPrompt, referencePath);
 
 				const filename = `${getBotName().toLowerCase()}.png`;
@@ -212,62 +210,70 @@ export async function sendResponse(
 				imageSent = true;
 
 				// User-initiated edits don't consume the weekly/photo quotas.
-				if (!isEdit && shouldGenImage) {
+				const consumeWeeklyQuota = !isEdit && shouldGenImage;
+				const consumePhotoRequest = !isEdit && allowPhotoRequest;
+				if (consumeWeeklyQuota) {
 					buffer.lastImageDate = getWeekStart();
 					bufferDirty = true;
 				}
-				if (!isEdit && allowPhotoRequest) {
+				if (consumePhotoRequest) {
 					buffer.allowPhotoRequest = false;
 					bufferDirty = true;
 				}
 				if (bufferDirty) {
-					await saveSensory(buffer);
+					// The passed-in buffer is a stale pre-generation snapshot; apply
+					// only the image flags to a fresh copy under the chat lock so we
+					// don't clobber messages appended by concurrent handlers.
+					await withChatLock(buffer.chatId, async () => {
+						const fresh = await loadSensory(buffer.chatId);
+						if (consumeWeeklyQuota) fresh.lastImageDate = buffer.lastImageDate;
+						if (consumePhotoRequest) fresh.allowPhotoRequest = false;
+						fresh.imageTargetDate = buffer.imageTargetDate;
+						fresh.imageTargetTime = buffer.imageTargetTime;
+						await saveSensory(fresh);
+					});
 				}
 			} catch (error) {
-				console.error("[image] Error generating image:", error);
+				log.error("[image] Error generating image:", error);
 				// Fall through to normal text reply
 			}
 		} else {
-			console.warn("[image] No base image found, skipping image generation");
+			log.warn("[image] No base image found, skipping image generation");
 		}
 	}
 
 	// Send text reply if image wasn't sent (or had no caption)
 	if (!imageSent) {
-		if (isDev)
-			console.log(
-				"[TTS] Checking for marker:",
-				ttsText ? `found "${ttsText}"` : "not found",
-			);
+		log.debug(
+			"[TTS] Checking for marker:",
+			ttsText ? `found "${ttsText}"` : "not found",
+		);
 
 		if (ttsText) {
 			try {
 				await ctx.replyWithChatAction("typing").catch(() => {});
-				if (isDev) console.log("[TTS] Generating speech for:", ttsText);
+				log.debug("[TTS] Generating speech for:", ttsText);
 				const audioPath = await textToSpeech(ttsText);
-				if (isDev) console.log("[TTS] Audio saved to:", audioPath);
+				log.debug("[TTS] Audio saved to:", audioPath);
 				await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
 				if (showTranscription) {
 					await ctx
 						.reply(`📝 ${ttsText}`, replyOptions)
 						.catch((err) =>
-							console.error("[TTS] Failed to show transcription:", err),
+							log.error("[TTS] Failed to show transcription:", err),
 						);
 				}
 				// Cleanup TTS file after sending
 				unlink(audioPath).catch((err) => {
-					if (isDev) console.error("[TTS] Failed to clean up audio file:", err);
+					log.debug("[TTS] Failed to clean up audio file:", err);
 				});
 			} catch (error) {
-				console.error("[TTS] Error generating speech:", error);
+				log.error("[TTS] Error generating speech:", error);
 				try {
 					await ctx.reply(ttsText, replyOptions);
 				} catch (fallbackError) {
 					// The user got no response at all — make sure that is visible
-					console.error(
-						"[TTS] Fallback text reply also failed:",
-						fallbackError,
-					);
+					log.error("[TTS] Fallback text reply also failed:", fallbackError);
 				}
 			}
 		} else {

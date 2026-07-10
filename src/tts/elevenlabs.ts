@@ -1,7 +1,6 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { log } from "../logger.ts";
 import type { TtsProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 export class ElevenLabsTtsProvider implements TtsProvider {
 	readonly name = "elevenlabs";
@@ -16,8 +15,7 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 	}
 
 	async synthesize(text: string): Promise<string> {
-		if (isDev)
-			console.log("[TTS:elevenlabs] Generating speech, voice:", this.voiceId);
+		log.debug("[TTS:elevenlabs] Generating speech, voice:", this.voiceId);
 
 		const audio = await this.client.textToSpeech.convert(this.voiceId, {
 			text,
@@ -31,8 +29,7 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 			chunks.push(chunk);
 		}
 		const buffer = Buffer.concat(chunks);
-		if (isDev)
-			console.log("[TTS:elevenlabs] Received bytes:", buffer.byteLength);
+		log.debug("[TTS:elevenlabs] Received bytes:", buffer.byteLength);
 		await Bun.write(filePath, buffer);
 		return filePath;
 	}

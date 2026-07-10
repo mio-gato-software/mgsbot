@@ -1,7 +1,6 @@
+import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 interface FalResponse {
 	output?: string;
@@ -42,15 +41,13 @@ export class FalChatProvider implements ChatProvider {
 			)
 			.join("\n");
 
-		if (isDev) {
-			console.log(
-				"[FalChatProvider] Calling model",
-				this.model,
-				"with",
-				messages.length,
-				"messages",
-			);
-		}
+		log.debug(
+			"[FalChatProvider] Calling model",
+			this.model,
+			"with",
+			messages.length,
+			"messages",
+		);
 
 		const data = await withRetry(async () => {
 			const response = await fetch("https://fal.run/openrouter/router", {
@@ -81,16 +78,14 @@ export class FalChatProvider implements ChatProvider {
 			throw new Error(`fal.ai model error: ${data.error}`);
 		}
 
-		if (isDev && data.usage) {
-			console.log(
+		if (data.usage) {
+			log.debug(
 				`[tokens:fal] in=${data.usage.prompt_tokens ?? 0} out=${data.usage.completion_tokens ?? 0} cost=${data.usage.cost ?? "?"}`,
 			);
 		}
 
 		const text = data.output ?? "";
-		if (isDev) {
-			console.log("[FalChatProvider] Response:", text.slice(0, 200));
-		}
+		log.debug("[FalChatProvider] Response:", text.slice(0, 200));
 		return text;
 	}
 }

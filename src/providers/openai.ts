@@ -1,9 +1,11 @@
 import OpenAI from "openai";
+import { describeImagePrompt } from "../ai/vision.ts";
+import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
-const isDev = process.env.NODE_ENV === "development";
-
+// Deliberately not extending OpenAiCompatibleChatProvider: this uses the
+// OpenAI SDK's Responses API, not the chat-completions HTTP shape.
 export class OpenAIChatProvider implements ChatProvider {
 	readonly name = "openai";
 	model: string;
@@ -31,15 +33,13 @@ export class OpenAIChatProvider implements ChatProvider {
 			})),
 		];
 
-		if (isDev) {
-			console.log(
-				"[OpenAIChatProvider] Calling model",
-				this.model,
-				"with",
-				messages.length,
-				"messages",
-			);
-		}
+		log.debug(
+			"[OpenAIChatProvider] Calling model",
+			this.model,
+			"with",
+			messages.length,
+			"messages",
+		);
 
 		const response = await withRetry(async () => {
 			const res = await this.client.responses.create({
@@ -51,14 +51,12 @@ export class OpenAIChatProvider implements ChatProvider {
 
 		const text = response.output_text ?? "";
 
-		if (isDev) {
-			if (response.usage) {
-				console.log(
-					`[tokens:openai] in=${response.usage.input_tokens} out=${response.usage.output_tokens}`,
-				);
-			}
-			console.log("[OpenAIChatProvider] Response:", text.slice(0, 200));
+		if (response.usage) {
+			log.debug(
+				`[tokens:openai] in=${response.usage.input_tokens} out=${response.usage.output_tokens}`,
+			);
 		}
+		log.debug("[OpenAIChatProvider] Response:", text.slice(0, 200));
 
 		return text;
 	}
@@ -68,13 +66,9 @@ export class OpenAIChatProvider implements ChatProvider {
 		mimeType: string,
 		caption?: string,
 	): Promise<string> {
-		const prompt = caption
-			? `The user sent this image with the caption: "${caption}". Describe what you see briefly so you can reference it in conversation.`
-			: "The user sent this image. Describe what you see briefly so you can reference it in conversation.";
+		const prompt = describeImagePrompt(caption);
 
-		if (isDev) {
-			console.log("[OpenAIChatProvider] describeImage using model", this.model);
-		}
+		log.debug("[OpenAIChatProvider] describeImage using model", this.model);
 
 		const response = await withRetry(async () => {
 			const res = await this.client.responses.create({
@@ -97,12 +91,7 @@ export class OpenAIChatProvider implements ChatProvider {
 		});
 
 		const text = response.output_text ?? "";
-		if (isDev) {
-			console.log(
-				"[OpenAIChatProvider] describeImage result:",
-				text.slice(0, 200),
-			);
-		}
+		log.debug("[OpenAIChatProvider] describeImage result:", text.slice(0, 200));
 		return text;
 	}
 }

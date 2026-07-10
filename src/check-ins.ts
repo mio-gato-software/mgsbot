@@ -1,8 +1,14 @@
 import { readdir, readFile } from "node:fs/promises";
 import type { Api } from "grammy";
 import { generateResponse } from "./ai/core.ts";
-import { botNow, clampToReasonableHours } from "./bot-time.ts";
+import { botNow, clampToReasonableHours, getWeekStart } from "./bot-time.ts";
 import { generateEmbedding } from "./embeddings.ts";
+import {
+	ACTIVE_CONVERSATION_MS,
+	getRecentFollowUpEvents,
+	wasFollowUpSentToday,
+} from "./follow-ups.ts";
+import { log } from "./logger.ts";
 import {
 	addMessageToSensory,
 	getFactsForSubjects,
@@ -14,7 +20,9 @@ import {
 	loadRelationshipMemory,
 	loadSensory,
 	withChatLock,
+	withCheckInsLock,
 } from "./memory/index.ts";
+import { unwrapVersioned, wrapVersioned } from "./memory/versioning.ts";
 import { assembleSystemPrompt } from "./prompt/assemble.ts";
 import { buildPromptContext } from "./prompt/context.ts";
 import { buildMessages } from "./prompt/history.ts";
@@ -25,14 +33,16 @@ import type {
 } from "./types.ts";
 import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
-const isDev = process.env.NODE_ENV === "development";
-
 const CHECK_INS_PATH = "./memory/check-ins.json";
 const SENSORY_DIR = "./memory/sensory";
-const FOLLOW_UPS_PATH = "./memory/follow-ups.json";
 
-const ACTIVE_CONVERSATION_MS = 15 * 60 * 1000; // 15 minutes
 const POSTPONE_MS = 60 * 60 * 1000; // 1 hour
+
+// Silence-aware backoff: once this many consecutive proactive messages get no
+// reply, drop to at most one check-in per week until the user writes again —
+// a real friend backs off instead of insisting.
+const UNANSWERED_BACKOFF_THRESHOLD = 2;
+const RECENT_MESSAGES_KEPT = 5;
 
 const CHECK_IN_STRATEGIES = [
 	"random_thought",
@@ -50,30 +60,25 @@ type CheckInStrategy = (typeof CHECK_IN_STRATEGIES)[number];
 async function loadCheckIns(): Promise<CheckInState[]> {
 	try {
 		const data = await readFile(CHECK_INS_PATH, "utf-8");
-		return JSON.parse(data) as CheckInState[];
+		return unwrapVersioned<CheckInState[]>(JSON.parse(data));
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[check-ins] Error loading check-ins.json:", err);
+			log.error("[check-ins] Error loading check-ins.json:", err);
 		}
 		return [];
 	}
 }
 
 async function saveCheckIns(states: CheckInState[]): Promise<void> {
-	await atomicWriteFile(CHECK_INS_PATH, JSON.stringify(states, null, 2));
+	await atomicWriteFile(
+		CHECK_INS_PATH,
+		JSON.stringify(wrapVersioned(states), null, 2),
+	);
 }
 
 // --- Scheduling ---
 
-export function getWeekStart(date?: Date | number): string {
-	const d = botNow(date);
-	// Monday-based week: dayOfWeek 0=Sun, 1=Mon...6=Sat
-	const dayOfWeek = d.day();
-	const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-	return d.subtract(daysFromMonday, "day").format("YYYY-MM-DD");
-}
-
-export { clampToReasonableHours } from "./bot-time.ts";
+export { clampToReasonableHours, getWeekStart } from "./bot-time.ts";
 
 /**
  * Generate random time slots for the week with weighted hour distribution.
@@ -188,39 +193,38 @@ async function getEligibleChatIds(): Promise<number[]> {
 		return chatIds;
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[check-ins] Error reading sensory dir:", err);
+			log.error("[check-ins] Error reading sensory dir:", err);
 		}
 		return [];
 	}
 }
 
-// --- Follow-up cross-check ---
-
-async function followUpSentToday(): Promise<boolean> {
-	try {
-		const data = await readFile(FOLLOW_UPS_PATH, "utf-8");
-		const followUps = JSON.parse(data) as Array<{
-			status: string;
-			scheduledFor: number;
-		}>;
-		const todayStart = botNow().startOf("day").valueOf();
-		return followUps.some(
-			(fu) => fu.status === "sent" && fu.scheduledFor >= todayStart,
-		);
-	} catch {
-		return false;
-	}
-}
-
 // --- Strategy Selection ---
 
-function pickStrategy(recentStrategies: string[]): CheckInStrategy {
+export function pickStrategy(
+	recentStrategies: string[],
+	exclude: readonly string[] = [],
+): CheckInStrategy {
 	// Filter out recently used strategies to avoid repetition
 	const available = CHECK_IN_STRATEGIES.filter(
-		(s) => !recentStrategies.slice(-3).includes(s),
+		(s) => !recentStrategies.slice(-3).includes(s) && !exclude.includes(s),
 	);
-	const pool = available.length > 0 ? available : [...CHECK_IN_STRATEGIES];
-	return pool[Math.floor(Math.random() * pool.length)] ?? "random_thought";
+	const pool =
+		available.length > 0
+			? available
+			: CHECK_IN_STRATEGIES.filter((s) => !exclude.includes(s));
+	const finalPool = pool.length > 0 ? pool : [...CHECK_IN_STRATEGIES];
+	return (
+		finalPool[Math.floor(Math.random() * finalPool.length)] ?? "random_thought"
+	);
+}
+
+/** True if the user has written anything after the given timestamp. */
+export function hasUserMessageSince(
+	messages: ConversationMessage[],
+	since: number,
+): boolean {
+	return messages.some((m) => m.role === "user" && m.timestamp > since);
 }
 
 function getStrategyInstruction(strategy: CheckInStrategy): string {
@@ -245,6 +249,7 @@ function getStrategyInstruction(strategy: CheckInStrategy): string {
 async function generateCheckInMessage(
 	chatId: number,
 	strategy: CheckInStrategy,
+	options?: { avoidTopics?: string[]; unanswered?: boolean },
 ): Promise<string> {
 	const buffer = await loadSensory(chatId);
 
@@ -298,10 +303,25 @@ async function generateCheckInMessage(
 	);
 
 	const strategyInstruction = getStrategyInstruction(strategy);
+
+	const avoidTopics = (options?.avoidTopics ?? []).filter((t) => t.trim());
+	const freshnessBlock = avoidTopics.length
+		? `\n\nTopics you ALREADY brought up in recent proactive messages or follow-ups. Do NOT mention any of them again — not even as a joke, callback, or reproach. Pick something completely different:\n${avoidTopics
+				.map((t) => `- "${t.slice(0, 150)}"`)
+				.join("\n")}`
+		: "";
+
+	const unansweredBlock = options?.unanswered
+		? `\n\nIMPORTANT: your recent proactive messages got NO reply. Act like a considerate friend:
+- Do NOT mention the silence, do NOT reproach, do NOT ask why they haven't answered
+- Do NOT revisit the topics of those unanswered messages
+- Send something fresh, light, and self-contained that reads fine even if they never reply`
+		: "";
+
 	const checkInBlock = `\n\n## Special instruction: Proactive message
 You are STARTING the conversation. The user didn't write to you — it just occurred to you to message them because that's how you are with people you care about.
 
-${strategyInstruction}
+${strategyInstruction}${freshnessBlock}${unansweredBlock}
 
 How your message should sound:
 - Like an impulsive WhatsApp message, 1-3 sentences max
@@ -344,117 +364,151 @@ export async function checkAndSendCheckIns(
 		Number.parseInt(process.env.CHECK_INS_PER_WEEK ?? "2", 10) || 2,
 	);
 
-	const states = await loadCheckIns();
-	const currentWeekStart = getWeekStart();
-	let changed = false;
+	// Hold the check-ins lock for the whole cycle so overlapping ticks (or any
+	// future writer) can't clobber slot status changes with a stale array.
+	await withCheckInsLock(async () => {
+		const states = await loadCheckIns();
+		const currentWeekStart = getWeekStart();
+		let changed = false;
 
-	for (const chatId of chatIds) {
-		let state = states.find((s) => s.chatId === chatId);
+		for (const chatId of chatIds) {
+			let state = states.find((s) => s.chatId === chatId);
 
-		// Create state if missing
-		if (!state) {
-			state = {
-				chatId,
-				weekStart: currentWeekStart,
-				slots: generateWeeklySlots(checkInsPerWeek),
-				lastSentTimestamp: 0,
-				recentStrategies: [],
-			};
-			states.push(state);
-			changed = true;
-			if (isDev)
-				console.log(
+			// Create state if missing
+			if (!state) {
+				state = {
+					chatId,
+					weekStart: currentWeekStart,
+					slots: generateWeeklySlots(checkInsPerWeek),
+					lastSentTimestamp: 0,
+					recentStrategies: [],
+				};
+				states.push(state);
+				changed = true;
+				log.debug(
 					`[check-ins] Created state for chat ${chatId} with ${state.slots.length} slots`,
 				);
-		}
+			}
 
-		// New week? Regenerate slots
-		if (state.weekStart !== currentWeekStart) {
-			state.weekStart = currentWeekStart;
-			state.slots = generateWeeklySlots(checkInsPerWeek);
-			changed = true;
-			if (isDev)
-				console.log(
+			// New week? Regenerate slots
+			if (state.weekStart !== currentWeekStart) {
+				state.weekStart = currentWeekStart;
+				state.slots = generateWeeklySlots(checkInsPerWeek);
+				changed = true;
+				log.debug(
 					`[check-ins] New week for chat ${chatId}, generated ${state.slots.length} slots`,
 				);
-		}
+			}
 
-		// Find the next pending slot that's due
-		const now = Date.now();
-		const pendingSlot = state.slots.find(
-			(s) => s.status === "pending" && s.scheduledFor <= now,
-		);
-		if (!pendingSlot) continue;
+			// Find the next pending slot that's due
+			const now = Date.now();
+			const pendingSlot = state.slots.find(
+				(s) => s.status === "pending" && s.scheduledFor <= now,
+			);
+			if (!pendingSlot) continue;
 
-		// Guard: follow-up already sent today
-		if (await followUpSentToday()) {
-			if (isDev)
-				console.log("[check-ins] Follow-up sent today, skipping check-in");
-			continue;
-		}
-
-		// Guard: active conversation
-		const buffer = await loadSensory(chatId);
-		if (now - buffer.lastActivity < ACTIVE_CONVERSATION_MS) {
-			// Postpone by 1 hour
-			pendingSlot.scheduledFor = clampToReasonableHours(now + POSTPONE_MS);
-			changed = true;
-			if (isDev)
-				console.log("[check-ins] Active conversation, postponed check-in");
-			continue;
-		}
-
-		// Pick strategy and generate message
-		const strategy = pickStrategy(state.recentStrategies);
-
-		try {
-			const message = await generateCheckInMessage(chatId, strategy);
-
-			if (!message.trim()) {
-				if (isDev) console.log("[check-ins] Empty message generated, skipping");
-				pendingSlot.status = "skipped";
-				changed = true;
+			// Guard: follow-up already sent today
+			if (await wasFollowUpSentToday()) {
+				log.debug("[check-ins] Follow-up sent today, skipping check-in");
 				continue;
 			}
 
-			// Send the message
+			// Guard: active conversation
+			const buffer = await loadSensory(chatId);
+			if (now - buffer.lastActivity < ACTIVE_CONVERSATION_MS) {
+				// Postpone by 1 hour
+				pendingSlot.scheduledFor = clampToReasonableHours(now + POSTPONE_MS);
+				changed = true;
+				log.debug("[check-ins] Active conversation, postponed check-in");
+				continue;
+			}
+
+			// Silence detection: has the user written since our last proactive send?
+			const unansweredStreak =
+				state.lastSentTimestamp > 0 &&
+				!hasUserMessageSince(buffer.messages, state.lastSentTimestamp)
+					? (state.unansweredStreak ?? 0) + 1
+					: 0;
+
+			// Backoff: while the user stays silent, cap at one check-in per week.
+			const sentThisWeek = state.slots.some((s) => s.status === "sent");
+			if (unansweredStreak >= UNANSWERED_BACKOFF_THRESHOLD && sentThisWeek) {
+				pendingSlot.status = "skipped";
+				changed = true;
+				log.debug(
+					`[check-ins] User silent (streak=${unansweredStreak}), skipping extra weekly slot for chat ${chatId}`,
+				);
+				continue;
+			}
+
+			// Freshness: never re-raise topics from recent proactive messages or
+			// tracked follow-ups. Once the user goes quiet, also drop
+			// memory_callback — it's the strategy that recycles old shared topics.
+			const avoidTopics = [
+				...(state.recentMessages ?? []).map((m) => m.text),
+				...(await getRecentFollowUpEvents()),
+			];
+			const strategy = pickStrategy(
+				state.recentStrategies,
+				unansweredStreak >= 1 ? ["memory_callback"] : [],
+			);
+
 			try {
-				await api.sendMessage(chatId, message, { parse_mode: "Markdown" });
-			} catch {
-				await api.sendMessage(chatId, message);
-			}
+				const message = await generateCheckInMessage(chatId, strategy, {
+					avoidTopics,
+					unanswered: unansweredStreak >= 1,
+				});
 
-			pendingSlot.status = "sent";
-			state.lastSentTimestamp = now;
-			state.recentStrategies.push(strategy);
-			if (state.recentStrategies.length > 5) {
-				state.recentStrategies = state.recentStrategies.slice(-5);
-			}
-			changed = true;
+				if (!message.trim()) {
+					log.debug("[check-ins] Empty message generated, skipping");
+					pendingSlot.status = "skipped";
+					changed = true;
+					continue;
+				}
 
-			if (isDev)
-				console.log(
+				// Send the message
+				try {
+					await api.sendMessage(chatId, message, { parse_mode: "Markdown" });
+				} catch {
+					await api.sendMessage(chatId, message);
+				}
+
+				pendingSlot.status = "sent";
+				state.lastSentTimestamp = now;
+				state.unansweredStreak = unansweredStreak;
+				state.recentStrategies.push(strategy);
+				if (state.recentStrategies.length > 5) {
+					state.recentStrategies = state.recentStrategies.slice(-5);
+				}
+				state.recentMessages = [
+					...(state.recentMessages ?? []),
+					{ text: message.slice(0, 200), sentAt: now },
+				].slice(-RECENT_MESSAGES_KEPT);
+				changed = true;
+
+				log.debug(
 					`[check-ins] Sent check-in (strategy=${strategy}) to chat ${chatId}`,
 				);
 
-			// Save bot message to sensory buffer for continuity
-			const botMessage: ConversationMessage = {
-				role: "model",
-				content: message,
-				timestamp: Date.now(),
-			};
-			await withChatLock(chatId, async () => {
-				const fresh = await loadSensory(chatId);
-				await addMessageToSensory(fresh, botMessage);
-			});
-		} catch (error) {
-			console.error("[check-ins] Error sending check-in:", error);
-			pendingSlot.status = "skipped";
-			changed = true;
+				// Save bot message to sensory buffer for continuity
+				const botMessage: ConversationMessage = {
+					role: "model",
+					content: message,
+					timestamp: Date.now(),
+				};
+				await withChatLock(chatId, async () => {
+					const fresh = await loadSensory(chatId);
+					await addMessageToSensory(fresh, botMessage);
+				});
+			} catch (error) {
+				log.error("[check-ins] Error sending check-in:", error);
+				pendingSlot.status = "skipped";
+				changed = true;
+			}
 		}
-	}
 
-	if (changed) await saveCheckIns(states);
+		if (changed) await saveCheckIns(states);
+	});
 }
 
 // --- Initialization ---
@@ -464,9 +518,12 @@ export async function initCheckIns(): Promise<void> {
 		await readFile(CHECK_INS_PATH, "utf-8");
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[check-ins] Error reading check-ins.json:", err);
+			log.error("[check-ins] Error reading check-ins.json:", err);
 		}
-		await atomicWriteFile(CHECK_INS_PATH, "[]");
-		if (isDev) console.log("[check-ins] Created check-ins.json");
+		await atomicWriteFile(
+			CHECK_INS_PATH,
+			JSON.stringify(wrapVersioned([]), null, 2),
+		);
+		log.debug("[check-ins] Created check-ins.json");
 	}
 }

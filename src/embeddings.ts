@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import { GoogleGenAI } from "@google/genai";
+import { log } from "./logger.ts";
 import { isFileNotFound } from "./utils.ts";
 
 let _ai: GoogleGenAI | null = null;
@@ -10,8 +11,7 @@ function getAI(): GoogleGenAI {
 	return _ai;
 }
 export const EMBEDDING_MODEL = "gemini-embedding-2";
-
-const isDev = process.env.NODE_ENV === "development";
+export const EMBEDDING_DIM = 768;
 
 const CACHE_PATH = "./memory/embedding-cache.json";
 const MAX_CACHE_ENTRIES = 5000;
@@ -26,14 +26,13 @@ function loadDiskCache(): void {
 			const raw = readFileSync(CACHE_PATH, "utf-8");
 			const entries = JSON.parse(raw) as [string, number[]][];
 			diskCache = new Map(entries);
-			if (isDev)
-				console.log(
-					`[embeddings] Loaded ${diskCache.size} cached embeddings from disk`,
-				);
+			log.debug(
+				`[embeddings] Loaded ${diskCache.size} cached embeddings from disk`,
+			);
 		}
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[embeddings] Error loading cache:", err);
+			log.error("[embeddings] Error loading cache:", err);
 		}
 		diskCache = new Map();
 	}
@@ -52,7 +51,7 @@ async function persistDiskCache(): Promise<void> {
 		await rename(tmpPath, CACHE_PATH);
 		diskCacheDirty = false;
 	} catch (error) {
-		console.error("[embeddings] Failed to persist cache:", error);
+		log.error("[embeddings] Failed to persist cache:", error);
 	}
 }
 
@@ -62,7 +61,7 @@ loadDiskCache();
 // Persist every 60 seconds if dirty (non-blocking)
 setInterval(() => {
 	persistDiskCache().catch((err) =>
-		console.error("[embeddings] Persist interval error:", err),
+		log.error("[embeddings] Persist interval error:", err),
 	);
 }, 60_000);
 
@@ -83,6 +82,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 			const response = await getAI().models.embedContent({
 				model: EMBEDDING_MODEL,
 				contents: text,
+				// The model defaults to 3072 dims; every stored embedding is 768-dim,
+				// so pin it — mixed dimensions silently break cosine similarity.
+				config: { outputDimensionality: EMBEDDING_DIM },
 			});
 
 			const embedding = response.embeddings?.[0]?.values;
@@ -92,10 +94,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
 			diskCache.set(hash, embedding);
 			diskCacheDirty = true;
-			if (isDev)
-				console.log(
-					`[embeddings] Generated embedding for: "${text.slice(0, 60)}..."`,
-				);
+			log.debug(
+				`[embeddings] Generated embedding for: "${text.slice(0, 60)}..."`,
+			);
 			return embedding;
 		} catch (err: unknown) {
 			lastError = err;
@@ -105,10 +106,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 					: undefined;
 			if (status === 429 && attempt < MAX_RETRIES - 1) {
 				const delay = 1000 * 2 ** attempt;
-				if (isDev)
-					console.warn(
-						`[embeddings] Rate limited (429), retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
-					);
+				log.debug(
+					`[embeddings] Rate limited (429), retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
+				);
 				await new Promise((resolve) => setTimeout(resolve, delay));
 				continue;
 			}

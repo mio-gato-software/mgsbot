@@ -5,12 +5,22 @@ import {
 	GoogleGenAI,
 	type Part,
 } from "@google/genai";
+import { log } from "../logger.ts";
 import { createChatProvider } from "../providers/index.ts";
 import { supportsVision } from "../providers/types.ts";
 import { withRetry } from "../utils.ts";
 
-const isDev = process.env.NODE_ENV === "development";
 const MODEL = "gemini-3-flash-preview";
+
+export const DESCRIBE_IMAGE_PROMPT =
+	"The user sent this image. Describe what you see briefly so you can reference it in conversation.";
+
+// Shared across vision-capable providers so the prompt stays consistent.
+export function describeImagePrompt(caption?: string): string {
+	return caption
+		? `The user sent this image with the caption: "${caption}". Describe what you see briefly so you can reference it in conversation.`
+		: DESCRIBE_IMAGE_PROMPT;
+}
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
@@ -21,7 +31,7 @@ function getAI(): GoogleGenAI {
 function logTokenUsage(label: string, response: GenerateContentResponse): void {
 	const usage = response.usageMetadata;
 	if (!usage) return;
-	console.log(
+	log.info(
 		`[tokens:${label}] in=${usage.promptTokenCount ?? 0} out=${usage.candidatesTokenCount ?? 0} total=${usage.totalTokenCount ?? 0}`,
 	);
 }
@@ -36,29 +46,24 @@ export async function describeImage(
 
 		const provider = createChatProvider();
 		if (supportsVision(provider)) {
-			if (isDev)
-				console.log(
-					`[describeImage] Using provider: ${provider.name} (${provider.model})`,
-				);
+			log.debug(
+				`[describeImage] Using provider: ${provider.name} (${provider.model})`,
+			);
 			try {
 				return await provider.describeImage(base64Data, mimeType, caption);
 			} catch (error) {
-				console.error(
+				log.error(
 					`[describeImage] Provider ${provider.name} failed, falling back to Gemini:`,
 					error,
 				);
 			}
 		}
 
-		if (isDev) console.log("[describeImage] Using Gemini, mimeType:", mimeType);
+		log.debug("[describeImage] Using Gemini, mimeType:", mimeType);
 
 		const parts: Part[] = [
 			{ inlineData: { mimeType, data: base64Data } },
-			{
-				text: caption
-					? `The user sent this image with the caption: "${caption}". Describe what you see briefly so you can reference it in conversation.`
-					: "The user sent this image. Describe what you see briefly so you can reference it in conversation.",
-			},
+			{ text: describeImagePrompt(caption) },
 		];
 
 		const response = await withRetry(() =>
@@ -70,10 +75,10 @@ export async function describeImage(
 
 		logTokenUsage("describeImage", response);
 		const text = response.text ?? "[image description failed]";
-		if (isDev) console.log("[describeImage] Result:", text.slice(0, 200));
+		log.debug("[describeImage] Result:", text.slice(0, 200));
 		return text;
 	} catch (error) {
-		console.error("[describeImage] Error:", error);
+		log.error("[describeImage] Error:", error);
 		return "[image description failed]";
 	}
 }
@@ -92,7 +97,7 @@ export async function analyzeYouTube(
 			{ text: prompt },
 		];
 
-		if (isDev) console.log("[analyzeYouTube] URL:", videoUrl);
+		log.debug("[analyzeYouTube] URL:", videoUrl);
 
 		const response = await getAI().models.generateContent({
 			model: MODEL,
@@ -101,10 +106,10 @@ export async function analyzeYouTube(
 
 		logTokenUsage("analyzeYouTube", response);
 		const text = response.text ?? "[video analysis failed]";
-		if (isDev) console.log("[analyzeYouTube] Result:", text.slice(0, 200));
+		log.debug("[analyzeYouTube] Result:", text.slice(0, 200));
 		return text;
 	} catch (error) {
-		console.error("[analyzeYouTube] Error:", error);
+		log.error("[analyzeYouTube] Error:", error);
 		return "[video analysis failed]";
 	}
 }

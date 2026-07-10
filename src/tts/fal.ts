@@ -1,6 +1,5 @@
+import { log } from "../logger.ts";
 import type { TtsProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 interface FalTtsResponse {
 	audio?: {
@@ -21,7 +20,7 @@ export class FalTtsProvider implements TtsProvider {
 	}
 
 	async synthesize(text: string): Promise<string> {
-		if (isDev) console.log("[TTS:fal] Generating speech, voice:", this.voice);
+		log.debug("[TTS:fal] Generating speech, voice:", this.voice);
 
 		const response = await fetch(
 			"https://fal.run/fal-ai/elevenlabs/tts/eleven-v3",
@@ -66,7 +65,7 @@ export class FalTtsProvider implements TtsProvider {
 
 		const filePath = `./audios/tts_fal_${Date.now()}.mp3`;
 		const buffer = Buffer.from(await audioResponse.arrayBuffer());
-		if (isDev) console.log("[TTS:fal] Received bytes:", buffer.byteLength);
+		log.debug("[TTS:fal] Received bytes:", buffer.byteLength);
 		await Bun.write(filePath, buffer);
 		return filePath;
 	}

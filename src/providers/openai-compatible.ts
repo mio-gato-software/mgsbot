@@ -1,7 +1,7 @@
+import { alertOwner, errorSummary } from "../alerts.ts";
+import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 export interface OpenAiCompatibleResponse {
 	choices: Array<{
@@ -75,36 +75,50 @@ export class OpenAiCompatibleChatProvider implements ChatProvider {
 		logContext = "",
 	): Promise<string> {
 		const data = await withRetry(async () => {
-			const response = await fetch(this.endpoint, {
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${this.apiKey}`,
-					"Content-Type": "application/json",
-					...this.extraHeaders,
-				},
-				body: JSON.stringify({
-					model: this.model,
-					messages,
-					...this.extraBody,
-				}),
-				signal: AbortSignal.timeout(this.timeoutMs),
-			});
-			if (!response.ok) {
-				const errorBody = await response.text().catch(() => "");
-				throw new Error(
-					`${this.errorLabel}${logContext} API error: ${response.status} ${response.statusText} ${errorBody}`,
-				);
-			}
-			return (await response.json()) as OpenAiCompatibleResponse;
+			return await this.fetchCompletion(messages, logContext);
+		}).catch(async (error: unknown) => {
+			// Retries exhausted: notify the owner (rate-limited), then rethrow
+			await alertOwner(
+				"chat-provider",
+				`${this.errorLabel}${logContext} request failed after retries: ${errorSummary(error)}`,
+			);
+			throw error;
 		});
 
-		if (isDev && data.usage) {
-			console.log(
+		if (data.usage) {
+			log.debug(
 				`[tokens:${this.name}${logContext}] in=${data.usage.prompt_tokens} out=${data.usage.completion_tokens} total=${data.usage.total_tokens}`,
 			);
 		}
 
 		return data.choices?.[0]?.message?.content ?? "";
+	}
+
+	private async fetchCompletion(
+		messages: Array<{ role: string; content: unknown }>,
+		logContext: string,
+	): Promise<OpenAiCompatibleResponse> {
+		const response = await fetch(this.endpoint, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${this.apiKey}`,
+				"Content-Type": "application/json",
+				...this.extraHeaders,
+			},
+			body: JSON.stringify({
+				model: this.model,
+				messages,
+				...this.extraBody,
+			}),
+			signal: AbortSignal.timeout(this.timeoutMs),
+		});
+		if (!response.ok) {
+			const errorBody = await response.text().catch(() => "");
+			throw new Error(
+				`${this.errorLabel}${logContext} API error: ${response.status} ${response.statusText} ${errorBody}`,
+			);
+		}
+		return (await response.json()) as OpenAiCompatibleResponse;
 	}
 
 	async generateResponse(
@@ -119,20 +133,16 @@ export class OpenAiCompatibleChatProvider implements ChatProvider {
 			})),
 		];
 
-		if (isDev) {
-			console.log(
-				`[${this.name}] Calling model`,
-				this.model,
-				"with",
-				converted.length,
-				"messages",
-			);
-		}
+		log.debug(
+			`[${this.name}] Calling model`,
+			this.model,
+			"with",
+			converted.length,
+			"messages",
+		);
 
 		const text = await this.chatCompletion(converted);
-		if (isDev) {
-			console.log(`[${this.name}] Response:`, text.slice(0, 200));
-		}
+		log.debug(`[${this.name}] Response:`, text.slice(0, 200));
 		return text;
 	}
 }

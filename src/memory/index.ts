@@ -5,6 +5,7 @@ import { EPISODES_DIR } from "./episodes.ts";
 import { RELATIONSHIPS_DIR } from "./relationships.ts";
 import { SEMANTIC_PATH } from "./semantic.ts";
 import { SENSORY_DIR } from "./sensory.ts";
+import { wrapVersioned } from "./versioning.ts";
 
 export {
 	getChapterForMonth,
@@ -22,7 +23,10 @@ export {
 export {
 	withChapterLock,
 	withChatLock,
+	withCheckInsLock,
 	withEpisodeLock,
+	withFollowUpsLock,
+	withPersonalityLock,
 	withRelationshipLock,
 	withSemanticLock,
 } from "./locks.ts";
@@ -34,6 +38,7 @@ export {
 export {
 	loadRelationshipMemory,
 	saveRelationshipMemory,
+	updateRelationshipMemory,
 } from "./relationships.ts";
 export {
 	addSemanticFacts,
@@ -50,6 +55,11 @@ export {
 	loadSensory,
 	saveSensory,
 } from "./sensory.ts";
+export {
+	CURRENT_SCHEMA_VERSION,
+	unwrapVersioned,
+	wrapVersioned,
+} from "./versioning.ts";
 
 export async function initMemoryDirs(): Promise<void> {
 	if (!existsSync(SENSORY_DIR)) mkdirSync(SENSORY_DIR, { recursive: true });
@@ -59,6 +69,6 @@ export async function initMemoryDirs(): Promise<void> {
 	if (!existsSync(CHAPTERS_DIR)) mkdirSync(CHAPTERS_DIR, { recursive: true });
 	// Create semantic.json if it doesn't exist
 	if (!existsSync(SEMANTIC_PATH)) {
-		await writeFile(SEMANTIC_PATH, "[]");
+		await writeFile(SEMANTIC_PATH, JSON.stringify(wrapVersioned([]), null, 2));
 	}
 }

@@ -1,3 +1,4 @@
+import { log } from "../logger.ts";
 import {
 	type ChatProviderName,
 	isChatProviderName,
@@ -28,7 +29,7 @@ export function createChatProvider(): ChatProvider {
 
 	cachedProvider = buildChatProvider(providerName);
 
-	console.log(`[chat] Using provider: ${cachedProvider.name}`);
+	log.info(`[chat] Using provider: ${cachedProvider.name}`);
 	return cachedProvider;
 }
 
@@ -81,7 +82,7 @@ export function switchChatProvider(
 	}
 	cachedProvider = buildChatProvider(normalized, model);
 
-	console.log(
+	log.info(
 		`[chat] Switched to provider: ${cachedProvider.name}, model: ${cachedProvider.model}`,
 	);
 	return cachedProvider;

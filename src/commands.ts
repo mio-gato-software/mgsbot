@@ -1,6 +1,7 @@
 import type { Bot } from "grammy";
 import { setBotOff } from "./bot-state.ts";
 import { isGroupChat } from "./conversation.ts";
+import { log } from "./logger.ts";
 import {
 	decayConfidence,
 	loadSensory,
@@ -27,9 +28,7 @@ export function registerCommands(bot: Bot): void {
 		const modelArg =
 			parts.length > 1 ? parts.slice(1).join(" ").trim() : undefined;
 
-		console.log(
-			`[provider] Command received: "${matchStr}" from ${ctx.from?.id}`,
-		);
+		log.info(`[provider] Command received: "${matchStr}" from ${ctx.from?.id}`);
 
 		if (!providerArg) {
 			const info = getChatProviderInfo();
