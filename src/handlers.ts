@@ -6,6 +6,7 @@ import type { Bot, Context, MiddlewareFn } from "grammy";
 import { classifyGroupMessageIntent } from "./ai/classifiers.ts";
 import { analyzeYouTube, describeImage } from "./ai/vision.ts";
 import { isBotOff, isSleepingHour } from "./bot-state.ts";
+import { startChatAction, withChatAction } from "./chat-actions.ts";
 import { registerCommands } from "./commands.ts";
 import { getBotName, isBotConfigured, loadConfig } from "./config.ts";
 import {
@@ -209,14 +210,17 @@ export function registerHandlers(bot: Bot): void {
 						: safeMediaExtension(mimeType.split("/")[1], "mp3");
 					const prefix = replyVoice ? "voice_reply" : "audio_reply";
 
-					const transcription = await downloadAndTranscribeByFileId(
-						ctx.api,
-						botToken,
-						fileId,
-						mimeType,
-						fileExtension,
-						prefix,
-						replyMessageId,
+					// Receipt feedback while the replied audio downloads + transcribes
+					const transcription = await withChatAction(ctx, "typing", () =>
+						downloadAndTranscribeByFileId(
+							ctx.api,
+							botToken,
+							fileId,
+							mimeType,
+							fileExtension,
+							prefix,
+							replyMessageId,
+						),
 					);
 
 					const audioSenderUser = replyMsg?.from;
@@ -262,6 +266,9 @@ export function registerHandlers(bot: Bot): void {
 					return;
 				}
 
+				// Receipt feedback while the replied photo downloads and gets
+				// pre-analyzed; stopped before processConversation takes over.
+				const receiving = startChatAction(ctx, "typing");
 				try {
 					const photo = replyPhoto[replyPhoto.length - 1];
 					if (!photo) throw new Error("No photo found in replied message");
@@ -313,6 +320,7 @@ export function registerHandlers(bot: Bot): void {
 							const content = text
 								? `[Image from ${photoSender}]\n\n${safeName}'s message: "${text}"`
 								: `[Image from ${photoSender}]`;
+							receiving.stop();
 							await processConversationAndTrackGroupContinuation(
 								ctx,
 								content,
@@ -344,6 +352,7 @@ export function registerHandlers(bot: Bot): void {
 									? `[Image from ${photoSender}]: ${description}\n\n${safeName}'s message: "${text}"`
 									: `[Image from ${photoSender}]: ${description}`;
 							}
+							receiving.stop();
 							await processConversationAndTrackGroupContinuation(
 								ctx,
 								content,
@@ -365,6 +374,9 @@ export function registerHandlers(bot: Bot): void {
 						await ctx
 							.reply(`[Dev] Reply-to-photo error: ${error}`)
 							.catch(() => {});
+				} finally {
+					// Idempotent: guards against the indicator leaking on early errors.
+					receiving.stop();
 				}
 				return;
 			}

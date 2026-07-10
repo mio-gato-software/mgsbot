@@ -3,6 +3,7 @@ import type { Context } from "grammy";
 import { InputFile } from "grammy";
 import type { ReactionTypeEmoji } from "grammy/types";
 import { getBaseImagePath } from "./appearance.ts";
+import type { ChatActionHandle } from "./chat-actions.ts";
 import { getBotName } from "./config.ts";
 import { editImage, generateImage } from "./image/index.ts";
 import { getWeekStart } from "./image-scheduler.ts";
@@ -62,6 +63,8 @@ export interface SendResponseOptions {
 	buffer: SensoryBuffer;
 	isGroup: boolean;
 	userImagePath?: string;
+	/** Live indicator from the caller; switched per modality (photo/voice). */
+	chatAction?: ChatActionHandle;
 }
 
 export interface SendResponseResult {
@@ -86,6 +89,7 @@ export async function sendResponse(
 		buffer,
 		isGroup,
 		userImagePath,
+		chatAction,
 	} = options;
 	let responseText = options.responseText;
 	const quoteMarker = extractQuoteReplyMarker(responseText);
@@ -193,7 +197,13 @@ export async function sendResponse(
 		// we don't need the character base either.
 		if (isEdit || basePath || isFullAccessActive()) {
 			try {
-				await ctx.replyWithChatAction("upload_photo");
+				// Generation takes many seconds — keep "sending photo…" alive via
+				// the caller's handle instead of a single ~5s action.
+				if (chatAction) {
+					chatAction.update("upload_photo");
+				} else {
+					await ctx.replyWithChatAction("upload_photo").catch(() => {});
+				}
 				log.debug(
 					`[image] ${isEdit ? "Edit" : "Generate"} prompt:`,
 					extractedPrompt.slice(0, 300),
@@ -251,7 +261,13 @@ export async function sendResponse(
 
 		if (ttsText) {
 			try {
-				await ctx.replyWithChatAction("typing").catch(() => {});
+				// A voice reply should look like one: "recording voice…" while the
+				// audio is synthesized, not "typing…".
+				if (chatAction) {
+					chatAction.update("record_voice");
+				} else {
+					await ctx.replyWithChatAction("record_voice").catch(() => {});
+				}
 				log.debug("[TTS] Generating speech for:", ttsText);
 				const audioPath = await textToSpeech(ttsText);
 				log.debug("[TTS] Audio saved to:", audioPath);
@@ -278,7 +294,12 @@ export async function sendResponse(
 			}
 		} else {
 			try {
-				await ctx.replyWithChatAction("typing").catch(() => {});
+				// Switch back to typing in case an image attempt changed the action.
+				if (chatAction) {
+					chatAction.update("typing");
+				} else {
+					await ctx.replyWithChatAction("typing").catch(() => {});
+				}
 				await ctx.reply(responseText, {
 					...replyOptions,
 					parse_mode: "Markdown",
