@@ -1,3 +1,4 @@
+import { log } from "../logger.ts";
 import { getTraitDefinitionsForPrompt } from "../personality.ts";
 import type {
 	Episode,
@@ -8,8 +9,6 @@ import type {
 import { TRAIT_NAMES } from "../types.ts";
 import { hasFollowUpIntent } from "./classifiers.ts";
 import { generateResponse } from "./core.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 const VALID_CATEGORIES = new Set(["person", "group", "rule", "event"]);
 const VALID_TRAIT_NAMES = new Set<string>(TRAIT_NAMES);
@@ -329,7 +328,7 @@ Respond ONLY with JSON:
 		if (!jsonMatch) return validateLongTermMemoryUpdate({});
 		return validateLongTermMemoryUpdate(JSON.parse(jsonMatch[0]));
 	} catch (error) {
-		if (isDev) console.error("[long-term-memory] Update failed:", error);
+		log.debug("[long-term-memory] Update failed:", error);
 		return validateLongTermMemoryUpdate({});
 	}
 }
@@ -397,7 +396,7 @@ ${recentMessages}`;
 				typeof fu.question === "string",
 		);
 	} catch (error) {
-		if (isDev) console.error("[extractFollowUps] Error:", error);
+		log.debug("[extractFollowUps] Error:", error);
 		return [];
 	}
 }

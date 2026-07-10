@@ -226,10 +226,14 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 | `SIMPLE_ASSISTANT_MODE` | `false` | Disables personality, media processing, image generation, and memory. Uses a basic "helpful assistant" prompt. |
 | `ENABLE_SLEEP_SCHEDULE` | `true` | Bot sleeps 11:30 PM – 6:00 AM in its configured timezone |
 | `BOT_TIMEZONE` | `America/Santo_Domingo` | IANA timezone for sleep schedule, time awareness, follow-ups, and weather |
+| `WEATHER_LATITUDE` | `18.4861` | Latitude for daily weather context (default: Santo Domingo) |
+| `WEATHER_LONGITUDE` | `-69.9312` | Longitude for daily weather context (default: Santo Domingo) |
+| `WEATHER_CITY` | `Santo Domingo` | City name used in the weather context string |
 | `ENABLE_FOLLOW_UPS` | `false` | Proactive follow-up questions about plans the user mentioned |
 | `ENABLE_CHECK_INS` | `false` | Proactive check-in messages (~2/week, like a real friend) |
 | `CHECK_INS_PER_WEEK` | `2` | Number of check-in messages per week |
 | `ENABLE_CHAT_LOG` | `false` | Daily conversation logging to `logs/` folder |
+| `CHAT_LOG_RETENTION_DAYS` | `30` | Days to keep daily chat log files before deletion |
 | `NODE_ENV` | `production` | Set `development` for verbose logging |
 
 ## Architecture

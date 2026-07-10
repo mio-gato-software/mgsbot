@@ -1,9 +1,9 @@
 import { createUserContent, GoogleGenAI } from "@google/genai";
+import { log } from "../logger.ts";
 import { createChatProvider } from "../providers/index.ts";
 import type { ConversationMessage } from "../types.ts";
 import { withRetry } from "../utils.ts";
 
-const isDev = process.env.NODE_ENV === "development";
 const CLASSIFIER_MODEL = "gemini-flash-lite-latest";
 const GROUP_ROUTER_MAX_MESSAGES = 6;
 const GROUP_ROUTER_MAX_MESSAGE_CHARS = 500;
@@ -220,7 +220,7 @@ export async function classifyEditIntent(
 	const useGemini = !!process.env.GOOGLE_API_KEY;
 	if (!useGemini && !warnedClassifierFallback) {
 		warnedClassifierFallback = true;
-		console.warn(
+		log.warn(
 			"[classifyEditIntent] GOOGLE_API_KEY not set — falling back to the configured chat provider for edit-intent classification.",
 		);
 	}
@@ -230,12 +230,12 @@ export async function classifyEditIntent(
 			.trim()
 			.toLowerCase();
 
-		if (isDev) console.log(`[classifyEditIntent] "${trimmed}" → ${text}`);
+		log.debug(`[classifyEditIntent] "${trimmed}" → ${text}`);
 		if (text.startsWith("yes")) return true;
 		if (text.startsWith("no")) return false;
 		return null;
 	} catch (error) {
-		console.error("[classifyEditIntent] Error:", error);
+		log.error("[classifyEditIntent] Error:", error);
 		return null;
 	}
 }
@@ -266,7 +266,7 @@ export async function classifyGroupSocialIntent(
 	const useGemini = !!process.env.GOOGLE_API_KEY;
 	if (!useGemini && !warnedClassifierFallback) {
 		warnedClassifierFallback = true;
-		console.warn(
+		log.warn(
 			"[classifyGroupMessageIntent] GOOGLE_API_KEY not set — falling back to the configured chat provider for group-intent classification.",
 		);
 	}
@@ -276,14 +276,12 @@ export async function classifyGroupSocialIntent(
 		const text = await runSingleWordClassifier(prompt, 80);
 		const decision = parseGroupSocialDecision(text);
 
-		if (isDev) {
-			console.log(
-				`[classifyGroupSocialIntent] ${input.mode} "${currentMessage}" → ${text.trim()}`,
-			);
-		}
+		log.debug(
+			`[classifyGroupSocialIntent] ${input.mode} "${currentMessage}" → ${text.trim()}`,
+		);
 		return decision;
 	} catch (error) {
-		console.error("[classifyGroupSocialIntent] Error:", error);
+		log.error("[classifyGroupSocialIntent] Error:", error);
 		return null;
 	}
 }

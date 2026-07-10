@@ -1,7 +1,6 @@
+import { log } from "../logger.ts";
 import { isTutorActive } from "../prompt/modes.ts";
 import type { SttProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 export class FalSttProvider implements SttProvider {
 	readonly name = "fal";
@@ -14,7 +13,7 @@ export class FalSttProvider implements SttProvider {
 	}
 
 	async transcribe(filePath: string, mimeType: string): Promise<string> {
-		if (isDev) console.log("[STT:fal] Transcribing with Scribe v2");
+		log.debug("[STT:fal] Transcribing with Scribe v2");
 
 		const fileBuffer = await Bun.file(filePath).arrayBuffer();
 		const base64Data = Buffer.from(fileBuffer).toString("base64");
@@ -51,7 +50,7 @@ export class FalSttProvider implements SttProvider {
 		const data = (await response.json()) as { text?: string };
 		const text = data.text?.trim();
 		if (!text) throw new Error("fal.ai STT returned empty text");
-		if (isDev) console.log("[STT:fal] Result:", text.slice(0, 200));
+		log.debug("[STT:fal] Result:", text.slice(0, 200));
 		return text;
 	}
 }

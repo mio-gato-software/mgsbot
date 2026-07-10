@@ -54,3 +54,16 @@ export async function withChapterLock<T>(
 export async function withSemanticLock<T>(fn: () => Promise<T>): Promise<T> {
 	return withKeyLock("semantic", fn);
 }
+
+// Global single-file stores. Not reentrant: never nest a lock inside itself.
+export async function withFollowUpsLock<T>(fn: () => Promise<T>): Promise<T> {
+	return withKeyLock("follow-ups", fn);
+}
+
+export async function withCheckInsLock<T>(fn: () => Promise<T>): Promise<T> {
+	return withKeyLock("check-ins", fn);
+}
+
+export async function withPersonalityLock<T>(fn: () => Promise<T>): Promise<T> {
+	return withKeyLock("personality", fn);
+}

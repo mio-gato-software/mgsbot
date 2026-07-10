@@ -1,14 +1,13 @@
 import { unlink } from "node:fs/promises";
 import type { Context } from "grammy";
+import { log } from "./logger.ts";
 import { transcribeAudio } from "./stt/index.ts";
 import { safeMediaExtension } from "./utils.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 async function cleanupFile(filePath: string): Promise<void> {
 	try {
 		await unlink(filePath);
-		if (isDev) console.log("[cleanup] Deleted:", filePath);
+		log.debug("[cleanup] Deleted:", filePath);
 	} catch {
 		// File may already be cleaned up
 	}
@@ -23,11 +22,11 @@ export async function downloadAndTranscribe(
 ): Promise<string> {
 	const file = await ctx.getFile();
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
-	if (isDev) console.log("[downloadAndTranscribe] Downloading from:", url);
+	log.debug("[downloadAndTranscribe] Downloading file:", file.file_path);
 
 	const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
 	if (!response.ok) {
-		console.error(
+		log.error(
 			"[downloadAndTranscribe] Download failed:",
 			response.status,
 			response.statusText,
@@ -38,22 +37,22 @@ export async function downloadAndTranscribe(
 	const buffer = Buffer.from(await response.arrayBuffer());
 	const filePath = `./audios/${prefix}_${ctx.message?.message_id}.${fileExtension}`;
 	await Bun.write(filePath, buffer);
-	if (isDev)
-		console.log(
-			"[downloadAndTranscribe] Saved to:",
-			filePath,
-			`(${buffer.length} bytes)`,
-		);
+	log.debug(
+		"[downloadAndTranscribe] Saved to:",
+		filePath,
+		`(${buffer.length} bytes)`,
+	);
 
-	const transcription = await transcribeAudio(filePath, mimeType);
-	if (isDev)
-		console.log(
+	try {
+		const transcription = await transcribeAudio(filePath, mimeType);
+		log.debug(
 			"[downloadAndTranscribe] Transcription:",
 			transcription.slice(0, 200),
 		);
-
-	await cleanupFile(filePath);
-	return transcription;
+		return transcription;
+	} finally {
+		await cleanupFile(filePath);
+	}
 }
 
 export async function downloadAndTranscribeByFileId(
@@ -67,12 +66,14 @@ export async function downloadAndTranscribeByFileId(
 ): Promise<string> {
 	const file = await api.getFile(fileId);
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
-	if (isDev)
-		console.log("[downloadAndTranscribeByFileId] Downloading from:", url);
+	log.debug(
+		"[downloadAndTranscribeByFileId] Downloading file:",
+		file.file_path,
+	);
 
 	const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
 	if (!response.ok) {
-		console.error(
+		log.error(
 			"[downloadAndTranscribeByFileId] Download failed:",
 			response.status,
 			response.statusText,
@@ -83,22 +84,22 @@ export async function downloadAndTranscribeByFileId(
 	const buffer = Buffer.from(await response.arrayBuffer());
 	const filePath = `./audios/${prefix}_${messageId}.${fileExtension}`;
 	await Bun.write(filePath, buffer);
-	if (isDev)
-		console.log(
-			"[downloadAndTranscribeByFileId] Saved to:",
-			filePath,
-			`(${buffer.length} bytes)`,
-		);
+	log.debug(
+		"[downloadAndTranscribeByFileId] Saved to:",
+		filePath,
+		`(${buffer.length} bytes)`,
+	);
 
-	const transcription = await transcribeAudio(filePath, mimeType);
-	if (isDev)
-		console.log(
+	try {
+		const transcription = await transcribeAudio(filePath, mimeType);
+		log.debug(
 			"[downloadAndTranscribeByFileId] Transcription:",
 			transcription.slice(0, 200),
 		);
-
-	await cleanupFile(filePath);
-	return transcription;
+		return transcription;
+	} finally {
+		await cleanupFile(filePath);
+	}
 }
 
 export async function downloadImage(
@@ -111,7 +112,7 @@ export async function downloadImage(
 	if (!photo) throw new Error("No photo in message");
 	const file = await ctx.api.getFile(photo.file_id);
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
-	if (isDev) console.log("[downloadImage] Downloading from:", url);
+	log.debug("[downloadImage] Downloading file:", file.file_path);
 
 	const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
 	if (!response.ok) {
@@ -126,12 +127,7 @@ export async function downloadImage(
 	const filePath = `./audios/photo_${ctx.message?.message_id}.${ext}`;
 	const buffer = Buffer.from(await response.arrayBuffer());
 	await Bun.write(filePath, buffer);
-	if (isDev)
-		console.log(
-			"[downloadImage] Saved to:",
-			filePath,
-			`(${buffer.length} bytes)`,
-		);
+	log.debug("[downloadImage] Saved to:", filePath, `(${buffer.length} bytes)`);
 
 	return { filePath, mimeType };
 }

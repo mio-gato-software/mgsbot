@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { log } from "../logger.ts";
 import {
 	FAL_IMAGE_MODELS,
 	resolveFalImageModelName,
@@ -7,7 +8,6 @@ import {
 import { withRetry } from "../utils.ts";
 import type { ImageProvider } from "./types.ts";
 
-const isDev = process.env.NODE_ENV === "development";
 const DEFAULT_GENERATION_TIMEOUT_MS = 300_000;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60_000;
 
@@ -61,7 +61,7 @@ export class FalImageProvider implements ImageProvider {
 		prompt: string,
 		referenceImagePath?: string,
 	): Promise<Buffer> {
-		if (isDev) console.log("[image:fal] Prompt:", prompt.slice(0, 200));
+		log.debug("[image:fal] Prompt:", prompt.slice(0, 200));
 
 		const body: Record<string, unknown> = {
 			prompt,
@@ -90,13 +90,11 @@ export class FalImageProvider implements ImageProvider {
 			endpoint = `https://fal.run/${model.textEndpoint}`;
 		}
 
-		if (isDev) {
-			console.log("[image:fal] Model:", this.modelName);
-			if (model.name === "gpt-image-2") {
-				console.log("[image:fal] Quality:", body.quality);
-			}
-			console.log("[image:fal] Endpoint:", endpoint);
+		log.debug("[image:fal] Model:", this.modelName);
+		if (model.name === "gpt-image-2") {
+			log.debug("[image:fal] Quality:", body.quality);
 		}
+		log.debug("[image:fal] Endpoint:", endpoint);
 
 		const data = await withRetry(async () => {
 			const response = await fetch(endpoint, {
@@ -132,7 +130,7 @@ export class FalImageProvider implements ImageProvider {
 			);
 		}
 
-		if (isDev) console.log("[image:fal] Image generated successfully");
+		log.debug("[image:fal] Image generated successfully");
 		return Buffer.from(await imageResponse.arrayBuffer());
 	}
 

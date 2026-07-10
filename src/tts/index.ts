@@ -1,3 +1,4 @@
+import { log } from "../logger.ts";
 import { resolveTtsProviderName } from "../provider-options.ts";
 import { ElevenLabsTtsProvider } from "./elevenlabs.ts";
 import { FalTtsProvider } from "./fal.ts";
@@ -27,7 +28,7 @@ function createTtsProvider(): TtsProvider | null {
 	}
 
 	if (cachedProvider) {
-		console.log(`[tts] Using provider: ${cachedProvider.name}`);
+		log.info(`[tts] Using provider: ${cachedProvider.name}`);
 	}
 
 	return cachedProvider;

@@ -1,7 +1,6 @@
+import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 interface AnthropicMessage {
 	role: "user" | "assistant";
@@ -46,15 +45,13 @@ export class AnthropicChatProvider implements ChatProvider {
 			content: msg.content,
 		}));
 
-		if (isDev) {
-			console.log(
-				"[AnthropicChatProvider] Calling model",
-				this.model,
-				"with",
-				anthropicMessages.length,
-				"messages",
-			);
-		}
+		log.debug(
+			"[AnthropicChatProvider] Calling model",
+			this.model,
+			"with",
+			anthropicMessages.length,
+			"messages",
+		);
 
 		const data = await withRetry(async () => {
 			const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -81,16 +78,14 @@ export class AnthropicChatProvider implements ChatProvider {
 			return (await response.json()) as AnthropicResponse;
 		});
 
-		if (isDev && data.usage) {
-			console.log(
+		if (data.usage) {
+			log.debug(
 				`[tokens:anthropic] in=${data.usage.input_tokens} out=${data.usage.output_tokens}`,
 			);
 		}
 
 		const text = data.content?.[0]?.text ?? "";
-		if (isDev) {
-			console.log("[AnthropicChatProvider] Response:", text.slice(0, 200));
-		}
+		log.debug("[AnthropicChatProvider] Response:", text.slice(0, 200));
 		return text;
 	}
 }

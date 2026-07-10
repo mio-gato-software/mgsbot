@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { log } from "./logger.ts";
 import { atomicWriteFileSync } from "./utils.ts";
 
 export type BotLanguage = "es" | "en";
@@ -71,14 +72,14 @@ function loadManualProfile(): BotConfig | null {
 		const data = readFileSync(BOT_PROFILE_PATH, "utf-8");
 		const profile = parseManualProfile(JSON.parse(data));
 		if (!profile) {
-			console.error(
+			log.error(
 				`[config] ${BOT_PROFILE_PATH} exists but is missing required fields. Required: botName, birthYear, gender, personality.`,
 			);
 			return null;
 		}
 		return profile;
 	} catch (error) {
-		console.error(`[config] Error loading ${BOT_PROFILE_PATH}:`, error);
+		log.error(`[config] Error loading ${BOT_PROFILE_PATH}:`, error);
 		return null;
 	}
 }
@@ -254,7 +255,7 @@ export function loadConfig(): BotConfig {
 		configLastRead = now;
 		return configCache;
 	} catch (error) {
-		console.error("[config] Error loading config:", error);
+		log.error("[config] Error loading config:", error);
 		configCache = migrateFromPermanent();
 		configLastRead = now;
 		return configCache;
@@ -267,7 +268,7 @@ export function saveConfig(config: BotConfig): void {
 		configCache = config;
 		configLastRead = Date.now();
 	} catch (error) {
-		console.error("[config] Error saving config:", error);
+		log.error("[config] Error saving config:", error);
 	}
 }
 

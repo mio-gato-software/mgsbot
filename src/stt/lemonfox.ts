@@ -1,7 +1,6 @@
+import { log } from "../logger.ts";
 import { isTutorActive } from "../prompt/modes.ts";
 import type { SttProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 export class LemonFoxSttProvider implements SttProvider {
 	readonly name = "lemonfox";
@@ -14,7 +13,7 @@ export class LemonFoxSttProvider implements SttProvider {
 	}
 
 	async transcribe(filePath: string): Promise<string> {
-		if (isDev) console.log("[STT:lemonfox] Transcribing");
+		log.debug("[STT:lemonfox] Transcribing");
 
 		const fileBuffer = await Bun.file(filePath).arrayBuffer();
 		const fileName = filePath.split("/").pop() ?? "audio.ogg";
@@ -46,7 +45,7 @@ export class LemonFoxSttProvider implements SttProvider {
 		const data = (await response.json()) as { text?: string };
 		const text = data.text?.trim();
 		if (!text) throw new Error("LemonFox STT returned empty text");
-		if (isDev) console.log("[STT:lemonfox] Result:", text.slice(0, 200));
+		log.debug("[STT:lemonfox] Result:", text.slice(0, 200));
 		return text;
 	}
 }

@@ -102,6 +102,18 @@ export function formatTime(date?: Date | number): string {
 }
 
 /**
+ * Get the Monday that starts the week containing the given date (bot timezone),
+ * as a YYYY-MM-DD string.
+ */
+export function getWeekStart(date?: Date | number): string {
+	const d = botNow(date);
+	// Monday-based week: dayOfWeek 0=Sun, 1=Mon...6=Sat
+	const dayOfWeek = d.day();
+	const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+	return d.subtract(daysFromMonday, "day").format("YYYY-MM-DD");
+}
+
+/**
  * Clamp a timestamp to reasonable hours (8:00 AM – 9:30 PM bot timezone).
  * Too late (after 9:30 PM) moves to 9:00 AM the next day; too early
  * (before 8 AM) moves to 9:00 AM the same day.

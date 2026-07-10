@@ -25,6 +25,24 @@ const HOLIDAYS: Record<number, [number, number][]> = {
 		[10, 9], // Constitution Day (moved from Nov 6)
 		[11, 25], // Christmas
 	],
+	// Ley 139-97 applied per weekday: Tue/Wed move to the previous Monday,
+	// Thu/Fri to the next Monday; Sat/Sun/Mon and protected dates don't move.
+	// Official Ministerio de Trabajo calendar for 2027 was not yet published
+	// when this entry was added — re-verify against it once announced.
+	2027: [
+		[0, 1], // New Year's Day (Fri, protected — not moved)
+		[0, 4], // Santos Reyes (moved from Jan 6, Wed)
+		[0, 21], // Nuestra Señora de la Altagracia (Thu, protected — not moved)
+		[0, 25], // Duarte's birthday (moved from Jan 26, Tue)
+		[1, 27], // Independence Day (Sat)
+		[2, 26], // Good Friday
+		[4, 1], // Labor Day (Sat — not moved)
+		[4, 27], // Corpus Christi (Thu, protected — not moved)
+		[7, 16], // Restoration Day (Mon)
+		[8, 24], // Nuestra Señora de las Mercedes (Fri, protected — not moved)
+		[10, 6], // Constitution Day (Sat — not moved)
+		[11, 25], // Christmas (Sat)
+	],
 };
 
 /**

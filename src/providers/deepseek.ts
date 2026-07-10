@@ -1,24 +1,23 @@
 import OpenAI from "openai";
+import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
-
-const isDev = process.env.NODE_ENV === "development";
 
 interface DeepSeekMessage {
 	role: "system" | "user" | "assistant";
 	content: string;
 }
 
-interface DeepSeekChatCompletionRequest {
-	model: string;
-	messages: DeepSeekMessage[];
-	thinking: {
-		type: "enabled";
+// DeepSeek extends the OpenAI wire format with a `thinking` field the SDK does not model.
+type DeepSeekChatCompletionRequest =
+	OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+		thinking: {
+			type: "enabled";
+		};
 	};
-	reasoning_effort: "high";
-	stream: false;
-}
 
+// Deliberately not extending OpenAiCompatibleChatProvider: this uses the
+// OpenAI SDK client to send DeepSeek's thinking/reasoning_effort body.
 export class DeepSeekChatProvider implements ChatProvider {
 	readonly name = "deepseek";
 	model: string;
@@ -51,15 +50,13 @@ export class DeepSeekChatProvider implements ChatProvider {
 			})),
 		];
 
-		if (isDev) {
-			console.log(
-				"[DeepSeekChatProvider] Calling model",
-				this.model,
-				"with",
-				deepSeekMessages.length,
-				"messages",
-			);
-		}
+		log.debug(
+			"[DeepSeekChatProvider] Calling model",
+			this.model,
+			"with",
+			deepSeekMessages.length,
+			"messages",
+		);
 
 		const response = await withRetry(async () => {
 			const request: DeepSeekChatCompletionRequest = {
@@ -70,6 +67,7 @@ export class DeepSeekChatProvider implements ChatProvider {
 				stream: false,
 			};
 
+			// Widen to the SDK param type: `thinking` is a DeepSeek-only extension field.
 			return await this.client.chat.completions.create(
 				request as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
 			);
@@ -77,14 +75,12 @@ export class DeepSeekChatProvider implements ChatProvider {
 
 		const text = response.choices?.[0]?.message?.content ?? "";
 
-		if (isDev) {
-			if (response.usage) {
-				console.log(
-					`[tokens:deepseek] in=${response.usage.prompt_tokens} out=${response.usage.completion_tokens} total=${response.usage.total_tokens}`,
-				);
-			}
-			console.log("[DeepSeekChatProvider] Response:", text.slice(0, 200));
+		if (response.usage) {
+			log.debug(
+				`[tokens:deepseek] in=${response.usage.prompt_tokens} out=${response.usage.completion_tokens} total=${response.usage.total_tokens}`,
+			);
 		}
+		log.debug("[DeepSeekChatProvider] Response:", text.slice(0, 200));
 
 		return text;
 	}

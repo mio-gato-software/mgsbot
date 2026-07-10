@@ -1,3 +1,4 @@
+import { log } from "../logger.ts";
 import { resolveImageProviderName } from "../provider-options.ts";
 import { FalImageProvider } from "./fal.ts";
 import { GeminiImageProvider } from "./gemini.ts";
@@ -21,7 +22,7 @@ function createImageProvider(): ImageProvider {
 			break;
 	}
 
-	console.log(`[image] Using provider: ${cachedProvider.name}`);
+	log.info(`[image] Using provider: ${cachedProvider.name}`);
 	return cachedProvider;
 }
 

@@ -1,6 +1,7 @@
 import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { type BotLanguage, loadConfig, saveConfig } from "./config.ts";
+import { log } from "./logger.ts";
 import {
 	addMessageToSensory,
 	loadSensory,
@@ -176,7 +177,7 @@ export async function processSetupConversation(
 				return;
 			}
 		} catch (error) {
-			console.error("[setup] Error parsing setup JSON:", error);
+			log.error("[setup] Error parsing setup JSON:", error);
 			// Fallback to normal reply if parsing fails
 		}
 	}

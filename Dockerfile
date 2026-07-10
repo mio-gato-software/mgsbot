@@ -1,4 +1,4 @@
-FROM oven/bun:1.3 AS base
+FROM oven/bun:1.3.14 AS base
 WORKDIR /app
 
 # Install dependencies
@@ -22,5 +22,10 @@ RUN mkdir -p memory/sensory memory/episodes audios logs \
 ENV NODE_ENV=production
 
 USER bun
+
+# The bot touches /tmp/mgsbot-heartbeat every 30s while its event loop is
+# alive; consider it unhealthy if the file goes stale for >2 minutes.
+HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=1m \
+    CMD bun -e "const t = Number(await Bun.file('/tmp/mgsbot-heartbeat').text()); process.exit(Date.now() - t < 120_000 ? 0 : 1)"
 
 CMD ["bun", "run", "index.ts"]

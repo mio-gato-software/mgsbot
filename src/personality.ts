@@ -1,4 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
+import { log } from "./logger.ts";
+import { withPersonalityLock } from "./memory/locks.ts";
 import {
 	type PersonalityGrowthEvent,
 	type PersonalitySignals,
@@ -9,7 +11,6 @@ import {
 } from "./types.ts";
 import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
-const isDev = process.env.NODE_ENV === "development";
 const PERSONALITY_PATH = "./memory/personality.json";
 
 const MAX_RECENT_GROWTH = 10;
@@ -239,11 +240,9 @@ export function migrateState(old: Record<string, unknown>): PersonalityState {
 		state.recentGrowth = oldGrowth.slice(-MAX_RECENT_GROWTH);
 	}
 
-	if (isDev) {
-		console.log("[personality] Migrated from v1 to v2:");
-		for (const [name, trait] of Object.entries(state.traits)) {
-			console.log(`  ${name}: ${trait.value.toFixed(3)}`);
-		}
+	log.debug("[personality] Migrated from v1 to v2:");
+	for (const [name, trait] of Object.entries(state.traits)) {
+		log.debug(`  ${name}: ${trait.value.toFixed(3)}`);
 	}
 
 	return state;
@@ -255,7 +254,12 @@ async function loadPersonality(): Promise<PersonalityState> {
 		const data = await readFile(PERSONALITY_PATH, "utf-8");
 		const raw = JSON.parse(data) as Record<string, unknown>;
 
-		if (typeof raw.version === "number" && raw.version >= CURRENT_VERSION) {
+		if (
+			typeof raw.version === "number" &&
+			raw.version >= CURRENT_VERSION &&
+			typeof raw.traits === "object" &&
+			raw.traits !== null
+		) {
 			// Ensure all fixed traits exist (in case new traits were added)
 			const state = raw as unknown as PersonalityState;
 			for (const name of TRAIT_NAMES) {
@@ -273,7 +277,7 @@ async function loadPersonality(): Promise<PersonalityState> {
 		return cachedState;
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[personality] Error loading personality.json:", err);
+			log.error("[personality] Error loading personality.json:", err);
 		}
 		cachedState = createEmptyState();
 		return cachedState;
@@ -290,13 +294,13 @@ export async function initPersonality(): Promise<void> {
 		await readFile(PERSONALITY_PATH, "utf-8");
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			console.error("[personality] Error reading personality.json:", err);
+			log.error("[personality] Error reading personality.json:", err);
 		}
 		await writeFile(
 			PERSONALITY_PATH,
 			JSON.stringify(createEmptyState(), null, 2),
 		);
-		if (isDev) console.log("[personality] Created personality.json");
+		log.debug("[personality] Created personality.json");
 	}
 	// Trigger load (and migration if needed)
 	await loadPersonality();
@@ -315,8 +319,7 @@ export function applySignalsToState(
 	for (const change of signals.traitChanges) {
 		const traitName = change.trait.toLowerCase().trim();
 		if (!VALID_TRAIT_SET.has(traitName)) {
-			if (isDev)
-				console.log(`[personality] Rejected unknown trait: "${traitName}"`);
+			log.debug(`[personality] Rejected unknown trait: "${traitName}"`);
 			continue;
 		}
 
@@ -331,10 +334,9 @@ export function applySignalsToState(
 		trait.momentum = Math.max(-1, Math.min(1, trait.momentum));
 		trait.lastReinforced = now;
 
-		if (isDev)
-			console.log(
-				`[personality] Updated "${traitName}": ${trait.value.toFixed(3)} (delta=${delta > 0 ? "+" : ""}${delta.toFixed(3)}, momentum=${trait.momentum.toFixed(3)})`,
-			);
+		log.debug(
+			`[personality] Updated "${traitName}": ${trait.value.toFixed(3)} (delta=${delta > 0 ? "+" : ""}${delta.toFixed(3)}, momentum=${trait.momentum.toFixed(3)})`,
+		);
 
 		affectedTraits.push(traitName);
 	}
@@ -360,9 +362,13 @@ export async function applyPersonalitySignals(
 	signals: PersonalitySignals,
 	conversationContext: string,
 ): Promise<void> {
-	const state = await loadPersonality();
-	applySignalsToState(state, signals, conversationContext);
-	await savePersonality(state);
+	// Serialize load-modify-save: concurrent background promotions would
+	// otherwise race on the shared cached state and the file.
+	await withPersonalityLock(async () => {
+		const state = await loadPersonality();
+		applySignalsToState(state, signals, conversationContext);
+		await savePersonality(state);
+	});
 }
 
 // --- Build behavioral instructions for the system prompt ---
