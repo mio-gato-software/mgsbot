@@ -3,6 +3,7 @@ import type { Api } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { extractFollowUps } from "./ai/evaluation.ts";
 import { botNow, clampToReasonableHours, formatDateTime } from "./bot-time.ts";
+import { pulseTypingBeforeSend } from "./chat-actions.ts";
 import { log } from "./logger.ts";
 import {
 	addMessageToSensory,
@@ -289,7 +290,9 @@ export async function checkAndSendFollowUps(
 				return;
 			}
 
-			// Send the message
+			// Send the message (brief typing pulse first — receipt feedback and
+			// a more human cadence for proactive messages)
+			await pulseTypingBeforeSend(api, followUp.chatId);
 			try {
 				await api.sendMessage(followUp.chatId, message, {
 					parse_mode: "Markdown",

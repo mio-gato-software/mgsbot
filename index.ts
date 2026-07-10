@@ -2,11 +2,12 @@ import { existsSync, mkdirSync } from "node:fs";
 import { alertOwner, errorSummary, setAlertSink } from "./src/alerts.ts";
 import { log } from "./src/logger.ts";
 import {
+	findEnvCaseMismatches,
 	formatProviderConfigurationFailure,
 	formatProviderStartupSummary,
 	validateProviderConfiguration,
 } from "./src/provider-options.ts";
-import { loadEnvIntoProcess } from "./src/utils.ts";
+import { loadEnvIntoProcess, parseEnvFile } from "./src/utils.ts";
 
 // --- Load .env manually (compiled binaries may not auto-load it) ---
 
@@ -151,6 +152,9 @@ if (providerValidation.errors.length > 0) {
 	process.exit(1);
 }
 for (const warning of providerValidation.warnings) {
+	log.warn(`[startup] ${warning}`);
+}
+for (const warning of findEnvCaseMismatches(Object.keys(parseEnvFile()))) {
 	log.warn(`[startup] ${warning}`);
 }
 for (const line of formatProviderStartupSummary()) {

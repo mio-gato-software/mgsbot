@@ -258,6 +258,86 @@ const ProviderEnvSchema = z.object({
 	INWORLD_VOICE_ID: optionalString,
 });
 
+// Vars read directly via process.env elsewhere in the codebase (not part of
+// the provider schema) — included so case typos on them get flagged too.
+const CORE_ENV_VARS = [
+	"BOT_TOKEN",
+	"OWNER_USER_ID",
+	"ALLOWED_GROUP_ID",
+	"BOT_TIMEZONE",
+	"PROVIDER",
+	"GEMINI_MODEL",
+	"OPENROUTER_MODEL",
+	"OPENROUTER_HTTP_REFERER",
+	"OPENROUTER_TITLE",
+	"ELEVENLABS_VOICE_ID",
+	"FAL_IMAGE_TIMEOUT_MS",
+	"SIMPLE_ASSISTANT_MODE",
+	"ENABLE_FOLLOW_UPS",
+	"ENABLE_CHECK_INS",
+	"CHECK_INS_PER_WEEK",
+	"ENABLE_CHAT_LOG",
+	"CHAT_LOG_RETENTION_DAYS",
+	"ENABLE_SLEEP_SCHEDULE",
+	"ENABLE_GROUP_VOICE_CONTEXT",
+	"GROUP_PASSIVE_VOICE_MAX_SECONDS",
+	"GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS",
+	"WEATHER_LATITUDE",
+	"WEATHER_LONGITUDE",
+	"WEATHER_CITY",
+	"SHOW_TRANSCRIPTION",
+	"LOG_LEVEL",
+	"NODE_ENV",
+] as const;
+
+function knownEnvVarNames(): Set<string> {
+	const names = new Set<string>(CORE_ENV_VARS);
+	for (const key of Object.keys(ProviderEnvSchema.shape)) {
+		names.add(key);
+	}
+	const groups: readonly (readonly ProviderOption<string>[])[] = [
+		CHAT_PROVIDERS,
+		TTS_PROVIDERS,
+		STT_PROVIDERS,
+		IMAGE_PROVIDERS,
+	];
+	for (const group of groups) {
+		for (const provider of group) {
+			for (const required of provider.requiredEnv) {
+				names.add(required);
+			}
+			if (provider.modelEnv) {
+				names.add(provider.modelEnv);
+			}
+		}
+	}
+	return names;
+}
+
+/**
+ * Flag .env keys that match a known variable except for letter case
+ * (e.g. "FAL_model" vs "FAL_MODEL") — env var names are case-sensitive, so
+ * such values are silently ignored and the misconfiguration is invisible.
+ */
+export function findEnvCaseMismatches(envKeys: Iterable<string>): string[] {
+	const known = knownEnvVarNames();
+	const byLower = new Map<string, string>();
+	for (const name of known) {
+		byLower.set(name.toLowerCase(), name);
+	}
+	const warnings: string[] = [];
+	for (const key of envKeys) {
+		if (known.has(key)) continue;
+		const canonical = byLower.get(key.toLowerCase());
+		if (canonical) {
+			warnings.push(
+				`.env has "${key}" but the bot reads "${canonical}" — env var names are case-sensitive, so this value is being ignored.`,
+			);
+		}
+	}
+	return warnings;
+}
+
 function parseProviderEnv(env: EnvMap): ProviderEnv {
 	const result = safeParseProviderEnv(env);
 	if (!result.success) {

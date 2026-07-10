@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	findEnvCaseMismatches,
 	formatProviderCommandStatus,
 	formatProviderConfigurationFailure,
 	resolveChatProviderName,
@@ -175,5 +176,31 @@ describe("provider options", () => {
 			},
 		);
 		expect(status).toContain("Imágenes: fal (nano-banana-pro)");
+	});
+});
+
+describe("findEnvCaseMismatches", () => {
+	test("flags a known var written with wrong case", () => {
+		const warnings = findEnvCaseMismatches(["FAL_model"]);
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toContain('"FAL_model"');
+		expect(warnings[0]).toContain('"FAL_MODEL"');
+	});
+
+	test("flags lowercase core credentials", () => {
+		const warnings = findEnvCaseMismatches(["bot_token", "google_api_key"]);
+		expect(warnings).toHaveLength(2);
+	});
+
+	test("does not flag correctly cased keys", () => {
+		expect(
+			findEnvCaseMismatches(["FAL_MODEL", "BOT_TOKEN", "CHAT_PROVIDER"]),
+		).toHaveLength(0);
+	});
+
+	test("ignores unknown keys entirely", () => {
+		expect(
+			findEnvCaseMismatches(["MY_CUSTOM_VAR", "some_random"]),
+		).toHaveLength(0);
 	});
 });
