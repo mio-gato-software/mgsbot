@@ -3,6 +3,7 @@
 import type { Bot, Context } from "grammy";
 import { classifyGroupMessageIntent } from "../ai/classifiers.ts";
 import { isBotOff, isSleepingHour } from "../bot-state.ts";
+import { withChatAction } from "../chat-actions.ts";
 import { getBotName } from "../config.ts";
 import {
 	getUserDisplayName,
@@ -155,13 +156,14 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 			return;
 		}
 		try {
-			const transcription = await downloadAndTranscribe(
-				ctx,
-				botToken,
-				"audio/ogg",
-				"ogg",
-				"voice",
-			);
+			// Receipt feedback while downloading + transcribing — but only when
+			// the bot was addressed; passive group listening must stay invisible.
+			const willLikelyRespond = !isGroup || mentionType !== "none";
+			const transcribe = () =>
+				downloadAndTranscribe(ctx, botToken, "audio/ogg", "ogg", "voice");
+			const transcription = willLikelyRespond
+				? await withChatAction(ctx, "typing", transcribe)
+				: await transcribe();
 			if (showTranscription && (!isGroup || mentionType !== "none")) {
 				await ctx
 					.reply(`📝 ${transcription}`, {
@@ -217,12 +219,10 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 				"mp3",
 			);
 			const mimeType = ctx.message.audio.mime_type ?? "audio/mp3";
-			const transcription = await downloadAndTranscribe(
-				ctx,
-				botToken,
-				mimeType,
-				ext,
-				"audio",
+			// This path always leads to a reply — show receipt feedback while
+			// downloading + transcribing.
+			const transcription = await withChatAction(ctx, "typing", () =>
+				downloadAndTranscribe(ctx, botToken, mimeType, ext, "audio"),
 			);
 			if (showTranscription) {
 				await ctx

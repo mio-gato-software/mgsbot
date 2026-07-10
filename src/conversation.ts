@@ -5,6 +5,7 @@ import {
 	generateLongTermMemoryUpdate,
 } from "./ai/evaluation.ts";
 import { botNow } from "./bot-time.ts";
+import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { EMBEDDING_MODEL, generateEmbedding } from "./embeddings.ts";
 import {
@@ -42,7 +43,7 @@ import { buildPromptContext } from "./prompt/context.ts";
 import { buildMessages } from "./prompt/history.ts";
 import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
 import type { MediaAttachment } from "./providers/types.ts";
-import { sendResponse } from "./response-processor.ts";
+import { type SendResponseResult, sendResponse } from "./response-processor.ts";
 import { isTtsAvailable } from "./tts/index.ts";
 import type {
 	ConversationMessage,
@@ -190,170 +191,181 @@ export async function processConversation(
 		return false;
 	}
 
-	// Register identity for this user
-	const { userId, username } = getUserInfo(ctx);
-	if (userId) {
-		await registerIdentity(userId, userName, username);
-	}
-
-	// Load sensory buffer and append the user turn atomically per chat.
-	const userTurnAlreadyRecorded = options?.userTurnAlreadyRecorded === true;
-	const { buffer, overflow, allowPhotoRequest } = await withChatLock(
-		chatId,
-		async () => {
-			const buf = await loadSensory(chatId);
-			const allow = buf.allowPhotoRequest === true;
-			if (userTurnAlreadyRecorded) {
-				return { buffer: buf, overflow: null, allowPhotoRequest: allow };
-			}
-			const userMessage: ConversationMessage = {
-				role: "user",
-				name: userName,
-				userId,
-				content: userContent,
-				timestamp: Date.now(),
-			};
-			const ov = await addMessageToSensory(buf, userMessage);
-			return { buffer: buf, overflow: ov, allowPhotoRequest: allow };
-		},
-	);
-	if (!userTurnAlreadyRecorded) {
-		logUserMessage(userName, userContent).catch(log.error);
-	}
-
-	// Promote overflow to memory in background
-	if (overflow) {
-		promoteToMemory(chatId, overflow).catch((err) => {
-			log.error(`[promote] Failed for chat ${chatId} (user overflow):`, err);
-		});
-	}
-
-	// Follow-up detection and cancellation (DMs only, background)
-	if (!isGroupChat(ctx)) {
-		checkAndCancelResolvedFollowUps(chatId, userContent).catch(log.error);
-		const recentText = buffer.messages
-			.filter((m) => m.role === "user")
-			.map((m) => m.content)
-			.join("\n");
-		detectAndStoreFollowUps(chatId, recentText, userContent).catch(log.error);
-	}
-
-	// Build prompt and messages
-	let shouldGenImage = false;
-	let promptCtx: Parameters<typeof assembleSystemPrompt>[0];
-	const skipHistoricalContext = options?.skipHistoricalContext === true;
-	if (!isSimpleAssistantMode) {
-		shouldGenImage = shouldGenerateImageNow(buffer);
-		if (isFullAccessActive()) {
-			shouldGenImage = true;
+	// Immediate receipt feedback: show "typing…" from the moment we start
+	// working on a reply — retrieval plus generation can take many seconds.
+	// sendResponse switches the indicator per modality (photo/voice) via the
+	// shared handle, and the finally below always clears it.
+	const typing = startChatAction(ctx, "typing");
+	let result: SendResponseResult | null;
+	try {
+		// Register identity for this user
+		const { userId, username } = getUserInfo(ctx);
+		if (userId) {
+			await registerIdentity(userId, userName, username);
 		}
-	}
 
-	if (isSimpleAssistantMode || skipHistoricalContext) {
-		promptCtx = buildPromptContext({
-			relevantEpisodes: [],
-			relevantFacts: [],
-			mentionType: isGroupChat(ctx) ? mentionType : undefined,
-			groupAutoReply: options?.groupAutoReply === true,
-			groupContinuation: options?.groupContinuation === true,
-			isVoiceMessage,
-			userAttachedImage: !!userImagePath,
-			shouldGenerateImage: shouldGenImage,
-			allowPhotoRequest,
-			ttsAvailable: isTtsAvailable(),
-		});
-	} else {
-		// Start query embedding and name resolution in parallel
-		const queryEmbeddingPromise = getQueryEmbedding(buffer.messages);
-		const rawActiveNames = [
-			...new Set(
-				buffer.messages
-					.slice(-ACTIVE_NAME_WINDOW_MESSAGES)
-					.map((m) => m.name)
-					.filter((n): n is string => !!n),
-			),
-		];
-		const activeNamesPromise = Promise.all(
-			rawActiveNames.map((n) => resolveCanonicalName(n)),
-		).then((names) => [...new Set(names)]);
+		// Load sensory buffer and append the user turn atomically per chat.
+		const userTurnAlreadyRecorded = options?.userTurnAlreadyRecorded === true;
+		const { buffer, overflow, allowPhotoRequest } = await withChatLock(
+			chatId,
+			async () => {
+				const buf = await loadSensory(chatId);
+				const allow = buf.allowPhotoRequest === true;
+				if (userTurnAlreadyRecorded) {
+					return { buffer: buf, overflow: null, allowPhotoRequest: allow };
+				}
+				const userMessage: ConversationMessage = {
+					role: "user",
+					name: userName,
+					userId,
+					content: userContent,
+					timestamp: Date.now(),
+				};
+				const ov = await addMessageToSensory(buf, userMessage);
+				return { buffer: buf, overflow: ov, allowPhotoRequest: allow };
+			},
+		);
+		if (!userTurnAlreadyRecorded) {
+			logUserMessage(userName, userContent).catch(log.error);
+		}
 
-		// Wait for both to complete
-		const [{ embedding: queryEmbedding, text: queryText }, activeNames] =
-			await Promise.all([queryEmbeddingPromise, activeNamesPromise]);
-		const mentionedNames = await findMentionedCanonicalNames(queryText);
-		const subjectNames = uniqueNames([...activeNames, ...mentionedNames]);
+		// Promote overflow to memory in background
+		if (overflow) {
+			promoteToMemory(chatId, overflow).catch((err) => {
+				log.error(`[promote] Failed for chat ${chatId} (user overflow):`, err);
+			});
+		}
 
-		// Retrieve episodic, semantic, relationship, chapter, and permanent context in parallel.
-		const [
-			episodes,
-			facts,
-			participantFacts,
-			permanentFacts,
-			relationshipMemory,
-			recentChapters,
-		] = await Promise.all([
-			getRelevantEpisodes(
-				chatId,
-				queryEmbedding,
-				queryText,
-				MAX_RELEVANT_EPISODES,
-			),
-			getRelevantFacts(queryEmbedding, {
-				queryText,
-				maxCount: MAX_RELEVANT_FACTS,
-				chatId,
-			}),
-			subjectNames.length > 0
-				? getFactsForSubjects(subjectNames, MAX_PARTICIPANT_FACTS_PER_SUBJECT)
-				: ([] as SemanticFact[]),
-			getPermanentFacts(),
-			loadRelationshipMemory(chatId),
-			getRecentChapters(chatId),
-		]);
+		// Follow-up detection and cancellation (DMs only, background)
+		if (!isGroupChat(ctx)) {
+			checkAndCancelResolvedFollowUps(chatId, userContent).catch(log.error);
+			const recentText = buffer.messages
+				.filter((m) => m.role === "user")
+				.map((m) => m.content)
+				.join("\n");
+			detectAndStoreFollowUps(chatId, recentText, userContent).catch(log.error);
+		}
 
-		// Merge and deduplicate facts
-		const allFactIds = new Set(facts.map((f) => f.id));
-		const mergedFacts = [...facts];
-		for (const pf of participantFacts) {
-			if (!allFactIds.has(pf.id)) {
-				mergedFacts.push(pf);
-				allFactIds.add(pf.id);
+		// Build prompt and messages
+		let shouldGenImage = false;
+		let promptCtx: Parameters<typeof assembleSystemPrompt>[0];
+		const skipHistoricalContext = options?.skipHistoricalContext === true;
+		if (!isSimpleAssistantMode) {
+			shouldGenImage = shouldGenerateImageNow(buffer);
+			if (isFullAccessActive()) {
+				shouldGenImage = true;
 			}
 		}
 
-		promptCtx = buildPromptContext({
-			relevantEpisodes: episodes,
-			relevantFacts: mergedFacts,
-			permanentFacts,
-			relationshipMemory,
-			recentChapters,
-			activeNames,
-			mentionedNames,
-			mentionType: isGroupChat(ctx) ? mentionType : undefined,
-			isVoiceMessage,
-			userAttachedImage: !!userImagePath,
-			shouldGenerateImage: shouldGenImage,
+		if (isSimpleAssistantMode || skipHistoricalContext) {
+			promptCtx = buildPromptContext({
+				relevantEpisodes: [],
+				relevantFacts: [],
+				mentionType: isGroupChat(ctx) ? mentionType : undefined,
+				groupAutoReply: options?.groupAutoReply === true,
+				groupContinuation: options?.groupContinuation === true,
+				isVoiceMessage,
+				userAttachedImage: !!userImagePath,
+				shouldGenerateImage: shouldGenImage,
+				allowPhotoRequest,
+				ttsAvailable: isTtsAvailable(),
+			});
+		} else {
+			// Start query embedding and name resolution in parallel
+			const queryEmbeddingPromise = getQueryEmbedding(buffer.messages);
+			const rawActiveNames = [
+				...new Set(
+					buffer.messages
+						.slice(-ACTIVE_NAME_WINDOW_MESSAGES)
+						.map((m) => m.name)
+						.filter((n): n is string => !!n),
+				),
+			];
+			const activeNamesPromise = Promise.all(
+				rawActiveNames.map((n) => resolveCanonicalName(n)),
+			).then((names) => [...new Set(names)]);
+
+			// Wait for both to complete
+			const [{ embedding: queryEmbedding, text: queryText }, activeNames] =
+				await Promise.all([queryEmbeddingPromise, activeNamesPromise]);
+			const mentionedNames = await findMentionedCanonicalNames(queryText);
+			const subjectNames = uniqueNames([...activeNames, ...mentionedNames]);
+
+			// Retrieve episodic, semantic, relationship, chapter, and permanent context in parallel.
+			const [
+				episodes,
+				facts,
+				participantFacts,
+				permanentFacts,
+				relationshipMemory,
+				recentChapters,
+			] = await Promise.all([
+				getRelevantEpisodes(
+					chatId,
+					queryEmbedding,
+					queryText,
+					MAX_RELEVANT_EPISODES,
+				),
+				getRelevantFacts(queryEmbedding, {
+					queryText,
+					maxCount: MAX_RELEVANT_FACTS,
+					chatId,
+				}),
+				subjectNames.length > 0
+					? getFactsForSubjects(subjectNames, MAX_PARTICIPANT_FACTS_PER_SUBJECT)
+					: ([] as SemanticFact[]),
+				getPermanentFacts(),
+				loadRelationshipMemory(chatId),
+				getRecentChapters(chatId),
+			]);
+
+			// Merge and deduplicate facts
+			const allFactIds = new Set(facts.map((f) => f.id));
+			const mergedFacts = [...facts];
+			for (const pf of participantFacts) {
+				if (!allFactIds.has(pf.id)) {
+					mergedFacts.push(pf);
+					allFactIds.add(pf.id);
+				}
+			}
+
+			promptCtx = buildPromptContext({
+				relevantEpisodes: episodes,
+				relevantFacts: mergedFacts,
+				permanentFacts,
+				relationshipMemory,
+				recentChapters,
+				activeNames,
+				mentionedNames,
+				mentionType: isGroupChat(ctx) ? mentionType : undefined,
+				isVoiceMessage,
+				userAttachedImage: !!userImagePath,
+				shouldGenerateImage: shouldGenImage,
+				allowPhotoRequest,
+				ttsAvailable: isTtsAvailable(),
+			});
+		}
+
+		const systemPrompt = await assembleSystemPrompt(promptCtx);
+		const messages = buildMessages(buffer, mediaAttachment);
+
+		// Generate response
+		const responseText = await generateResponse(systemPrompt, messages);
+
+		// Process and send the response
+		result = await sendResponse({
+			ctx,
+			responseText,
+			shouldGenImage,
 			allowPhotoRequest,
-			ttsAvailable: isTtsAvailable(),
+			buffer,
+			isGroup: isGroupChat(ctx),
+			userImagePath,
+			chatAction: typing,
 		});
+	} finally {
+		typing.stop();
 	}
-
-	const systemPrompt = await assembleSystemPrompt(promptCtx);
-	const messages = buildMessages(buffer, mediaAttachment);
-
-	// Generate response
-	const responseText = await generateResponse(systemPrompt, messages);
-
-	// Process and send the response
-	const result = await sendResponse({
-		ctx,
-		responseText,
-		shouldGenImage,
-		allowPhotoRequest,
-		buffer,
-		isGroup: isGroupChat(ctx),
-		userImagePath,
-	});
 
 	// Save bot response to sensory buffer (only if non-silenced and non-empty)
 	const didRespond = !!result?.cleanedText.trim();

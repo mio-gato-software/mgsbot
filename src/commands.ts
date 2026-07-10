@@ -10,10 +10,12 @@ import {
 } from "./memory/index.ts";
 import {
 	CHAT_PROVIDER_NAMES,
+	findEnvCaseMismatches,
 	formatProviderCommandStatus,
 	isChatProviderName,
 } from "./provider-options.ts";
 import { getChatProviderInfo, switchChatProvider } from "./providers/index.ts";
+import { parseEnvFile } from "./utils.ts";
 
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
 
@@ -32,7 +34,14 @@ export function registerCommands(bot: Bot): void {
 
 		if (!providerArg) {
 			const info = getChatProviderInfo();
-			await ctx.reply(formatProviderCommandStatus(info));
+			let status = formatProviderCommandStatus(info);
+			// Surface .env keys that differ from a known var only by case —
+			// the classic silently-ignored FAL_model vs FAL_MODEL typo.
+			const mismatches = findEnvCaseMismatches(Object.keys(parseEnvFile()));
+			if (mismatches.length > 0) {
+				status += `\n\n${mismatches.map((m) => `⚠️ ${m}`).join("\n")}`;
+			}
+			await ctx.reply(status);
 			return;
 		}
 

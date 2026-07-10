@@ -80,6 +80,8 @@ src/
   daily-weather.ts           ← Fetches weather from Open-Meteo API, cached daily in memory/daily-weather.json
   chat-logger.ts             ← Daily conversation log to text files (logs/ folder), toggled via ENABLE_CHAT_LOG
   bot-time.ts                ← Centralized timezone utilities via dayjs (BOT_TIMEZONE env var, default: America/Santo_Domingo)
+  chat-actions.ts            ← Sustained Telegram chat-action indicators: refresh loop (actions expire ~5s),
+                               per-modality switching (typing/upload_photo/record_voice), proactive typing pulse
   utils.ts                   ← atomicWriteFile(), withRetry(), env file parsing, misc helpers
   ai/
     core.ts                  ← GoogleGenAI instance, generateResponse() delegation to chat provider

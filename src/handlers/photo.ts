@@ -2,6 +2,7 @@
 import type { Bot } from "grammy";
 import { describeImage } from "../ai/vision.ts";
 import { isBotOff, isSleepingHour } from "../bot-state.ts";
+import { startChatAction } from "../chat-actions.ts";
 import {
 	getUserDisplayName,
 	isGroupChat,
@@ -35,6 +36,10 @@ export function registerPhotoHandler(bot: Bot, botToken: string): void {
 			await observeConversationTurn(ctx, observedContent, userName);
 			return;
 		}
+		// Receipt feedback while the image downloads and gets pre-analyzed.
+		// Stopped right before processConversation, which runs its own
+		// indicator (and may switch it to upload_photo for edit requests).
+		const receiving = startChatAction(ctx, "typing");
 		try {
 			const { filePath, mimeType } = await downloadImage(ctx, botToken);
 			const caption = ctx.message.caption;
@@ -49,6 +54,7 @@ export function registerPhotoHandler(bot: Bot, botToken: string): void {
 					const content = caption
 						? `[Image from ${safeName}, caption: "${safeCaption}"]`
 						: `[Image from ${safeName}]`;
+					receiving.stop();
 					await processConversationAndTrackGroupContinuation(
 						ctx,
 						content,
@@ -80,6 +86,7 @@ export function registerPhotoHandler(bot: Bot, botToken: string): void {
 							? `[Image from ${safeName}, caption: "${safeCaption}"]: ${description}`
 							: `[Image from ${safeName}]: ${description}`;
 					}
+					receiving.stop();
 					await processConversationAndTrackGroupContinuation(
 						ctx,
 						content,
@@ -99,6 +106,9 @@ export function registerPhotoHandler(bot: Bot, botToken: string): void {
 			log.error("[photo handler] Error:", error);
 			if (isDev)
 				await ctx.reply(`[Dev] Photo handler error: ${error}`).catch(() => {});
+		} finally {
+			// Idempotent: guards against the indicator leaking on early errors.
+			receiving.stop();
 		}
 	});
 }

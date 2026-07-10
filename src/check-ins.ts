@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import type { Api } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { botNow, clampToReasonableHours, getWeekStart } from "./bot-time.ts";
+import { pulseTypingBeforeSend } from "./chat-actions.ts";
 import { generateEmbedding } from "./embeddings.ts";
 import {
 	ACTIVE_CONVERSATION_MS,
@@ -466,7 +467,9 @@ export async function checkAndSendCheckIns(
 					continue;
 				}
 
-				// Send the message
+				// Send the message (brief typing pulse first — a person types for a
+				// moment before hitting send)
+				await pulseTypingBeforeSend(api, chatId);
 				try {
 					await api.sendMessage(chatId, message, { parse_mode: "Markdown" });
 				} catch {
