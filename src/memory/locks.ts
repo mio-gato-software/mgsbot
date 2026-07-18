@@ -51,6 +51,13 @@ export async function withChapterLock<T>(
 	return withKeyLock(`chapters:${chatId}`, fn);
 }
 
+export async function withPromotionSpoolLock<T>(
+	chatId: number,
+	fn: () => Promise<T>,
+): Promise<T> {
+	return withKeyLock(`promotion-spool:${chatId}`, fn);
+}
+
 export async function withSemanticLock<T>(fn: () => Promise<T>): Promise<T> {
 	return withKeyLock("semantic", fn);
 }

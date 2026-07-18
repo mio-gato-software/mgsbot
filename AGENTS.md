@@ -76,6 +76,8 @@ src/
   bot-state.ts               ← Runtime on/off state (/on, /off) and sleep-hour check
   bot-rules.ts               ← Optional headless behavior/style rules (memory/bot_rules.json)
   appearance.ts              ← Locates base character image for image generation
+  janitor.ts                 ← Daily semantic-memory janitor: reviews same-subject fact clusters via
+                               the background model, soft-retires contradictions/duplicates
   holidays.ts                ← Holiday calendar (hardcoded per year, needs annual update)
   daily-weather.ts           ← Fetches weather from Open-Meteo API, cached daily in memory/daily-weather.json
   chat-logger.ts             ← Daily conversation log to text files (logs/ folder), toggled via ENABLE_CHAT_LOG
@@ -99,7 +101,9 @@ src/
                                activity, mention, image, voice, rules
   memory/
     index.ts                 ← Re-exports + store initialization
-    sensory.ts               ← Per-chat recent messages buffer (max 10, FIFO, overflow promotion)
+    sensory.ts               ← Per-chat recent messages buffer (max 10, FIFO, boundary-aware overflow promotion)
+    promotion-spool.ts       ← Per-chat spool of unpromoted message chunks (failed promotions +
+                               inactivity-wipe remainders), retried at startup/hourly
     episodes.ts              ← Per-chat episode summaries with embeddings (max 20)
     semantic.ts              ← Global semantic facts: dedup, confidence decay, permanent facts
     relationships.ts         ← Per-chat relationship memory (summary, tone, dynamics, open threads)
@@ -139,6 +143,7 @@ memory/                      ← Runtime data (gitignored)
   daily-weather.json         ← Cached daily weather data
   episodes/<chat_id>.json    ← Per-chat episode summaries with embeddings (max 20)
   sensory/<chat_id>.json     ← Per-chat recent messages (max 10) + image scheduling
+  promotion-spool/<chat_id>.json ← Per-chat unpromoted chunks awaiting promotion retry
   relationships/<chat_id>.json ← Per-chat relationship memory
   chapters/<chat_id>.json    ← Per-chat monthly chapters
   base.{png,jpg,jpeg}        ← Optional reference image for character image generation
@@ -160,15 +165,16 @@ There are four independent provider axes:
 | Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` by available keys; `fal` only when explicit |
 | Images | `IMAGE_PROVIDER` + `FAL_IMAGE_MODEL` | Character image generation/editing | `gemini`; fal defaults to `nano-banana-pro` |
 
-`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis.
+`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work (fact extraction, narrative updates, janitor) is likewise pinned to `BACKGROUND_MODEL` (cheap Gemini) whenever `GOOGLE_API_KEY` is set, so the chat model choice doesn't multiply background costs.
 
 ### Memory System
 
 The memory system uses multiple tiers with vector embeddings for semantic search (`src/memory/`):
 
-- **Semantic Store** (`memory/semantic.json`): Global knowledge base of `SemanticFact` objects with 768-dim embeddings. Categories: "person", "group", "rule", "event". Facts have `importance`, `confidence` (decays 0.02/day, min 0.1), and `subject`. Deduplication via cosine similarity at 0.85 threshold. Facts can be marked `permanent: true` for immutable biographical data (birthplace, family, marriage) — these never decay and are always included in prompts (max 25).
+- **Semantic Store** (`memory/semantic.json`): Global knowledge base of `SemanticFact` objects with 768-dim embeddings. Categories: "person", "group", "rule", "event". Facts have `importance`, `confidence` (decays 0.02/day, min 0.1), and `subject`. Deduplication via cosine similarity at 0.85 threshold. Facts injected into a prompt are reinforced (decay clock reset + small confidence bump, throttled to once/hour per fact), so often-recalled facts don't fade. Facts can be marked `permanent: true` for immutable biographical data (birthplace, family, marriage) — these never decay and are always included in prompts (max 25). A daily janitor (`src/janitor.ts`, disable with `ENABLE_MEMORY_JANITOR=false`) reviews subjects with ≥6 active facts via the background model and soft-retires contradicted/duplicate facts (`supersededBy` + `validUntil`, never hard deletion).
 - **Episodes** (`memory/episodes/<chat_id>.json`): Per-chat summarized conversations (max 20). Each episode has `summary`, `participants`, `timestamp`, `importance`, and an `embedding` for similarity search. Top 3 most relevant episodes selected for prompts.
-- **Sensory Buffer** (`memory/sensory/<chat_id>.json`): Per-chat recent messages (max 10, FIFO). Tracks `lastActivity`, `messageCountSincePromotion`. When overflow, oldest 5 are promoted to an episode via AI summarization. Inactive chats (>3 days) clear messages but keep summary.
+- **Sensory Buffer** (`memory/sensory/<chat_id>.json`): Per-chat recent messages (max 10, FIFO). Tracks `lastActivity`, `messageCountSincePromotion`. On overflow, the oldest 3–7 messages (split at the largest ≥30-min time gap, default 5) are promoted to an episode via AI summarization. Inactive chats (>3 days) spool remaining messages for promotion, then clear the buffer. Passively witnessed group messages (bot not addressed) are promoted only at a higher importance bar (≥3).
+- **Promotion Spool** (`memory/promotion-spool/<chat_id>.json`): Chunks whose promotion failed (transient API error, rate limit) plus inactivity-wipe remainders. Retried on the next promotion for that chat, at startup, and hourly; a chunk is dropped after 10 failed attempts.
 - **Relationships** (`memory/relationships/<chat_id>.json`): Per-chat relationship memory — an evolving summary of the relationship dynamic (tone, notable dynamics, open threads, interaction count).
 - **Chapters** (`memory/chapters/<chat_id>.json`): Per-chat monthly narrative chapters built from episodes (id `chapter_<chatId>_<YYYY-MM>`, title, compact summary, importance 1–5).
 
@@ -257,6 +263,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `CHAT_PROVIDER`: `gemini` (default), `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, or `fal`
 - `GOOGLE_API_KEY`: Always required — used for embeddings, image analysis, YouTube analysis, and image generation regardless of chat provider (also used for audio transcription when `STT_PROVIDER=gemini`)
 - `GEMINI_MODEL`: Gemini chat model (default: `gemini-3-flash-preview`)
+- `BACKGROUND_MODEL`: Pinned model for background memory work — fact extraction, narrative updates, janitor (default: `gemini-flash-latest`; falls back to the chat provider without `GOOGLE_API_KEY`)
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/claude-3.5-sonnet`)
 - `OPENROUTER_HTTP_REFERER` / `OPENROUTER_TITLE`: Optional attribution headers for OpenRouter requests
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `claude-sonnet-4-5-20250929`)
@@ -285,6 +292,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `CHECK_INS_PER_WEEK`: Number of check-in messages per week (default: `2`)
 - `ENABLE_CHAT_LOG`: Set `true` to enable daily conversation logging to `logs/` folder
 - `ENABLE_SLEEP_SCHEDULE`: Set `false` to disable sleep schedule (default: `true`)
+- `ENABLE_MEMORY_JANITOR`: Set `false` to disable the daily semantic-memory janitor (default: `true`)
 - `BOT_TIMEZONE`: IANA timezone for the bot (default: `America/Santo_Domingo`). Affects sleep schedule, time awareness, follow-ups, and weather.
 - `SHOW_TRANSCRIPTION`: Set `true` to echo voice/audio transcriptions back as a `📝` reply (debug aid)
 - `NODE_ENV`: Set `development` for verbose logging

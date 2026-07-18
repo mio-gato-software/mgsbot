@@ -2,12 +2,16 @@ import { readFile } from "node:fs/promises";
 import { log } from "../logger.ts";
 import type { ConversationMessage, SensoryBuffer } from "../types.ts";
 import { atomicWriteFile, isFileNotFound } from "../utils.ts";
+import { spoolChunk } from "./promotion-spool.ts";
 import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
 
 export const SENSORY_DIR = "./memory/sensory";
 
 const SENSORY_MAX_MESSAGES = 10;
-const SENSORY_OVERFLOW_COUNT = 5; // Messages returned on overflow
+const SENSORY_OVERFLOW_COUNT = 5; // Default messages returned on overflow
+const OVERFLOW_MIN_SPLIT = 3; // Boundary-aware overflow: smallest chunk
+const OVERFLOW_MAX_SPLIT = 7; // Boundary-aware overflow: largest chunk
+const OVERFLOW_BOUNDARY_GAP_MS = 30 * 60 * 1000; // Gap that marks a topic boundary
 const INACTIVITY_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const MEDIA_MESSAGE_COMPACT_TARGET_CHARS = 240;
 const UNCOMPRESSED_RECENT_MESSAGES = 2;
@@ -78,8 +82,19 @@ export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 		const data = await readFile(sensoryPath(chatId), "utf-8");
 		const buffer = JSON.parse(data) as SensoryBuffer;
 
-		// Clear messages if inactive for > 3 days
+		// Clear messages if inactive for > 3 days. The remainder is spooled for
+		// episode promotion instead of being discarded — the last messages before
+		// a silence are often the memorable ones. The deterministic id (derived
+		// from state that only changes on save) makes repeated loads idempotent.
 		if (Date.now() - buffer.lastActivity > INACTIVITY_THRESHOLD_MS) {
+			if (buffer.messages.length > 0) {
+				await spoolChunk({
+					chatId,
+					messages: buffer.messages,
+					reason: "inactivity-wipe",
+					id: `wipe_${chatId}_${buffer.lastActivity}_${buffer.messages.length}`,
+				});
+			}
 			buffer.messages = [];
 		}
 
@@ -97,6 +112,33 @@ export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 	}
 }
 
+/**
+ * Persist the inactivity wipe for a chat: if the on-disk buffer is still stale
+ * and holds messages, save it with messages cleared. Must run before a spooled
+ * inactivity-wipe chunk is promoted — otherwise a later load of the still-stale
+ * buffer would re-spool the chunk after its removal, promoting it twice.
+ * Preserves lastActivity (unlike saveSensory) so the follow-up/check-in
+ * "active conversation" guards don't mistake a dead chat for a live one.
+ * Call under withChatLock.
+ */
+export async function persistInactivityWipe(chatId: number): Promise<void> {
+	try {
+		const data = await readFile(sensoryPath(chatId), "utf-8");
+		const buffer = JSON.parse(data) as SensoryBuffer;
+		if (
+			buffer.messages.length === 0 ||
+			Date.now() - buffer.lastActivity <= INACTIVITY_THRESHOLD_MS
+		) {
+			return;
+		}
+		buffer.messages = [];
+		buffer.schemaVersion = CURRENT_SCHEMA_VERSION;
+		await atomicWriteFile(sensoryPath(chatId), JSON.stringify(buffer, null, 2));
+	} catch (err) {
+		if (!isFileNotFound(err)) throw err;
+	}
+}
+
 export async function saveSensory(buffer: SensoryBuffer): Promise<void> {
 	buffer.lastActivity = Date.now();
 	buffer.schemaVersion = CURRENT_SCHEMA_VERSION;
@@ -107,8 +149,30 @@ export async function saveSensory(buffer: SensoryBuffer): Promise<void> {
 }
 
 /**
+ * Pick how many of the oldest messages to promote on overflow. Defaults to 5,
+ * but shifts to the largest time gap (>= 30 min) between consecutive messages
+ * within [3, 7] so chunks end on conversation boundaries instead of mid-topic.
+ */
+function findOverflowSplitCount(messages: ConversationMessage[]): number {
+	let bestCount = SENSORY_OVERFLOW_COUNT;
+	let bestGap = 0;
+	for (let count = OVERFLOW_MIN_SPLIT; count <= OVERFLOW_MAX_SPLIT; count++) {
+		const before = messages[count - 1];
+		const after = messages[count];
+		if (!before || !after) break;
+		const gap = after.timestamp - before.timestamp;
+		if (gap >= OVERFLOW_BOUNDARY_GAP_MS && gap > bestGap) {
+			bestGap = gap;
+			bestCount = count;
+		}
+	}
+	return bestCount;
+}
+
+/**
  * Add a message to the sensory buffer.
- * Returns overflow messages (oldest 5) if buffer exceeds 10, otherwise null.
+ * Returns overflow messages (oldest 3-7, split at a conversation boundary
+ * when one exists) if the buffer exceeds 10, otherwise null.
  */
 export async function addMessageToSensory(
 	buffer: SensoryBuffer,
@@ -120,8 +184,9 @@ export async function addMessageToSensory(
 	let overflow: ConversationMessage[] | null = null;
 
 	if (buffer.messages.length > SENSORY_MAX_MESSAGES) {
-		overflow = buffer.messages.slice(0, SENSORY_OVERFLOW_COUNT);
-		buffer.messages = buffer.messages.slice(SENSORY_OVERFLOW_COUNT);
+		const splitCount = findOverflowSplitCount(buffer.messages);
+		overflow = buffer.messages.slice(0, splitCount);
+		buffer.messages = buffer.messages.slice(splitCount);
 	}
 
 	compactOlderMediaMessages(buffer.messages);
