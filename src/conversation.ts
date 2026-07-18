@@ -31,8 +31,15 @@ import {
 	getRelevantEpisodes,
 	getRelevantExistingFactsForDedup,
 	getRelevantFacts,
+	listSpooledChatIds,
+	loadPromotionSpool,
 	loadRelationshipMemory,
 	loadSensory,
+	persistInactivityWipe,
+	recordSpoolAttempt,
+	reinforceRecalledFacts,
+	removeSpooledChunk,
+	spoolChunk,
 	updateRelationshipMemory,
 	upsertChapter,
 	withChatLock,
@@ -55,6 +62,14 @@ const ACTIVE_NAME_WINDOW_MESSAGES = 6;
 const MAX_RELEVANT_EPISODES = 3;
 const MAX_RELEVANT_FACTS = 8;
 const MAX_PARTICIPANT_FACTS_PER_SUBJECT = 3;
+// Promotion importance bars: chunks from conversations the bot took part in
+// use the default; passively witnessed group chatter must clear a higher bar.
+const DEFAULT_PROMOTION_MIN_IMPORTANCE = 2;
+const PASSIVE_PROMOTION_MIN_IMPORTANCE = 3;
+// Failed promotions are spooled and retried; a chunk that keeps failing
+// (e.g., content that deterministically trips the provider) is dropped after
+// this many attempts so it can't clog the spool forever.
+const MAX_SPOOL_ATTEMPTS = 10;
 
 function uniqueNames(names: string[]): string[] {
 	return [...new Set(names.filter((name) => name.trim().length > 0))];
@@ -229,9 +244,9 @@ export async function processConversation(
 			logUserMessage(userName, userContent).catch(log.error);
 		}
 
-		// Promote overflow to memory in background
+		// Promote overflow to memory in background (spooled for retry on failure)
 		if (overflow) {
-			promoteToMemory(chatId, overflow).catch((err) => {
+			promoteToMemoryReliably(chatId, overflow).catch((err) => {
 				log.error(`[promote] Failed for chat ${chatId} (user overflow):`, err);
 			});
 		}
@@ -329,6 +344,14 @@ export async function processConversation(
 				}
 			}
 
+			// Retrieval reinforces: facts injected into the prompt get their decay
+			// clock reset (throttled), so often-recalled memories don't fade.
+			if (mergedFacts.length > 0) {
+				reinforceRecalledFacts(mergedFacts.map((f) => f.id)).catch((err) => {
+					log.debug("[semantic] Retrieval reinforcement failed:", err);
+				});
+			}
+
 			promptCtx = buildPromptContext({
 				relevantEpisodes: episodes,
 				relevantFacts: mergedFacts,
@@ -384,9 +407,9 @@ export async function processConversation(
 		});
 		logBotMessage(result.cleanedText).catch(log.error);
 
-		// Promote bot overflow too
+		// Promote bot overflow too (spooled for retry on failure)
 		if (botOverflow) {
-			promoteToMemory(chatId, botOverflow).catch((err) => {
+			promoteToMemoryReliably(chatId, botOverflow).catch((err) => {
 				log.error(`[promote] Failed for chat ${chatId} (bot overflow):`, err);
 			});
 		}
@@ -399,9 +422,6 @@ export async function observeConversationTurn(
 	ctx: Context,
 	userContent: string,
 	userName: string,
-	options?: {
-		promoteOverflow?: boolean;
-	},
 ): Promise<void> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
@@ -424,25 +444,104 @@ export async function observeConversationTurn(
 	});
 	logUserMessage(userName, userContent).catch(log.error);
 
+	// Passively witnessed messages (the bot wasn't addressed) still get a shot
+	// at long-term memory, but only above a higher importance bar so ambient
+	// group noise doesn't accumulate.
 	if (overflow) {
-		if (options?.promoteOverflow === true) {
-			promoteToMemory(chatId, overflow).catch((err) => {
-				log.error(
-					`[promote] Failed for chat ${chatId} (observer overflow):`,
-					err,
-				);
-			});
-		} else {
-			log.debug(
-				`[observer] Discarded ${overflow.length} passive overflow messages for chat ${chatId}`,
+		promoteToMemoryReliably(chatId, overflow, {
+			minImportance: PASSIVE_PROMOTION_MIN_IMPORTANCE,
+		}).catch((err) => {
+			log.error(
+				`[promote] Failed for chat ${chatId} (observer overflow):`,
+				err,
 			);
+		});
+	}
+}
+
+/**
+ * Promote a chunk to memory, spooling it on failure so a transient provider
+ * error or rate limit can't permanently lose messages. Previously spooled
+ * chunks for the chat are retried first (keeps rough chronological order).
+ */
+export async function promoteToMemoryReliably(
+	chatId: number,
+	overflow: ConversationMessage[],
+	options?: { minImportance?: number },
+): Promise<void> {
+	await drainPromotionSpool(chatId);
+	try {
+		await promoteToMemory(chatId, overflow, options);
+	} catch (err) {
+		log.error(
+			`[promote] Failed for chat ${chatId} — spooling chunk for retry:`,
+			err,
+		);
+		await spoolChunk({
+			chatId,
+			messages: overflow,
+			reason: "promotion-failed",
+			minImportance: options?.minImportance,
+		});
+	}
+}
+
+const spoolDrainsInProgress = new Set<number>();
+
+/**
+ * Retry spooled chunks for a chat. Concurrent drains for the same chat are
+ * skipped (not queued): chunk removal is keyed by id, but skipping avoids
+ * promoting the same chunk twice before the first removal lands.
+ */
+export async function drainPromotionSpool(chatId: number): Promise<void> {
+	if (spoolDrainsInProgress.has(chatId)) return;
+	spoolDrainsInProgress.add(chatId);
+	try {
+		const chunks = await loadPromotionSpool(chatId);
+		for (const chunk of chunks) {
+			try {
+				if (chunk.reason === "inactivity-wipe") {
+					// Commit the wipe to disk before promoting: a still-stale buffer
+					// would otherwise re-spool this chunk after removal and promote
+					// the same messages twice.
+					await withChatLock(chatId, () => persistInactivityWipe(chatId));
+				}
+				await promoteToMemory(chatId, chunk.messages, {
+					minImportance: chunk.minImportance,
+				});
+				await removeSpooledChunk(chatId, chunk.id);
+			} catch (err) {
+				const attempts = await recordSpoolAttempt(chatId, chunk.id);
+				if (attempts >= MAX_SPOOL_ATTEMPTS) {
+					log.error(
+						`[spool] Giving up on chunk ${chunk.id} for chat ${chatId} after ${attempts} attempts:`,
+						err,
+					);
+					await removeSpooledChunk(chatId, chunk.id);
+				} else {
+					log.warn(
+						`[spool] Retry failed for chunk ${chunk.id} in chat ${chatId} (attempt ${attempts}/${MAX_SPOOL_ATTEMPTS}):`,
+						err,
+					);
+				}
+			}
 		}
+	} finally {
+		spoolDrainsInProgress.delete(chatId);
+	}
+}
+
+/** Retry every chat's spooled chunks (startup + periodic job). */
+export async function retrySpooledPromotions(): Promise<void> {
+	for (const chatId of await listSpooledChatIds()) {
+		await drainPromotionSpool(chatId);
 	}
 }
 
 export async function promoteToMemory(
 	chatId: number,
 	overflow: ConversationMessage[],
+	options?: { minImportance?: number },
 ): Promise<void> {
 	const recentText = overflow
 		.map(
@@ -484,13 +583,22 @@ export async function promoteToMemory(
 	// Downstream gate: skip if the LLM judged the chunk uninteresting. The heuristic
 	// pre-filter is intentionally loose so transient activity mentions don't get
 	// silently dropped — but if even the LLM finds nothing worth keeping, don't
-	// pollute episodes with "casual conversation" placeholders.
-	const isTrivial =
-		result.importance <= 1 &&
-		result.facts.length === 0 &&
-		!result.personalitySignals?.traitChanges?.length;
-	if (isTrivial) {
-		log.debug("[promote] Skipped: LLM judged chunk trivial");
+	// pollute episodes with "casual conversation" placeholders. At the default
+	// bar any fact or personality signal rescues the chunk; above it (passive
+	// group chatter) the episode or a fact must itself clear the bar.
+	const minImportance =
+		options?.minImportance ?? DEFAULT_PROMOTION_MIN_IMPORTANCE;
+	const aboveDefaultBar = minImportance > DEFAULT_PROMOTION_MIN_IMPORTANCE;
+	const hasQualifyingFacts = aboveDefaultBar
+		? result.facts.some((f) => f.importance >= minImportance)
+		: result.facts.length > 0;
+	const hasSignals = !!result.personalitySignals?.traitChanges?.length;
+	const meetsBar =
+		result.importance >= minImportance ||
+		hasQualifyingFacts ||
+		(!aboveDefaultBar && hasSignals);
+	if (!meetsBar) {
+		log.debug(`[promote] Skipped: chunk below importance bar ${minImportance}`);
 		return;
 	}
 
