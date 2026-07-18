@@ -27,9 +27,17 @@ export {
 	withEpisodeLock,
 	withFollowUpsLock,
 	withPersonalityLock,
+	withPromotionSpoolLock,
 	withRelationshipLock,
 	withSemanticLock,
 } from "./locks.ts";
+export {
+	listSpooledChatIds,
+	loadPromotionSpool,
+	recordSpoolAttempt,
+	removeSpooledChunk,
+	spoolChunk,
+} from "./promotion-spool.ts";
 export {
 	computeTextScore,
 	getQueryEmbedding,
@@ -47,12 +55,15 @@ export {
 	getPermanentFacts,
 	getRelevantExistingFactsForDedup,
 	getRelevantFacts,
+	isFactActive,
 	loadSemanticStore,
+	reinforceRecalledFacts,
 	saveSemanticStore,
 } from "./semantic.ts";
 export {
 	addMessageToSensory,
 	loadSensory,
+	persistInactivityWipe,
 	saveSensory,
 } from "./sensory.ts";
 export {

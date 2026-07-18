@@ -15,6 +15,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations across several la
 ## Features
 
 - **Layered memory system** — manual profile/rules, relationship summaries, monthly chapters, semantic facts, episode summaries, and recent sensory context
+- **Self-maintaining memory** — failed promotions are spooled and retried (no data loss on API errors), often-recalled facts are reinforced instead of decaying, and a daily janitor retires contradicted or duplicate facts
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
 - **Multi-modal input** — text, voice notes, audio files, photos/images, and YouTube link analysis
 - **Image generation** — generates character images using Gemini or fal.ai with an optional reference image
@@ -128,7 +129,7 @@ There are four independent provider axes:
 | Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` by available keys; `fal` only when explicit | `ELEVENLABS_API_KEY`, `INWORLD_API_KEY`, `LEMON_FOX_API_KEY`, or `FAL_API_KEY` |
 | Images | `IMAGE_PROVIDER` + `FAL_IMAGE_MODEL` | Character image generation/editing | `gemini`; fal defaults to `nano-banana-pro` | `GOOGLE_API_KEY` or `FAL_API_KEY` |
 
-`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis.
+`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work (fact extraction, narrative updates, memory janitor) is pinned to a cheap Gemini model (`BACKGROUND_MODEL`) whenever `GOOGLE_API_KEY` is set, so choosing an expensive chat model doesn't multiply background costs.
 
 ### Required
 
@@ -144,6 +145,7 @@ There are four independent provider axes:
 | --- | --- | --- |
 | `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, or `fal` |
 | `GEMINI_MODEL` | `gemini-3-flash-preview` | Gemini model when `CHAT_PROVIDER=gemini` (other Gemini-only paths in code use fixed models; see **Google AI usage** below) |
+| `BACKGROUND_MODEL` | `gemini-flash-latest` | Pinned model for background memory work — fact extraction, narrative updates, and the memory janitor. Falls back to the chat provider when `GOOGLE_API_KEY` is missing. |
 | `OPENROUTER_API_KEY` | — | Required if using OpenRouter direct transport |
 | `OPENROUTER_MODEL` | `anthropic/claude-3.5-sonnet` | OpenRouter model |
 | `OPENROUTER_TRANSPORT` | *(auto)* | `direct` uses `OPENROUTER_API_KEY`; `fal` uses `FAL_API_KEY` with fal.ai's `openrouter/router` endpoint. If unset, direct is used when `OPENROUTER_API_KEY` exists; otherwise fal is used when `FAL_API_KEY` exists. |
@@ -185,7 +187,7 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 
 **Provider combinations:** You can mix providers across axes. For example, `CHAT_PROVIDER=anthropic`, `STT_PROVIDER=gemini`, `TTS_PROVIDER=elevenlabs`, and `IMAGE_PROVIDER=fal` is valid as long as the matching keys are set. A single `FAL_API_KEY` can satisfy OpenRouter via fal, fal.ai chat, STT, TTS, and images. A single `GOOGLE_API_KEY` powers Gemini chat plus the Google-only support paths.
 
-**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2`. Character image generation uses `gemini-3-pro-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview`.
+**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2`. Character image generation uses `gemini-3-pro-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview`. Background memory work uses `BACKGROUND_MODEL` (default `gemini-flash-latest`).
 
 ### Access Control
 
@@ -232,6 +234,7 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 | `ENABLE_FOLLOW_UPS` | `false` | Proactive follow-up questions about plans the user mentioned |
 | `ENABLE_CHECK_INS` | `false` | Proactive check-in messages (~2/week, like a real friend) |
 | `CHECK_INS_PER_WEEK` | `2` | Number of check-in messages per week |
+| `ENABLE_MEMORY_JANITOR` | `true` | Daily semantic-memory janitor that retires contradicted/duplicate facts about the same subject |
 | `ENABLE_CHAT_LOG` | `false` | Daily conversation logging to `logs/` folder |
 | `CHAT_LOG_RETENTION_DAYS` | `30` | Days to keep daily chat log files before deletion |
 | `NODE_ENV` | `production` | Set `development` for verbose logging |
@@ -260,6 +263,7 @@ src/
   identities.ts              User identity tracking: canonical names, aliases, name changes
   check-ins.ts               Proactive check-in scheduling and delivery
   follow-ups.ts              Follow-up detection, scheduling, and delivery
+  janitor.ts                 Daily semantic-memory janitor: retires contradicted/duplicate facts
   holidays.ts                Holiday calendar (currently Dominican Republic 2026)
   daily-weather.ts           Weather data from Open-Meteo API, cached daily
   chat-logger.ts             Daily conversation log writer
@@ -274,9 +278,10 @@ src/
     classifiers.ts           Lightweight AI classifiers used by proactive features
   memory/
     index.ts                 Memory facade and directory initialization
-    sensory.ts               Recent-message buffer and overflow promotion trigger
+    sensory.ts               Recent-message buffer and boundary-aware overflow promotion
+    promotion-spool.ts       Spool of unpromoted chunks (failed promotions, inactivity wipes)
     episodes.ts              Per-chat episodic summaries and relevance search
-    semantic.ts              Global semantic facts, confidence decay, dedup/supersession
+    semantic.ts              Global semantic facts, decay, retrieval reinforcement, dedup/supersession
     relationships.ts         Per-chat relationship state
     chapters.ts              Monthly narrative chapter summaries
     queries.ts               Embedding/text scoring helpers
@@ -352,10 +357,13 @@ The bot uses a layered memory architecture inspired by human cognition. The top 
 ├─────────────────────────────────────────────────┤
 │  Semantic Store (memory/semantic.json)          │
 │  Global knowledge base of atomic facts with     │
-│  vector embeddings (gemini-embedding-2).│
+│  vector embeddings (gemini-embedding-2).        │
 │  Categories: person, group, rule, event.        │
-│  Confidence decays 0.02/day (min 0.1).          │
+│  Confidence decays 0.02/day (min 0.1); facts    │
+│  recalled into prompts are reinforced instead.  │
 │  Deduplication via cosine similarity at 0.85.   │
+│  A daily janitor retires contradicted or        │
+│  duplicate facts about the same subject.        │
 ├─────────────────────────────────────────────────┤
 │  Episodes (memory/episodes/<chat_id>.json)      │
 │  Per-chat summarized conversations (max 20).    │
@@ -365,11 +373,22 @@ The bot uses a layered memory architecture inspired by human cognition. The top 
 ├─────────────────────────────────────────────────┤
 │  Sensory Buffer (memory/sensory/<chat_id>.json) │
 │  Recent messages per chat (max 10, FIFO).       │
-│  Oldest 5 promoted to episode via AI            │
-│  summarization on overflow. Inactive chats      │
-│  (>3 days) clear messages but keep summary.     │
+│  On overflow the oldest 3-7 messages (split at  │
+│  the largest time gap) are promoted to an       │
+│  episode via AI summarization. Inactive chats   │
+│  (>3 days) promote the remainder, then clear.   │
+├─────────────────────────────────────────────────┤
+│  Promotion Spool                                │
+│  (memory/promotion-spool/<chat_id>.json)        │
+│  Chunks whose promotion failed (API error, rate │
+│  limit) plus inactivity-wipe remainders.        │
+│  Retried at startup, hourly, and before the     │
+│  chat's next promotion — nothing is lost to a   │
+│  transient failure.                             │
 └─────────────────────────────────────────────────┘
 ```
+
+Conversations the bot merely witnesses in groups (without being addressed) are promoted only when the chunk clears a higher importance bar, so ambient chatter doesn't accumulate as long-term memory.
 
 All memory files are auto-created on first run. The `memory/` directory is gitignored — it contains your bot's learned knowledge and should be treated as user data.
 
@@ -396,7 +415,7 @@ The bot develops emergent personality traits that evolve over time:
    - `[IMAGE: prompt]` — generate and send a character image, or a subject-only image in full-access mode
    - `[IMAGE_SELF: prompt]` — generate the bot character in a scene in full-access mode
    - `[TTS]text[/TTS]` — send a voice note via the configured TTS provider
-8. Background: memory evaluation extracts semantic facts, personality signals, and follow-up opportunities
+8. Background: memory evaluation extracts semantic facts, personality signals, and follow-up opportunities on the pinned `BACKGROUND_MODEL`; failed promotions are spooled and retried automatically
 
 ### Image Generation
 

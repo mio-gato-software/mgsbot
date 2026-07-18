@@ -16,6 +16,10 @@ const CONFIDENCE_DECAY_RATE = 0.02; // Per day
 const MIN_CONFIDENCE = 0.1;
 const MAX_PERMANENT_FACTS = 25;
 const MAX_DEDUP_FACTS = 30;
+// Retrieval reinforcement: throttle so an active conversation doesn't rewrite
+// the store on every message, and bump gently (dedup reconfirm uses +0.2).
+const REINFORCEMENT_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const REINFORCEMENT_CONFIDENCE_BUMP = 0.05;
 
 let semanticCache: SemanticFact[] | null = null;
 let semanticLastMtimeMs = 0;
@@ -44,7 +48,7 @@ function normalizeFactShape(fact: SemanticFact): SemanticFact {
 	return fact;
 }
 
-function isFactActive(fact: SemanticFact, now = Date.now()): boolean {
+export function isFactActive(fact: SemanticFact, now = Date.now()): boolean {
 	return !fact.supersededBy && (!fact.validUntil || fact.validUntil > now);
 }
 
@@ -378,6 +382,46 @@ export async function getFactsForSubjects(
 		result.push(...facts.slice(0, maxPerSubject));
 	}
 	return result;
+}
+
+/**
+ * Apply retrieval reinforcement to the given facts in place: a fact that was
+ * actually injected into a prompt gets its decay clock reset and a small
+ * confidence bump, so often-recalled memories become effectively immortal.
+ * Facts reinforced within the last hour are skipped (write throttle).
+ * Returns the number of facts changed.
+ */
+export function applyRetrievalReinforcement(
+	store: SemanticFact[],
+	factIds: string[],
+	now = Date.now(),
+): number {
+	const ids = new Set(factIds);
+	let changed = 0;
+	for (const fact of store) {
+		if (!ids.has(fact.id) || fact.permanent || !isFactActive(fact, now)) {
+			continue;
+		}
+		if (now - fact.lastConfirmed < REINFORCEMENT_MIN_INTERVAL_MS) continue;
+		fact.lastConfirmed = now;
+		fact.lastDecayedAt = now;
+		fact.confidence = Math.min(
+			1,
+			fact.confidence + REINFORCEMENT_CONFIDENCE_BUMP,
+		);
+		changed++;
+	}
+	return changed;
+}
+
+export async function reinforceRecalledFacts(factIds: string[]): Promise<void> {
+	if (factIds.length === 0) return;
+	await withSemanticLock(async () => {
+		const store = await loadSemanticStore();
+		if (applyRetrievalReinforcement(store, factIds) > 0) {
+			await saveSemanticStore(store);
+		}
+	});
 }
 
 export async function getPermanentFacts(): Promise<SemanticFact[]> {

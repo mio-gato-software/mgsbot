@@ -124,6 +124,8 @@ const { checkAndSendFollowUps, initFollowUps } = await import(
 const { isBotOff, isSleepingHour, registerHandlers } = await import(
 	"./src/handlers.ts"
 );
+const { retrySpooledPromotions } = await import("./src/conversation.ts");
+const { runSemanticJanitor } = await import("./src/janitor.ts");
 const { initIdentities } = await import("./src/identities.ts");
 const { initMemoryDirs } = await import("./src/memory/index.ts");
 const { initPersonality } = await import("./src/personality.ts");
@@ -215,6 +217,31 @@ intervals.push(
 		});
 	}, 3_600_000),
 );
+
+// Retry promotions that failed or were captured by the inactivity wipe
+// (runs at startup, then hourly)
+retrySpooledPromotions().catch((err) => {
+	log.error("[spool] Startup promotion retry failed:", err);
+});
+intervals.push(
+	setInterval(() => {
+		retrySpooledPromotions().catch((err) => {
+			log.error("[spool] Promotion retry failed:", err);
+		});
+	}, 3_600_000),
+);
+
+// Semantic janitor: reviews same-subject fact clusters for contradictions
+// and duplicates (checked hourly, runs at most once per day)
+if (process.env.ENABLE_MEMORY_JANITOR !== "false") {
+	intervals.push(
+		setInterval(() => {
+			runSemanticJanitor().catch((err) => {
+				log.error("[janitor] Semantic janitor failed:", err);
+			});
+		}, 3_600_000),
+	);
+}
 
 // Follow-up checker (only if enabled)
 if (process.env.ENABLE_FOLLOW_UPS === "true") {

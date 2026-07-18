@@ -8,7 +8,7 @@ import type {
 } from "../types.ts";
 import { TRAIT_NAMES } from "../types.ts";
 import { hasFollowUpIntent } from "./classifiers.ts";
-import { generateResponse } from "./core.ts";
+import { generateBackgroundResponse, generateResponse } from "./core.ts";
 
 const VALID_CATEGORIES = new Set(["person", "group", "rule", "event"]);
 const VALID_TRAIT_NAMES = new Set<string>(TRAIT_NAMES);
@@ -220,7 +220,7 @@ If there's nothing personally relevant: {"summary": "casual conversation", "impo
 Conversation:
 ${recentMessages}`;
 
-	const text = await generateResponse(systemPrompt, [
+	const text = await generateBackgroundResponse(systemPrompt, [
 		{ role: "user", content: userMessage },
 	]);
 
@@ -321,7 +321,7 @@ Respond ONLY with JSON:
 }`;
 
 	try {
-		const text = await generateResponse(systemPrompt, [
+		const text = await generateBackgroundResponse(systemPrompt, [
 			{ role: "user", content: userMessage },
 		]);
 		const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -330,6 +330,92 @@ Respond ONLY with JSON:
 	} catch (error) {
 		log.debug("[long-term-memory] Update failed:", error);
 		return validateLongTermMemoryUpdate({});
+	}
+}
+
+export interface FactRetirement {
+	id: string;
+	supersededBy?: string;
+	reason: string;
+}
+
+/**
+ * Janitor pass over a cluster of same-subject facts: ask the background model
+ * which facts are contradicted by newer ones or are redundant duplicates.
+ * Conservative by instruction; returns an empty list on any parse failure.
+ */
+export async function reviewFactCluster(input: {
+	subject: string;
+	facts: Array<{
+		id: string;
+		content: string;
+		createdAt: number;
+		importance: number;
+	}>;
+}): Promise<FactRetirement[]> {
+	const factLines = input.facts
+		.map(
+			(fact) =>
+				`- id: ${fact.id} | saved: ${new Date(fact.createdAt).toISOString().slice(0, 10)} | importance: ${fact.importance} | ${fact.content}`,
+		)
+		.join("\n");
+
+	const systemPrompt =
+		"You are a careful memory-maintenance assistant. Respond ONLY with valid JSON, no additional text.";
+
+	const userMessage = `These are saved memory facts about the same subject ("${input.subject}").
+
+Identify ONLY facts that should be retired because they are:
+1. Directly CONTRADICTED by a newer fact in the list (e.g., an old job, location, or plan that a newer fact replaces), or
+2. Redundant DUPLICATES of another fact, adding no information.
+
+Rules:
+- Be VERY conservative. When in doubt, keep the fact.
+- Facts can coexist if both can be true at the same time (e.g., two different hobbies).
+- Retire the OLDER fact and point "supersededBy" at the NEWER fact's id.
+- Never retire a fact just because it seems unimportant — only for contradiction or duplication.
+
+Facts:
+${factLines}
+
+Respond ONLY with JSON:
+{"retire": [{"id": "fact id to retire", "supersededBy": "id of the newer fact that replaces it (omit if none)", "reason": "short reason"}]}
+
+If nothing should be retired: {"retire": []}`;
+
+	const text = await generateBackgroundResponse(systemPrompt, [
+		{ role: "user", content: userMessage },
+	]);
+
+	try {
+		const jsonMatch = text.match(/\{[\s\S]*\}/);
+		if (!jsonMatch) return [];
+		const parsed = JSON.parse(jsonMatch[0]) as {
+			retire?: Array<{
+				id?: unknown;
+				supersededBy?: unknown;
+				reason?: unknown;
+			}>;
+		};
+		if (!Array.isArray(parsed.retire)) return [];
+		return parsed.retire
+			.filter(
+				(
+					entry,
+				): entry is { id: string; supersededBy?: unknown; reason?: unknown } =>
+					typeof entry.id === "string" && entry.id.trim().length > 0,
+			)
+			.map((entry) => ({
+				id: entry.id.trim(),
+				supersededBy:
+					typeof entry.supersededBy === "string" && entry.supersededBy.trim()
+						? entry.supersededBy.trim()
+						: undefined,
+				reason: typeof entry.reason === "string" ? entry.reason.trim() : "",
+			}));
+	} catch (error) {
+		log.debug("[reviewFactCluster] Parse error:", error);
+		return [];
 	}
 }
 
@@ -370,7 +456,7 @@ Messages:
 ${recentMessages}`;
 
 	try {
-		const text = await generateResponse(systemPrompt, [
+		const text = await generateBackgroundResponse(systemPrompt, [
 			{ role: "user", content: userMessage },
 		]);
 
