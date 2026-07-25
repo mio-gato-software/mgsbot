@@ -3,6 +3,7 @@ import { log } from "../logger.ts";
 import type { ConversationMessage } from "../types.ts";
 import { atomicWriteFile, isFileNotFound } from "../utils.ts";
 import { withPromotionSpoolLock } from "./locks.ts";
+import type { PromotionSource } from "./promotion-metrics.ts";
 import { unwrapVersioned, wrapVersioned } from "./versioning.ts";
 
 export const PROMOTION_SPOOL_DIR = "./memory/promotion-spool";
@@ -17,6 +18,8 @@ export interface SpooledChunk {
 	reason: "promotion-failed" | "inactivity-wipe";
 	/** Importance bar the chunk was originally promoted under (see promoteToMemory). */
 	minImportance?: number;
+	/** Promotion path the chunk came from, kept so retries stay attributable. */
+	source?: PromotionSource;
 	spooledAt: number;
 	attempts: number;
 }
@@ -66,6 +69,7 @@ export async function spoolChunk(input: {
 	reason: SpooledChunk["reason"];
 	id?: string;
 	minImportance?: number;
+	source?: PromotionSource;
 }): Promise<void> {
 	if (input.messages.length === 0) return;
 	await withPromotionSpoolLock(input.chatId, async () => {
@@ -80,6 +84,7 @@ export async function spoolChunk(input: {
 			messages: input.messages,
 			reason: input.reason,
 			minImportance: input.minImportance,
+			source: input.source,
 			spooledAt: Date.now(),
 			attempts: 0,
 		});

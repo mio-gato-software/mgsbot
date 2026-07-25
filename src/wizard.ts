@@ -63,7 +63,7 @@ function writeEnvFile(data: WizardData): void {
 	}
 
 	// Wizard-managed model selection
-	existing.GEMINI_MODEL = data.geminiModel.trim() || "gemini-3-flash-preview";
+	existing.GEMINI_MODEL = data.geminiModel.trim() || "gemini-3.6-flash";
 
 	// Set sensible defaults only if not already present
 	if (!existing.CHAT_PROVIDER) existing.CHAT_PROVIDER = "gemini";
@@ -341,11 +341,11 @@ function buildWizardHtml(
 
       <label style="margin-top: 20px;" data-i18n="modelLabel">AI Model</label>
       <div class="model-options">
-        <label class="model-option${(prefilled?.geminiModel ?? "gemini-3-flash-preview") === "gemini-3-flash-preview" ? " selected" : ""}" id="opt-flash">
-          <input type="radio" name="geminiModel" value="gemini-3-flash-preview" ${(prefilled?.geminiModel ?? "gemini-3-flash-preview") === "gemini-3-flash-preview" ? "checked" : ""}>
+        <label class="model-option${(prefilled?.geminiModel ?? "gemini-3.6-flash") === "gemini-3.6-flash" ? " selected" : ""}" id="opt-flash">
+          <input type="radio" name="geminiModel" value="gemini-3.6-flash" ${(prefilled?.geminiModel ?? "gemini-3.6-flash") === "gemini-3.6-flash" ? "checked" : ""}>
           <div class="model-info">
-            <div class="model-name" data-i18n="flashName">Gemini 3 Flash (Recommended)</div>
-            <div class="model-desc" data-i18n="flashDesc">Fast, capable, and free tier available. Great for most use cases.</div>
+            <div class="model-name" data-i18n="flashName">Gemini 3.6 Flash (Recommended)</div>
+            <div class="model-desc" data-i18n="flashDesc">Fast, capable, and cheap per token. The right default for most use cases.</div>
           </div>
         </label>
         <label class="model-option${prefilled?.geminiModel === "gemini-3.1-pro-preview" ? " selected" : ""}" id="opt-pro">
@@ -416,8 +416,8 @@ function buildWizardHtml(
       apiKeyHint: 'Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, sign in, and create an API key. This is used for the AI model, embeddings, audio, images, and more.',
       apiKeyLabel: "API Key",
       modelLabel: "AI Model",
-      flashName: "Gemini 3 Flash (Recommended)",
-      flashDesc: "Fast, capable, and free tier available. Great for most use cases.",
+      flashName: "Gemini 3.6 Flash (Recommended)",
+      flashDesc: "Fast, capable, and cheap per token. The right default for most use cases.",
       proName: "Gemini 3.1 Pro",
       proDesc: "Smarter and more nuanced, but costs more. Best for deeper conversations.",
       userIdTitle: "Telegram User ID",
@@ -452,8 +452,8 @@ function buildWizardHtml(
       apiKeyHint: 'Ve a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, inicia sesi\\u00f3n y crea una clave API. Se usa para el modelo de IA, embeddings, audio, im\\u00e1genes y m\\u00e1s.',
       apiKeyLabel: "Clave API",
       modelLabel: "Modelo de IA",
-      flashName: "Gemini 3 Flash (Recomendado)",
-      flashDesc: "R\\u00e1pido, capaz y con nivel gratuito disponible. Ideal para la mayor\\u00eda de usos.",
+      flashName: "Gemini 3.6 Flash (Recomendado)",
+      flashDesc: "R\\u00e1pido, capaz y econ\\u00f3mico por token. Ideal para la mayor\\u00eda de usos.",
       proName: "Gemini 3.1 Pro",
       proDesc: "M\\u00e1s inteligente y matizado, pero cuesta m\\u00e1s. Mejor para conversaciones profundas.",
       userIdTitle: "ID de Usuario de Telegram",
@@ -637,7 +637,7 @@ export async function runSetupWizard(): Promise<void> {
 	const prefilled: Record<string, string> = {
 		botToken: "",
 		googleApiKey: "",
-		geminiModel: existing.GEMINI_MODEL ?? "gemini-3-flash-preview",
+		geminiModel: existing.GEMINI_MODEL ?? "gemini-3.6-flash",
 		ownerUserId: existing.OWNER_USER_ID ?? "",
 		allowedGroupId: existing.ALLOWED_GROUP_ID ?? "",
 		language: existingConfig.language ?? "es",
@@ -710,7 +710,7 @@ export async function runSetupWizard(): Promise<void> {
 					const data: WizardData = {
 						botToken: submittedBotToken || (existing.BOT_TOKEN ?? ""),
 						googleApiKey: submittedApiKey || (existing.GOOGLE_API_KEY ?? ""),
-						geminiModel: fields.geminiModel ?? "gemini-3-flash-preview",
+						geminiModel: fields.geminiModel ?? "gemini-3.6-flash",
 						ownerUserId: fields.ownerUserId ?? "",
 						allowedGroupId: fields.allowedGroupId ?? "",
 						language: (fields.language === "en" ? "en" : "es") as BotLanguage,

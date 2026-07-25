@@ -49,7 +49,7 @@ export class GeminiImageProvider implements ImageProvider {
 		}
 
 		const response = await getAI().models.generateContentStream({
-			model: "gemini-3-pro-image-preview",
+			model: "gemini-3-pro-image",
 			contents: createUserContent(parts),
 			config: {
 				imageConfig: {
@@ -84,7 +84,7 @@ export class GeminiImageProvider implements ImageProvider {
 		const base64Data = fs.readFileSync(imagePath, { encoding: "base64" });
 
 		const response = await getAI().models.generateContentStream({
-			model: "gemini-3-pro-image-preview",
+			model: "gemini-3-pro-image",
 			contents: createUserContent([
 				{ inlineData: { mimeType, data: base64Data } },
 				{

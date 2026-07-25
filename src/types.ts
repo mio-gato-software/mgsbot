@@ -82,7 +82,8 @@ export interface SemanticFact {
 	importance: number; // 1-5
 	confidence: number; // 0-1, decays if not reconfirmed
 	createdAt: number;
-	lastConfirmed: number;
+	lastConfirmed: number; // genuine reconfirmation (extraction), NOT retrieval
+	lastRecalledAt?: number; // last time retrieval injected it into a prompt
 	lastDecayedAt?: number;
 	scope?: "global" | "chat" | "person";
 	sourceChatId?: number;
@@ -176,4 +177,10 @@ export interface PromotionResult {
 		supersedes?: string[];
 	}>;
 	personalitySignals?: PersonalitySignals;
+	/** Extraction telemetry — how the background model behaved on this chunk. */
+	extraction?: {
+		model: string;
+		/** Facts the validator rejected (bad category, missing subject, ...). */
+		droppedFacts: number;
+	};
 }

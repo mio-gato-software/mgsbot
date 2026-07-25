@@ -28,6 +28,7 @@ bun run profile:show   # Show current profile status
 bun run profile:sync   # Apply bot_profile.json to bot config
 bun run rules:init     # Write memory/bot_rules.json template
 bun run rules:show     # Show current rules status
+bun run promote:stats  # Promotion bar calibration + extraction-quality report
 ```
 
 Releases: `bun run release:patch|minor|major` bumps the version, tags, and pushes (CI builds the binaries).
@@ -104,6 +105,9 @@ src/
     sensory.ts               ← Per-chat recent messages buffer (max 10, FIFO, boundary-aware overflow promotion)
     promotion-spool.ts       ← Per-chat spool of unpromoted message chunks (failed promotions +
                                inactivity-wipe remainders), retried at startup/hourly
+    promotion-policy.ts      ← Promotion importance bars (env-tunable) + meetsPromotionBar() gate
+    promotion-metrics.ts     ← Per-decision telemetry (memory/metrics/): what each bar dropped and
+                               how the background model is extracting (see promote:stats)
     episodes.ts              ← Per-chat episode summaries with embeddings (max 20)
     semantic.ts              ← Global semantic facts: dedup, confidence decay, permanent facts
     relationships.ts         ← Per-chat relationship memory (summary, tone, dynamics, open threads)
@@ -144,6 +148,7 @@ memory/                      ← Runtime data (gitignored)
   episodes/<chat_id>.json    ← Per-chat episode summaries with embeddings (max 20)
   sensory/<chat_id>.json     ← Per-chat recent messages (max 10) + image scheduling
   promotion-spool/<chat_id>.json ← Per-chat unpromoted chunks awaiting promotion retry
+  metrics/promotion-YYYY-MM.jsonl ← Promotion decisions: bar outcomes + extraction quality
   relationships/<chat_id>.json ← Per-chat relationship memory
   chapters/<chat_id>.json    ← Per-chat monthly chapters
   base.{png,jpg,jpeg}        ← Optional reference image for character image generation
@@ -171,9 +176,9 @@ There are four independent provider axes:
 
 The memory system uses multiple tiers with vector embeddings for semantic search (`src/memory/`):
 
-- **Semantic Store** (`memory/semantic.json`): Global knowledge base of `SemanticFact` objects with 768-dim embeddings. Categories: "person", "group", "rule", "event". Facts have `importance`, `confidence` (decays 0.02/day, min 0.1), and `subject`. Deduplication via cosine similarity at 0.85 threshold. Facts injected into a prompt are reinforced (decay clock reset + small confidence bump, throttled to once/hour per fact), so often-recalled facts don't fade. Facts can be marked `permanent: true` for immutable biographical data (birthplace, family, marriage) — these never decay and are always included in prompts (max 25). A daily janitor (`src/janitor.ts`, disable with `ENABLE_MEMORY_JANITOR=false`) reviews subjects with ≥6 active facts via the background model and soft-retires contradicted/duplicate facts (`supersededBy` + `validUntil`, never hard deletion).
+- **Semantic Store** (`memory/semantic.json`): Global knowledge base of `SemanticFact` objects with 768-dim embeddings. Categories: "person", "group", "rule", "event". Facts have `importance`, `confidence` (decays 0.02/day, min 0.1), and `subject`. Deduplication via cosine similarity at 0.85 threshold. Facts injected into a prompt are reinforced (small confidence bump, throttled to once/hour per fact via `lastRecalledAt`), so often-recalled facts fade more slowly — but retrieval is usefulness, not evidence: the bump is capped by `reinforcementCeiling()` (0.75, eroding 0.01/day as `lastConfirmed` ages) and never touches the decay clock, so a fact the bot only ever quotes back to itself still decays out. Only genuine reconfirmation through extraction (the dedup merge path) moves `lastConfirmed` and lifts a fact above the ceiling. Facts can be marked `permanent: true` for immutable biographical data (birthplace, family, marriage) — these never decay and are always included in prompts (max 25). A daily janitor (`src/janitor.ts`, disable with `ENABLE_MEMORY_JANITOR=false`) reviews subjects with ≥6 active facts via the background model and soft-retires contradicted/duplicate facts (`supersededBy` + `validUntil`, never hard deletion).
 - **Episodes** (`memory/episodes/<chat_id>.json`): Per-chat summarized conversations (max 20). Each episode has `summary`, `participants`, `timestamp`, `importance`, and an `embedding` for similarity search. Top 3 most relevant episodes selected for prompts.
-- **Sensory Buffer** (`memory/sensory/<chat_id>.json`): Per-chat recent messages (max 10, FIFO). Tracks `lastActivity`, `messageCountSincePromotion`. On overflow, the oldest 3–7 messages (split at the largest ≥30-min time gap, default 5) are promoted to an episode via AI summarization. Inactive chats (>3 days) spool remaining messages for promotion, then clear the buffer. Passively witnessed group messages (bot not addressed) are promoted only at a higher importance bar (≥3).
+- **Sensory Buffer** (`memory/sensory/<chat_id>.json`): Per-chat recent messages (max 10, FIFO). Tracks `lastActivity`, `messageCountSincePromotion`. On overflow, the oldest 3–7 messages (split at the largest ≥30-min time gap, default 5) are promoted to an episode via AI summarization. Inactive chats (>3 days) spool remaining messages for promotion, then clear the buffer. Passively witnessed group messages (bot not addressed) are promoted only at a higher importance bar (default ≥3, `PASSIVE_PROMOTION_MIN_IMPORTANCE`). Bars live in `src/memory/promotion-policy.ts`; every decision is recorded by `src/memory/promotion-metrics.ts` so `bun run promote:stats` can replay the gate at each candidate bar instead of guessing (it also lists the chunks the current bar dropped).
 - **Promotion Spool** (`memory/promotion-spool/<chat_id>.json`): Chunks whose promotion failed (transient API error, rate limit) plus inactivity-wipe remainders. Retried on the next promotion for that chat, at startup, and hourly; a chunk is dropped after 10 failed attempts.
 - **Relationships** (`memory/relationships/<chat_id>.json`): Per-chat relationship memory — an evolving summary of the relationship dynamic (tone, notable dynamics, open threads, interaction count).
 - **Chapters** (`memory/chapters/<chat_id>.json`): Per-chat monthly narrative chapters built from episodes (id `chapter_<chatId>_<YYYY-MM>`, title, compact summary, importance 1–5).
@@ -249,7 +254,7 @@ Three setup paths:
 
 ### Image Generation
 
-Once weekly (random day and time between 8am–11pm DR time), the bot includes an `[IMAGE: ...]` marker. The prompt is sent to `gemini-3-pro-image-preview` along with the base character image. Weekly schedule tracked per-chat via `lastImageDate`, `imageTargetDate`, and `imageTargetTime` in sensory buffer. Photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command).
+Once weekly (random day and time between 8am–11pm DR time), the bot includes an `[IMAGE: ...]` marker. The prompt is sent to `gemini-3-pro-image` along with the base character image. Weekly schedule tracked per-chat via `lastImageDate`, `imageTargetDate`, and `imageTargetTime` in sensory buffer. Photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command).
 
 ### Sleep Schedule
 
@@ -262,8 +267,8 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `BOT_TOKEN` (required): Telegram bot token
 - `CHAT_PROVIDER`: `gemini` (default), `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, or `fal`
 - `GOOGLE_API_KEY`: Always required — used for embeddings, image analysis, YouTube analysis, and image generation regardless of chat provider (also used for audio transcription when `STT_PROVIDER=gemini`)
-- `GEMINI_MODEL`: Gemini chat model (default: `gemini-3-flash-preview`)
-- `BACKGROUND_MODEL`: Pinned model for background memory work — fact extraction, narrative updates, janitor (default: `gemini-flash-latest`; falls back to the chat provider without `GOOGLE_API_KEY`)
+- `GEMINI_MODEL`: Gemini chat model (default: `gemini-3.6-flash`)
+- `BACKGROUND_MODEL`: Pinned model for background memory work — fact extraction, narrative updates, janitor (default: `gemini-3.6-flash`, pinned explicitly so extraction-quality shifts stay attributable; falls back to the chat provider without `GOOGLE_API_KEY`)
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/claude-3.5-sonnet`)
 - `OPENROUTER_HTTP_REFERER` / `OPENROUTER_TITLE`: Optional attribution headers for OpenRouter requests
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `claude-sonnet-4-5-20250929`)
@@ -292,6 +297,8 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `CHECK_INS_PER_WEEK`: Number of check-in messages per week (default: `2`)
 - `ENABLE_CHAT_LOG`: Set `true` to enable daily conversation logging to `logs/` folder
 - `ENABLE_SLEEP_SCHEDULE`: Set `false` to disable sleep schedule (default: `true`)
+- `PROMOTION_MIN_IMPORTANCE` / `PASSIVE_PROMOTION_MIN_IMPORTANCE`: Promotion importance bars (default 2 / 3). Calibrate with `bun run promote:stats`
+- `PROMOTION_METRICS` / `PROMOTION_METRICS_RETENTION_MONTHS`: Promotion decision telemetry (default on, 6 months)
 - `ENABLE_MEMORY_JANITOR`: Set `false` to disable the daily semantic-memory janitor (default: `true`)
 - `BOT_TIMEZONE`: IANA timezone for the bot (default: `America/Santo_Domingo`). Affects sleep schedule, time awareness, follow-ups, and weather.
 - `SHOW_TRANSCRIPTION`: Set `true` to echo voice/audio transcriptions back as a `📝` reply (debug aid)

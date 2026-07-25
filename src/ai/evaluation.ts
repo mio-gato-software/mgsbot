@@ -8,9 +8,34 @@ import type {
 } from "../types.ts";
 import { TRAIT_NAMES } from "../types.ts";
 import { hasFollowUpIntent } from "./classifiers.ts";
-import { generateBackgroundResponse, generateResponse } from "./core.ts";
+import {
+	generateBackgroundResponse,
+	generateBackgroundResponseWithModel,
+	generateResponse,
+} from "./core.ts";
 
 const VALID_CATEGORIES = new Set(["person", "group", "rule", "event"]);
+const PARSE_ERROR_SNIPPET_CHARS = 300;
+
+/**
+ * The extractor answered, but not with usable JSON. Carries the model so the
+ * caller can attribute the failure — the whole point of pinning background work
+ * to a cheap model is being able to tell when that model starts degrading.
+ */
+export class ExtractionParseError extends Error {
+	readonly model: string;
+	readonly snippet: string;
+
+	constructor(model: string, rawText: string, cause?: unknown) {
+		super(
+			`Extraction returned unparseable output from ${model || "unknown model"}`,
+			cause === undefined ? undefined : { cause },
+		);
+		this.name = "ExtractionParseError";
+		this.model = model;
+		this.snippet = rawText.slice(0, PARSE_ERROR_SNIPPET_CHARS);
+	}
+}
 const VALID_TRAIT_NAMES = new Set<string>(TRAIT_NAMES);
 const MAX_RELATIONSHIP_DYNAMICS = 5;
 const MAX_RELATIONSHIP_THREADS = 5;
@@ -83,7 +108,10 @@ function validateLongTermMemoryUpdate(raw: unknown): LongTermMemoryUpdate {
 	};
 }
 
-function validatePromotionResult(raw: PromotionResult): PromotionResult {
+function validatePromotionResult(
+	raw: PromotionResult,
+	model = "",
+): PromotionResult {
 	const summary =
 		typeof raw.summary === "string" && raw.summary.trim()
 			? raw.summary.trim()
@@ -94,7 +122,8 @@ function validatePromotionResult(raw: PromotionResult): PromotionResult {
 			? Math.max(1, Math.min(5, Math.round(raw.importance)))
 			: 1;
 
-	const facts = (raw.facts ?? [])
+	const rawFacts = raw.facts ?? [];
+	const facts = rawFacts
 		.filter((f) => {
 			if (!f.content || typeof f.content !== "string" || !f.content.trim())
 				return false;
@@ -145,7 +174,13 @@ function validatePromotionResult(raw: PromotionResult): PromotionResult {
 		personalitySignals = undefined;
 	}
 
-	return { summary, importance, facts, personalitySignals };
+	return {
+		summary,
+		importance,
+		facts,
+		personalitySignals,
+		extraction: { model, droppedFacts: rawFacts.length - facts.length },
+	};
 }
 
 export async function evaluateConversationChunk(
@@ -220,18 +255,25 @@ If there's nothing personally relevant: {"summary": "casual conversation", "impo
 Conversation:
 ${recentMessages}`;
 
-	const text = await generateBackgroundResponse(systemPrompt, [
-		{ role: "user", content: userMessage },
-	]);
+	const { text, model } = await generateBackgroundResponseWithModel(
+		systemPrompt,
+		[{ role: "user", content: userMessage }],
+	);
 
+	// An unparseable reply used to degrade to "casual conversation, importance 1",
+	// which the promotion gate then dropped — a model failure was indistinguishable
+	// from a boring conversation, and the chunk was lost silently. Throw instead:
+	// the caller spools the chunk for retry, and the failure shows up in the logs
+	// and in the extraction-quality metrics.
+	const jsonMatch = text.match(/\{[\s\S]*\}/);
+	if (!jsonMatch) {
+		throw new ExtractionParseError(model, text);
+	}
 	try {
-		const jsonMatch = text.match(/\{[\s\S]*\}/);
-		if (!jsonMatch)
-			return { summary: "casual conversation", importance: 1, facts: [] };
 		const parsed = JSON.parse(jsonMatch[0]) as PromotionResult;
-		return validatePromotionResult(parsed);
-	} catch {
-		return { summary: "casual conversation", importance: 1, facts: [] };
+		return validatePromotionResult(parsed, model);
+	} catch (error) {
+		throw new ExtractionParseError(model, text, error);
 	}
 }
 
@@ -320,16 +362,25 @@ Respond ONLY with JSON:
   }
 }`;
 
+	// A failed call must NOT resolve to the placeholder defaults: the caller
+	// overwrites the relationship summary and the month's chapter with whatever
+	// comes back, so a model hiccup would replace accumulated narrative memory
+	// with "The relationship is still forming...". Throw and keep what we have —
+	// the episode and its facts are already saved by this point, and the next
+	// promotion updates the narrative. (The defaults still fill in individual
+	// missing fields of an otherwise valid reply.)
+	const { text, model } = await generateBackgroundResponseWithModel(
+		systemPrompt,
+		[{ role: "user", content: userMessage }],
+	);
+	const jsonMatch = text.match(/\{[\s\S]*\}/);
+	if (!jsonMatch) {
+		throw new ExtractionParseError(model, text);
+	}
 	try {
-		const text = await generateBackgroundResponse(systemPrompt, [
-			{ role: "user", content: userMessage },
-		]);
-		const jsonMatch = text.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) return validateLongTermMemoryUpdate({});
 		return validateLongTermMemoryUpdate(JSON.parse(jsonMatch[0]));
 	} catch (error) {
-		log.debug("[long-term-memory] Update failed:", error);
-		return validateLongTermMemoryUpdate({});
+		throw new ExtractionParseError(model, text, error);
 	}
 }
 

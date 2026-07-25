@@ -9,7 +9,11 @@ import { withRetry } from "../utils.ts";
 // cheap Gemini model so its cost stays capped regardless of the chat provider
 // selected via /provider. Full flash (not lite): multi-field JSON extraction
 // is beyond the yes/no routing the lite classifiers handle.
-const DEFAULT_BACKGROUND_MODEL = "gemini-flash-latest";
+// Pinned to an explicit version rather than the `gemini-flash-latest` alias:
+// extraction quality is measured per model (see memory/promotion-metrics.ts),
+// and an alias that silently moves under the bot makes a quality shift
+// impossible to attribute.
+const DEFAULT_BACKGROUND_MODEL = "gemini-3.6-flash";
 
 let backgroundAI: GoogleGenAI | null = null;
 let warnedBackgroundFallback = false;
@@ -30,6 +34,11 @@ export async function generateResponse(
 	}
 }
 
+/** Model id background work will try first. */
+export function backgroundModelId(): string {
+	return process.env.BACKGROUND_MODEL || DEFAULT_BACKGROUND_MODEL;
+}
+
 /**
  * Generate a response for background (non-user-facing) work on the pinned
  * cheap model. Falls back to the configured chat provider when
@@ -39,13 +48,28 @@ export async function generateBackgroundResponse(
 	systemPrompt: string,
 	messages: ChatMessage[],
 ): Promise<string> {
+	return (await generateBackgroundResponseWithModel(systemPrompt, messages))
+		.text;
+}
+
+/**
+ * Same as `generateBackgroundResponse`, but also reports which model actually
+ * served the request. Callers that track extraction quality need to know
+ * whether they got the cheap background model or the chat-provider fallback —
+ * a quality shift is only interpretable next to the model that produced it.
+ */
+export async function generateBackgroundResponseWithModel(
+	systemPrompt: string,
+	messages: ChatMessage[],
+): Promise<{ text: string; model: string }> {
 	if (process.env.GOOGLE_API_KEY) {
+		const model = backgroundModelId();
 		try {
-			return await withRetry(
+			const text = await withRetry(
 				async () => {
 					if (!backgroundAI) backgroundAI = new GoogleGenAI({});
 					const response = await backgroundAI.models.generateContent({
-						model: process.env.BACKGROUND_MODEL || DEFAULT_BACKGROUND_MODEL,
+						model,
 						config: systemPrompt ? { systemInstruction: systemPrompt } : {},
 						contents: messages.map((msg) => ({
 							role: msg.role === "user" ? "user" : "model",
@@ -57,6 +81,7 @@ export async function generateBackgroundResponse(
 				2,
 				500,
 			);
+			return { text, model };
 		} catch (error) {
 			log.warn(
 				"[background-model] Background model failed, falling back to chat provider:",
@@ -69,5 +94,9 @@ export async function generateBackgroundResponse(
 			"[background-model] GOOGLE_API_KEY not set — background memory work will use the configured chat provider.",
 		);
 	}
-	return generateResponse(systemPrompt, messages);
+	const provider = createChatProvider();
+	return {
+		text: await generateResponse(systemPrompt, messages),
+		model: `${provider.name}:${provider.model}`,
+	};
 }
