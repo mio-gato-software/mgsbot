@@ -32,6 +32,20 @@ export {
 	withSemanticLock,
 } from "./locks.ts";
 export {
+	extractionHealthProblems,
+	loadPromotionMetrics,
+	type PromotionMetricRecord,
+	type PromotionSource,
+	recordPromotionDecision,
+	runExtractionHealthCheck,
+	summarizePromotionMetrics,
+} from "./promotion-metrics.ts";
+export {
+	defaultPromotionBar,
+	meetsPromotionBar,
+	passivePromotionBar,
+} from "./promotion-policy.ts";
+export {
 	listSpooledChatIds,
 	loadPromotionSpool,
 	recordSpoolAttempt,

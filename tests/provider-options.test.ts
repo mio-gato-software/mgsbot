@@ -157,7 +157,7 @@ describe("provider options", () => {
 
 	test("/provider status says chat switching is independent", () => {
 		const status = formatProviderCommandStatus(
-			{ provider: "gemini", model: "gemini-3-flash-preview" },
+			{ provider: "gemini", model: "gemini-3.6-flash" },
 			{ GOOGLE_API_KEY: "google" },
 		);
 		expect(status).toContain("/provider solo cambia el chat");
@@ -167,7 +167,7 @@ describe("provider options", () => {
 
 	test("/provider status includes the fal image model when fal images are selected", () => {
 		const status = formatProviderCommandStatus(
-			{ provider: "gemini", model: "gemini-3-flash-preview" },
+			{ provider: "gemini", model: "gemini-3.6-flash" },
 			{
 				GOOGLE_API_KEY: "google",
 				IMAGE_PROVIDER: "fal",

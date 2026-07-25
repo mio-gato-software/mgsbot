@@ -1,9 +1,11 @@
 import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import {
+	ExtractionParseError,
 	evaluateConversationChunk,
 	generateLongTermMemoryUpdate,
 } from "./ai/evaluation.ts";
+import { alertOwner } from "./alerts.ts";
 import { botNow } from "./bot-time.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
@@ -23,6 +25,7 @@ import {
 	addEpisode,
 	addMessageToSensory,
 	addSemanticFacts,
+	defaultPromotionBar,
 	getChapterForMonth,
 	getFactsForSubjects,
 	getPermanentFacts,
@@ -35,7 +38,11 @@ import {
 	loadPromotionSpool,
 	loadRelationshipMemory,
 	loadSensory,
+	meetsPromotionBar,
+	type PromotionSource,
+	passivePromotionBar,
 	persistInactivityWipe,
+	recordPromotionDecision,
 	recordSpoolAttempt,
 	reinforceRecalledFacts,
 	removeSpooledChunk,
@@ -55,6 +62,7 @@ import { isTtsAvailable } from "./tts/index.ts";
 import type {
 	ConversationMessage,
 	MentionType,
+	PromotionResult,
 	SemanticFact,
 } from "./types.ts";
 
@@ -62,10 +70,6 @@ const ACTIVE_NAME_WINDOW_MESSAGES = 6;
 const MAX_RELEVANT_EPISODES = 3;
 const MAX_RELEVANT_FACTS = 8;
 const MAX_PARTICIPANT_FACTS_PER_SUBJECT = 3;
-// Promotion importance bars: chunks from conversations the bot took part in
-// use the default; passively witnessed group chatter must clear a higher bar.
-const DEFAULT_PROMOTION_MIN_IMPORTANCE = 2;
-const PASSIVE_PROMOTION_MIN_IMPORTANCE = 3;
 // Failed promotions are spooled and retried; a chunk that keeps failing
 // (e.g., content that deterministically trips the provider) is dropped after
 // this many attempts so it can't clog the spool forever.
@@ -344,8 +348,9 @@ export async function processConversation(
 				}
 			}
 
-			// Retrieval reinforces: facts injected into the prompt get their decay
-			// clock reset (throttled), so often-recalled memories don't fade.
+			// Retrieval reinforces: facts injected into the prompt get a small,
+			// throttled confidence bump so recalled memories fade more slowly —
+			// capped by an eroding ceiling so repetition never reads as truth.
 			if (mergedFacts.length > 0) {
 				reinforceRecalledFacts(mergedFacts.map((f) => f.id)).catch((err) => {
 					log.debug("[semantic] Retrieval reinforcement failed:", err);
@@ -449,7 +454,8 @@ export async function observeConversationTurn(
 	// group noise doesn't accumulate.
 	if (overflow) {
 		promoteToMemoryReliably(chatId, overflow, {
-			minImportance: PASSIVE_PROMOTION_MIN_IMPORTANCE,
+			minImportance: passivePromotionBar(),
+			source: "passive",
 		}).catch((err) => {
 			log.error(
 				`[promote] Failed for chat ${chatId} (observer overflow):`,
@@ -467,7 +473,7 @@ export async function observeConversationTurn(
 export async function promoteToMemoryReliably(
 	chatId: number,
 	overflow: ConversationMessage[],
-	options?: { minImportance?: number },
+	options?: { minImportance?: number; source?: PromotionSource },
 ): Promise<void> {
 	await drainPromotionSpool(chatId);
 	try {
@@ -482,6 +488,7 @@ export async function promoteToMemoryReliably(
 			messages: overflow,
 			reason: "promotion-failed",
 			minImportance: options?.minImportance,
+			source: options?.source,
 		});
 	}
 }
@@ -508,6 +515,8 @@ export async function drainPromotionSpool(chatId: number): Promise<void> {
 				}
 				await promoteToMemory(chatId, chunk.messages, {
 					minImportance: chunk.minImportance,
+					source: chunk.source,
+					retried: true,
 				});
 				await removeSpooledChunk(chatId, chunk.id);
 			} catch (err) {
@@ -541,7 +550,11 @@ export async function retrySpooledPromotions(): Promise<void> {
 export async function promoteToMemory(
 	chatId: number,
 	overflow: ConversationMessage[],
-	options?: { minImportance?: number },
+	options?: {
+		minImportance?: number;
+		source?: PromotionSource;
+		retried?: boolean;
+	},
 ): Promise<void> {
 	const recentText = overflow
 		.map(
@@ -570,11 +583,48 @@ export async function promoteToMemory(
 	]);
 	const existingFactSummary = formatExistingFactSummary(existingFacts);
 
+	const defaultBar = defaultPromotionBar();
+	const minImportance = options?.minImportance ?? defaultBar;
+	const source: PromotionSource = options?.source ?? "active";
+	const baseMetric = {
+		chatId,
+		source,
+		retried: options?.retried === true,
+		bar: minImportance,
+		defaultBar,
+		messageCount: overflow.length,
+	};
+
 	// LLM: evaluate and extract
-	const result = await evaluateConversationChunk(
-		recentText,
-		existingFactSummary,
-	);
+	let result: PromotionResult;
+	try {
+		result = await evaluateConversationChunk(recentText, existingFactSummary);
+	} catch (err) {
+		// Record the failed attempt before rethrowing: a rising parse-failure rate
+		// on the cheap background model is exactly what the metrics exist to catch.
+		await recordPromotionDecision({
+			...baseMetric,
+			ts: Date.now(),
+			model: err instanceof ExtractionParseError ? err.model : "",
+			parseOk: !(err instanceof ExtractionParseError),
+			importance: 0,
+			factImportances: [],
+			droppedFacts: 0,
+			hasPersonalitySignals: false,
+			kept: false,
+			summary: "",
+		});
+		if (err instanceof ExtractionParseError) {
+			log.warn(
+				`[promote] Extraction from ${err.model} was unparseable for chat ${chatId} — spooling for retry. Raw: ${err.snippet}`,
+			);
+			await alertOwner(
+				"memory-extraction",
+				`Background extraction returned unparseable output from ${err.model}. Memory writes for chat ${chatId} are being retried.`,
+			);
+		}
+		throw err;
+	}
 
 	log.debug(
 		`[promote] Summary: "${result.summary}", importance: ${result.importance}, facts: ${result.facts.length}`,
@@ -583,21 +633,35 @@ export async function promoteToMemory(
 	// Downstream gate: skip if the LLM judged the chunk uninteresting. The heuristic
 	// pre-filter is intentionally loose so transient activity mentions don't get
 	// silently dropped — but if even the LLM finds nothing worth keeping, don't
-	// pollute episodes with "casual conversation" placeholders. At the default
-	// bar any fact or personality signal rescues the chunk; above it (passive
-	// group chatter) the episode or a fact must itself clear the bar.
-	const minImportance =
-		options?.minImportance ?? DEFAULT_PROMOTION_MIN_IMPORTANCE;
-	const aboveDefaultBar = minImportance > DEFAULT_PROMOTION_MIN_IMPORTANCE;
-	const hasQualifyingFacts = aboveDefaultBar
-		? result.facts.some((f) => f.importance >= minImportance)
-		: result.facts.length > 0;
+	// pollute episodes with "casual conversation" placeholders. Bars live in
+	// promotion-policy.ts and every decision is recorded, so the passive bar can
+	// be calibrated against what it actually dropped (`bun run promote:stats`).
+	const factImportances = result.facts.map((f) => f.importance);
 	const hasSignals = !!result.personalitySignals?.traitChanges?.length;
-	const meetsBar =
-		result.importance >= minImportance ||
-		hasQualifyingFacts ||
-		(!aboveDefaultBar && hasSignals);
-	if (!meetsBar) {
+	const kept = meetsPromotionBar(
+		{
+			importance: result.importance,
+			factImportances,
+			hasPersonalitySignals: hasSignals,
+		},
+		minImportance,
+		defaultBar,
+	);
+
+	await recordPromotionDecision({
+		...baseMetric,
+		ts: Date.now(),
+		model: result.extraction?.model ?? "",
+		parseOk: true,
+		importance: result.importance,
+		factImportances,
+		droppedFacts: result.extraction?.droppedFacts ?? 0,
+		hasPersonalitySignals: hasSignals,
+		kept,
+		summary: result.summary,
+	});
+
+	if (!kept) {
 		log.debug(`[promote] Skipped: chunk below importance bar ${minImportance}`);
 		return;
 	}
@@ -658,6 +722,9 @@ export async function promoteToMemory(
 		await applyPersonalitySignals(result.personalitySignals, recentText);
 	}
 
+	// Fire-and-forget: a failure here leaves the existing relationship summary and
+	// chapter untouched (better than overwriting them with placeholder text), and
+	// the next promotion picks the narrative back up.
 	updateNarrativeMemory({ chatId, episode, recentText }).catch((err) => {
 		log.error(`[long-term-memory] Failed for chat ${chatId}:`, err);
 	});

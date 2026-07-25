@@ -15,7 +15,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations across several la
 ## Features
 
 - **Layered memory system** — manual profile/rules, relationship summaries, monthly chapters, semantic facts, episode summaries, and recent sensory context
-- **Self-maintaining memory** — failed promotions are spooled and retried (no data loss on API errors), often-recalled facts are reinforced instead of decaying, and a daily janitor retires contradicted or duplicate facts
+- **Self-maintaining memory** — failed promotions are spooled and retried (no data loss on API errors), often-recalled facts decay more slowly (capped so repetition never reads as certainty), and a daily janitor retires contradicted or duplicate facts
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
 - **Multi-modal input** — text, voice notes, audio files, photos/images, and YouTube link analysis
 - **Image generation** — generates character images using Gemini or fal.ai with an optional reference image
@@ -144,8 +144,8 @@ There are four independent provider axes:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, or `fal` |
-| `GEMINI_MODEL` | `gemini-3-flash-preview` | Gemini model when `CHAT_PROVIDER=gemini` (other Gemini-only paths in code use fixed models; see **Google AI usage** below) |
-| `BACKGROUND_MODEL` | `gemini-flash-latest` | Pinned model for background memory work — fact extraction, narrative updates, and the memory janitor. Falls back to the chat provider when `GOOGLE_API_KEY` is missing. |
+| `GEMINI_MODEL` | `gemini-3.6-flash` | Gemini model when `CHAT_PROVIDER=gemini` (other Gemini-only paths in code use fixed models; see **Google AI usage** below) |
+| `BACKGROUND_MODEL` | `gemini-3.6-flash` | Pinned model for background memory work — fact extraction, narrative updates, and the memory janitor. Falls back to the chat provider when `GOOGLE_API_KEY` is missing. |
 | `OPENROUTER_API_KEY` | — | Required if using OpenRouter direct transport |
 | `OPENROUTER_MODEL` | `anthropic/claude-3.5-sonnet` | OpenRouter model |
 | `OPENROUTER_TRANSPORT` | *(auto)* | `direct` uses `OPENROUTER_API_KEY`; `fal` uses `FAL_API_KEY` with fal.ai's `openrouter/router` endpoint. If unset, direct is used when `OPENROUTER_API_KEY` exists; otherwise fal is used when `FAL_API_KEY` exists. |
@@ -169,7 +169,7 @@ There are four independent provider axes:
 
 | Goal | Provider | Model | Notes |
 | --- | --- | --- | --- |
-| **Best compatibility** | `gemini` | `gemini-3.1-pro` | Best overall experience — native support for all features including function calling and vision |
+| **Best compatibility** | `gemini` | `gemini-3.1-pro-preview` | Best overall experience — native support for all features including function calling and vision |
 | **Best value** | `fireworks` | `accounts/fireworks/models/kimi-k2.5` | Strong performance at low cost |
 
 You can switch providers at runtime via the `/provider` Telegram command (DM only, owner only):
@@ -187,7 +187,7 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 
 **Provider combinations:** You can mix providers across axes. For example, `CHAT_PROVIDER=anthropic`, `STT_PROVIDER=gemini`, `TTS_PROVIDER=elevenlabs`, and `IMAGE_PROVIDER=fal` is valid as long as the matching keys are set. A single `FAL_API_KEY` can satisfy OpenRouter via fal, fal.ai chat, STT, TTS, and images. A single `GOOGLE_API_KEY` powers Gemini chat plus the Google-only support paths.
 
-**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2`. Character image generation uses `gemini-3-pro-image-preview`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3-flash-preview`. Background memory work uses `BACKGROUND_MODEL` (default `gemini-flash-latest`).
+**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2`. Character image generation uses `gemini-3-pro-image`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3.6-flash`. Background memory work uses `BACKGROUND_MODEL` (default `gemini-3.6-flash`, pinned explicitly rather than a `-latest` alias so extraction-quality changes stay attributable).
 
 ### Access Control
 
@@ -280,6 +280,8 @@ src/
     index.ts                 Memory facade and directory initialization
     sensory.ts               Recent-message buffer and boundary-aware overflow promotion
     promotion-spool.ts       Spool of unpromoted chunks (failed promotions, inactivity wipes)
+    promotion-policy.ts      Promotion importance bars + the gate every chunk is judged by
+    promotion-metrics.ts     Per-decision telemetry: what each bar dropped, extraction quality
     episodes.ts              Per-chat episodic summaries and relevance search
     semantic.ts              Global semantic facts, decay, retrieval reinforcement, dedup/supersession
     relationships.ts         Per-chat relationship state
@@ -360,7 +362,9 @@ The bot uses a layered memory architecture inspired by human cognition. The top 
 │  vector embeddings (gemini-embedding-2).        │
 │  Categories: person, group, rule, event.        │
 │  Confidence decays 0.02/day (min 0.1); facts    │
-│  recalled into prompts are reinforced instead.  │
+│  recalled into prompts get a small bump, capped │
+│  by a ceiling that erodes as their last real    │
+│  confirmation ages — decay still wins.          │
 │  Deduplication via cosine similarity at 0.85.   │
 │  A daily janitor retires contradicted or        │
 │  duplicate facts about the same subject.        │
@@ -389,6 +393,14 @@ The bot uses a layered memory architecture inspired by human cognition. The top 
 ```
 
 Conversations the bot merely witnesses in groups (without being addressed) are promoted only when the chunk clears a higher importance bar, so ambient chatter doesn't accumulate as long-term memory.
+
+Both bars are env-tunable (`PROMOTION_MIN_IMPORTANCE`, `PASSIVE_PROMOTION_MIN_IMPORTANCE`) because a bar picked a priori will drop context whose value only shows up later. Every promotion decision — kept or dropped — is recorded to `memory/metrics/promotion-YYYY-MM.jsonl`, and `bun run promote:stats` replays them through the real gate at every candidate bar and reports extraction quality per model:
+
+```bash
+bun run promote:stats
+```
+
+The same report is how the background model is watched: parse failures, facts per chunk, validator-rejected facts, and empty extractions, broken down by model. An unparseable extraction is no longer silently treated as a boring conversation — it fails, the chunk goes to the retry spool, and the owner gets an alert.
 
 All memory files are auto-created on first run. The `memory/` directory is gitignored — it contains your bot's learned knowledge and should be treated as user data.
 
@@ -423,7 +435,7 @@ The bot generates character images on a weekly schedule:
 
 - One random day per week, at a random time between 8 AM and 11 PM (bot timezone)
 - Pluggable provider: Gemini (`IMAGE_PROVIDER=gemini`, default) or fal.ai (`IMAGE_PROVIDER=fal`)
-- Gemini uses `gemini-3-pro-image-preview` with a base character image (`memory/base.{png,jpg,jpeg}`)
+- Gemini uses `gemini-3-pro-image` with a base character image (`memory/base.{png,jpg,jpeg}`)
 - fal.ai defaults to Nano Banana Pro (`FAL_IMAGE_MODEL=nano-banana-pro`) and can be switched to GPT Image 2 with `FAL_IMAGE_MODEL=gpt-image-2`
 - fal.ai sends `FAL_IMAGE_QUALITY=high` only when GPT Image 2 is selected; lower values can reduce latency and cost
 - fal.ai uses the model's `/edit` endpoint when a base image exists (character images) and its base text-to-image endpoint for standalone generation (e.g., full-access mode illustrations)
@@ -522,7 +534,7 @@ The bot's conversational language is configured during setup and stored in `memo
 
 - **Runtime:** [Bun](https://bun.sh)
 - **Bot framework:** [grammY](https://grammy.dev)
-- **AI:** [Google GenAI](https://ai.google.dev) — default chat: `gemini-3-flash-preview`; character images: `gemini-3-pro-image-preview`; embeddings: `gemini-embedding-2`
+- **AI:** [Google GenAI](https://ai.google.dev) — default chat: `gemini-3.6-flash`; character images: `gemini-3-pro-image`; embeddings: `gemini-embedding-2`
 - **Language:** TypeScript (strict mode)
 - **Linter/Formatter:** [Biome](https://biomejs.dev) — tabs, double quotes, auto-organized imports
 

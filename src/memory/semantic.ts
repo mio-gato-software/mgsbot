@@ -20,6 +20,17 @@ const MAX_DEDUP_FACTS = 30;
 // the store on every message, and bump gently (dedup reconfirm uses +0.2).
 const REINFORCEMENT_MIN_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const REINFORCEMENT_CONFIDENCE_BUMP = 0.05;
+// Retrieval says a fact is *useful*, not that it is *true*: being recalled a
+// lot must not turn into certainty. Two guards keep repetition from
+// impersonating evidence:
+//  1. A ceiling — retrieval alone can only hold a fact at this confidence.
+//     Going above it requires genuine reconfirmation in conversation (the
+//     dedup merge path, which is the only thing that moves lastConfirmed).
+//  2. The ceiling itself erodes as that last real confirmation ages, so a fact
+//     the bot keeps quoting back to itself still decays out of the store
+//     instead of becoming immortal.
+export const REINFORCEMENT_CONFIDENCE_CEILING = 0.75;
+export const REINFORCEMENT_CEILING_EROSION_PER_DAY = 0.01;
 
 let semanticCache: SemanticFact[] | null = null;
 let semanticLastMtimeMs = 0;
@@ -385,10 +396,33 @@ export async function getFactsForSubjects(
 }
 
 /**
+ * Highest confidence retrieval alone may push a fact to. Starts at the ceiling
+ * and erodes with the age of the last genuine confirmation, so repetition buys
+ * a recalled fact time but never permanence.
+ */
+export function reinforcementCeiling(
+	fact: SemanticFact,
+	now = Date.now(),
+): number {
+	const daysSinceConfirmed = Math.max(
+		0,
+		(now - fact.lastConfirmed) / 86_400_000,
+	);
+	return Math.max(
+		0,
+		REINFORCEMENT_CONFIDENCE_CEILING -
+			REINFORCEMENT_CEILING_EROSION_PER_DAY * daysSinceConfirmed,
+	);
+}
+
+/**
  * Apply retrieval reinforcement to the given facts in place: a fact that was
- * actually injected into a prompt gets its decay clock reset and a small
- * confidence bump, so often-recalled memories become effectively immortal.
- * Facts reinforced within the last hour are skipped (write throttle).
+ * actually injected into a prompt gets a small confidence bump, capped by
+ * `reinforcementCeiling`, so often-recalled memories fade more slowly without
+ * repetition being mistaken for truth. Deliberately does NOT touch
+ * `lastConfirmed` or `lastDecayedAt` — daily decay keeps running on recalled
+ * facts, and only real reconfirmation resets those clocks.
+ * Facts recalled within the last hour are skipped (write throttle).
  * Returns the number of facts changed.
  */
 export function applyRetrievalReinforcement(
@@ -402,13 +436,16 @@ export function applyRetrievalReinforcement(
 		if (!ids.has(fact.id) || fact.permanent || !isFactActive(fact, now)) {
 			continue;
 		}
-		if (now - fact.lastConfirmed < REINFORCEMENT_MIN_INTERVAL_MS) continue;
-		fact.lastConfirmed = now;
-		fact.lastDecayedAt = now;
-		fact.confidence = Math.min(
-			1,
-			fact.confidence + REINFORCEMENT_CONFIDENCE_BUMP,
-		);
+		const lastRecalled = fact.lastRecalledAt ?? fact.lastConfirmed;
+		if (now - lastRecalled < REINFORCEMENT_MIN_INTERVAL_MS) continue;
+		fact.lastRecalledAt = now;
+		const ceiling = reinforcementCeiling(fact, now);
+		if (fact.confidence < ceiling) {
+			fact.confidence = Math.min(
+				ceiling,
+				fact.confidence + REINFORCEMENT_CONFIDENCE_BUMP,
+			);
+		}
 		changed++;
 	}
 	return changed;

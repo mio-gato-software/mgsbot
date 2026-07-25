@@ -17,7 +17,7 @@ export const CHAT_PROVIDERS = [
 		label: "Gemini",
 		requiredEnv: ["GOOGLE_API_KEY"],
 		modelEnv: "GEMINI_MODEL",
-		defaultModel: "gemini-3-flash-preview",
+		defaultModel: "gemini-3.6-flash",
 		description: "Main Google chat provider with native inline image support.",
 	},
 	{

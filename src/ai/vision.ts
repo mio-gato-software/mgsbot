@@ -10,7 +10,7 @@ import { createChatProvider } from "../providers/index.ts";
 import { supportsVision } from "../providers/types.ts";
 import { withRetry } from "../utils.ts";
 
-const MODEL = "gemini-3-flash-preview";
+const MODEL = "gemini-3.6-flash";
 
 export const DESCRIBE_IMAGE_PROMPT =
 	"The user sent this image. Describe what you see briefly so you can reference it in conversation.";

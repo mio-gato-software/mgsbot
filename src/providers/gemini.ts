@@ -8,7 +8,7 @@ import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
-const DEFAULT_MODEL = "gemini-3-flash-preview";
+const DEFAULT_MODEL = "gemini-3.6-flash";
 
 function logTokenUsage(label: string, response: GenerateContentResponse): void {
 	const usage = response.usageMetadata;

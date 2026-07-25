@@ -4,7 +4,9 @@ import { createChatProvider } from "../providers/index.ts";
 import type { ConversationMessage } from "../types.ts";
 import { withRetry } from "../utils.ts";
 
-const CLASSIFIER_MODEL = "gemini-flash-lite-latest";
+// Pinned explicitly (not the `-latest` alias) so routing behaviour only changes
+// when we change it.
+const CLASSIFIER_MODEL = "gemini-3.5-flash-lite";
 const GROUP_ROUTER_MAX_MESSAGES = 6;
 const GROUP_ROUTER_MAX_MESSAGE_CHARS = 500;
 const GROUP_ROUTER_MAX_TOTAL_CHARS = 3000;

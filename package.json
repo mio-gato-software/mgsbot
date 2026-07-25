@@ -42,6 +42,7 @@
 		"profile:sync": "bun run index.ts --sync-profile",
 		"rules:init": "bun run index.ts --init-rules",
 		"rules:show": "bun run index.ts --show-rules",
+		"promote:stats": "bun run scripts/promotion-stats.ts",
 		"test": "bun test",
 		"typecheck": "tsc --noEmit",
 		"lint": "biome check .",

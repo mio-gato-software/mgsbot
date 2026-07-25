@@ -8,7 +8,7 @@ import { isTutorActive } from "../prompt/modes.ts";
 import { withRetry } from "../utils.ts";
 import type { SttProvider } from "./types.ts";
 
-const MODEL = "gemini-3-flash-preview";
+const MODEL = "gemini-3.6-flash";
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {

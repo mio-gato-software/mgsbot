@@ -127,7 +127,9 @@ const { isBotOff, isSleepingHour, registerHandlers } = await import(
 const { retrySpooledPromotions } = await import("./src/conversation.ts");
 const { runSemanticJanitor } = await import("./src/janitor.ts");
 const { initIdentities } = await import("./src/identities.ts");
-const { initMemoryDirs } = await import("./src/memory/index.ts");
+const { initMemoryDirs, runExtractionHealthCheck } = await import(
+	"./src/memory/index.ts"
+);
 const { initPersonality } = await import("./src/personality.ts");
 
 // --- Startup env validation ---
@@ -227,6 +229,20 @@ intervals.push(
 	setInterval(() => {
 		retrySpooledPromotions().catch((err) => {
 			log.error("[spool] Promotion retry failed:", err);
+		});
+	}, 3_600_000),
+);
+
+// Extraction-quality watch: rolling 7-day report on how the cheap background
+// model is extracting, with an owner alert when it degrades (checked hourly,
+// runs at most once per day)
+runExtractionHealthCheck(alertOwner).catch((err) => {
+	log.debug("[promote-metrics] Startup health check failed:", err);
+});
+intervals.push(
+	setInterval(() => {
+		runExtractionHealthCheck(alertOwner).catch((err) => {
+			log.debug("[promote-metrics] Health check failed:", err);
 		});
 	}, 3_600_000),
 );
