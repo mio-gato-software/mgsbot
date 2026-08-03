@@ -132,6 +132,32 @@ export async function downloadImage(
 	return { filePath, mimeType };
 }
 
+export async function downloadPdfByFileId(
+	api: Context["api"],
+	botToken: string,
+	fileId: string,
+	messageId: number,
+): Promise<string> {
+	const file = await api.getFile(fileId);
+	if (!file.file_path)
+		throw new Error("Telegram did not return a PDF file path");
+	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+	log.debug("[downloadPdf] Downloading file:", file.file_path);
+
+	const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+	if (!response.ok) {
+		throw new Error(
+			`Download failed: ${response.status} ${response.statusText}`,
+		);
+	}
+
+	const filePath = `./audios/pdf_${messageId}.pdf`;
+	const buffer = Buffer.from(await response.arrayBuffer());
+	await Bun.write(filePath, buffer);
+	log.debug("[downloadPdf] Saved to:", filePath, `(${buffer.length} bytes)`);
+	return filePath;
+}
+
 export { cleanupFile };
 
 export const YOUTUBE_REGEX =

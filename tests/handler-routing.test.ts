@@ -177,6 +177,10 @@ describe("getTelegramReplyContext", () => {
 			[{ ...base, photo: [{ file_id: "p", width: 1, height: 1 }] }, "[photo]"],
 			[{ ...base, voice: { file_id: "v" } }, "[voice message]"],
 			[{ ...base, audio: { file_id: "a" } }, "[audio file]"],
+			[
+				{ ...base, document: { file_id: "d", file_name: "report.pdf" } },
+				"[document: report.pdf]",
+			],
 			[{ ...base }, "[message]"],
 		];
 		for (const [replyToMessage, expected] of cases) {

@@ -81,6 +81,11 @@ function getReplyMessageContent(ctx: Context): string | undefined {
 	if (replyMsg.photo?.length) return "[photo]";
 	if (replyMsg.voice) return "[voice message]";
 	if (replyMsg.audio) return "[audio file]";
+	if (replyMsg.document) {
+		return replyMsg.document.file_name
+			? `[document: ${replyMsg.document.file_name}]`
+			: "[document]";
+	}
 	return "[message]";
 }
 

@@ -8,7 +8,7 @@
 
 A conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities. Built with [grammY](https://grammy.dev), [Google Gemini](https://ai.google.dev), and [Bun](https://bun.sh).
 
-MGS Bot isn't a typical chatbot — it remembers conversations across several layers, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, and YouTube links out of the box, while still supporting a simpler assistant mode when you do not want the personality system.
+MGS Bot isn't a typical chatbot — it remembers conversations across several layers, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, PDFs, and YouTube links out of the box, while still supporting a simpler assistant mode when you do not want the personality system.
 
 > **Note:** This project is not currently accepting contributions. Feel free to fork it for your own use.
 
@@ -17,7 +17,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations across several la
 - **Layered memory system** — manual profile/rules, relationship summaries, monthly chapters, semantic facts, episode summaries, and recent sensory context
 - **Self-maintaining memory** — failed promotions are spooled and retried (no data loss on API errors), often-recalled facts decay more slowly (capped so repetition never reads as certainty), and a daily janitor retires contradicted or duplicate facts
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
-- **Multi-modal input** — text, voice notes, audio files, photos/images, and YouTube link analysis
+- **Multi-modal input** — text, voice notes, audio files, photos/images, PDFs (including scans, embedded images, charts, and tables), and YouTube link analysis
 - **Image generation** — generates character images using Gemini or fal.ai with an optional reference image
 - **Voice responses** — text-to-speech replies via ElevenLabs, LemonFox, Inworld, or fal.ai
 - **Proactive behavior** — follow-up questions about mentioned plans and periodic check-in messages
@@ -136,7 +136,7 @@ There are four independent provider axes:
 | Variable | Description |
 | --- | --- |
 | `BOT_TOKEN` | Telegram bot token from @BotFather |
-| `GOOGLE_API_KEY` | Google AI API key — always required, even when using a different chat provider. Used for embeddings, image analysis, YouTube analysis, image generation, and Gemini-based audio transcription when LemonFox is not used or `STT_PROVIDER=gemini`. |
+| `GOOGLE_API_KEY` | Google AI API key — always required, even when using a different chat provider. Used for embeddings, image/PDF analysis, YouTube analysis, image generation, and Gemini-based audio transcription when LemonFox is not used or `STT_PROVIDER=gemini`. |
 | `OWNER_USER_ID` | Your Telegram user ID. The bot only responds to DMs from this user. |
 
 ### Chat Provider
@@ -187,7 +187,7 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 
 **Provider combinations:** You can mix providers across axes. For example, `CHAT_PROVIDER=anthropic`, `STT_PROVIDER=gemini`, `TTS_PROVIDER=elevenlabs`, and `IMAGE_PROVIDER=fal` is valid as long as the matching keys are set. A single `FAL_API_KEY` can satisfy OpenRouter via fal, fal.ai chat, STT, TTS, and images. A single `GOOGLE_API_KEY` powers Gemini chat plus the Google-only support paths.
 
-**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2`. Character image generation uses `gemini-3-pro-image`. Transcription (Gemini path), image description when falling back from a non-vision provider, and YouTube analysis use `gemini-3.6-flash`. Background memory work uses `BACKGROUND_MODEL` (default `gemini-3.6-flash`, pinned explicitly rather than a `-latest` alias so extraction-quality changes stay attributable).
+**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2`. Character image generation uses `gemini-3-pro-image`. Transcription (Gemini path), image/PDF analysis, and YouTube analysis use `gemini-3.6-flash`. Background memory work uses `BACKGROUND_MODEL` (default `gemini-3.6-flash`, pinned explicitly rather than a `-latest` alias so extraction-quality changes stay attributable).
 
 ### Access Control
 
@@ -274,6 +274,7 @@ src/
   ai/
     core.ts                  Chat generation delegation to the active provider
     vision.ts                Image and YouTube analysis helpers
+    documents.ts             PDF text, scan, image, chart, and table analysis
     evaluation.ts            Memory extraction, personality signals, relationship/chapter updates
     classifiers.ts           Lightweight AI classifiers used by proactive features
   memory/

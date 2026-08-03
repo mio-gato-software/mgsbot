@@ -25,6 +25,7 @@ export interface MockReplyToMessage {
 	photo?: { file_id: string; width: number; height: number }[];
 	voice?: { file_id: string; duration?: number };
 	audio?: { file_id: string; duration?: number; mime_type?: string };
+	document?: { file_id: string; file_name?: string; mime_type?: string };
 }
 
 export interface MockContextOptions {
@@ -40,6 +41,7 @@ export interface MockContextOptions {
 	voice?: { file_id?: string; duration?: number };
 	audio?: { file_id?: string; duration?: number; mime_type?: string };
 	photo?: { file_id: string; width: number; height: number }[];
+	document?: { file_id: string; file_name?: string; mime_type?: string };
 	replyToMessage?: MockReplyToMessage;
 	/** Build a ctx without ctx.message (e.g. non-message updates). */
 	noMessage?: boolean;
@@ -90,6 +92,7 @@ export function makeMockContext(
 				voice: options.voice,
 				audio: options.audio,
 				photo: options.photo,
+				document: options.document,
 				reply_to_message: options.replyToMessage,
 			};
 

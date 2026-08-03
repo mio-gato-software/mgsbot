@@ -21,6 +21,10 @@ import {
 	registerGroupAutoReply,
 	registerSpontaneousReplyEvaluation,
 } from "./group-state.ts";
+import {
+	handlePdfDocument,
+	registerDocumentHandler,
+} from "./handlers/document.ts";
 import { registerPhotoHandler } from "./handlers/photo.ts";
 import {
 	buildReplyAwareTextContent,
@@ -141,6 +145,9 @@ export function registerHandlers(bot: Bot): void {
 	// Photos
 	registerPhotoHandler(bot, botToken);
 
+	// PDF documents, including scanned pages and embedded images
+	registerDocumentHandler(bot, botToken);
+
 	// Text messages (catch-all)
 	bot.on("message", async (ctx) => {
 		const text = ctx.message.text;
@@ -181,12 +188,28 @@ export function registerHandlers(bot: Bot): void {
 			return;
 		}
 
-		// Reply-to-audio/photo: transcribe audio or describe image from replied message
+		// Reply-to-audio/photo/PDF: process media from the replied message
 		{
 			const replyMsg = ctx.message.reply_to_message;
 			const replyVoice = replyMsg?.voice;
 			const replyAudio = replyMsg?.audio;
 			const replyPhoto = replyMsg?.photo;
+			const replyDocument = replyMsg?.document;
+
+			if (replyDocument) {
+				const documentSenderUser = replyMsg?.from;
+				const documentSender = documentSenderUser
+					? (documentSenderUser.first_name ??
+						documentSenderUser.username ??
+						"Unknown")
+					: "Unknown";
+				const handled = await handlePdfDocument(ctx, botToken, replyDocument, {
+					requestText: text,
+					documentSender,
+					messageId: replyMsg?.message_id,
+				});
+				if (handled) return;
+			}
 
 			if (replyVoice || replyAudio) {
 				if (isGroupChat(ctx) && mentionType === "none") {

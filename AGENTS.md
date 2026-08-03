@@ -62,7 +62,7 @@ src/
                                provider call, response send, episode promotion, background evaluation
   response-processor.ts      ← Response marker handling ([SILENCE], [REACT], [IMAGE], [TTS], [QUOTE_REPLY]),
                                image/TTS sending, Markdown fallback
-  media-handlers.ts          ← Telegram media download and preprocessing (voice, audio, photo)
+  media-handlers.ts          ← Telegram media download and preprocessing (voice, audio, photo, PDF)
   commands.ts                ← Telegram commands: /provider, /allowphotorequest, /help, /on, /off, /optimize
   provider-options.ts        ← Provider metadata, env validation, /provider runtime status formatting
   embeddings.ts              ← Gemini embedding generation (gemini-embedding-2) with disk-persisted LRU cache
@@ -91,6 +91,7 @@ src/
     classifiers.ts           ← Lightweight LLM classifiers (routing decisions)
     evaluation.ts            ← Background memory evaluation: semantic facts, personality signals, follow-ups
     vision.ts                ← Image description, YouTube analysis
+    documents.ts             ← Native Gemini PDF analysis (text, scans, images, charts, tables)
   prompt/
     pipeline.ts              ← Section pipeline: ordered, mode-aware prompt assembly
     assemble.ts              ← buildSystemPrompt() entry point
