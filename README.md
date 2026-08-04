@@ -8,7 +8,7 @@
 
 A conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities. Built with [grammY](https://grammy.dev), [Google Gemini](https://ai.google.dev), and [Bun](https://bun.sh).
 
-MGS Bot isn't a typical chatbot — it remembers conversations across several layers, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, PDFs, and YouTube links out of the box, while still supporting a simpler assistant mode when you do not want the personality system.
+MGS Bot isn't a typical chatbot — it remembers conversations across several layers, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, PDFs, public web pages, and YouTube links out of the box, while still supporting a simpler assistant mode when you do not want the personality system.
 
 > **Note:** This project is not currently accepting contributions. Feel free to fork it for your own use.
 
@@ -17,7 +17,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations across several la
 - **Layered memory system** — manual profile/rules, relationship summaries, monthly chapters, semantic facts, episode summaries, and recent sensory context
 - **Self-maintaining memory** — failed promotions are spooled and retried (no data loss on API errors), often-recalled facts decay more slowly (capped so repetition never reads as certainty), and a daily janitor retires contradicted or duplicate facts
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
-- **Multi-modal input** — text, voice notes, audio files, photos/images, PDFs (including scans, embedded images, charts, and tables), and YouTube link analysis
+- **Multi-modal input** — text, voice notes, audio files, photos/images, PDFs (including scans, embedded images, charts, and tables), public web pages, and YouTube link analysis
 - **Image generation** — generates character images using Gemini or fal.ai with an optional reference image
 - **Voice responses** — text-to-speech replies via ElevenLabs, LemonFox, Inworld, or fal.ai
 - **Proactive behavior** — follow-up questions about mentioned plans and periodic check-in messages
