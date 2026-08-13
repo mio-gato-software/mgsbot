@@ -5,6 +5,8 @@ import type { ConversationMessage } from "../types.ts";
 import { withRetry } from "../utils.ts";
 import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
 import {
+	openAIModelSupportsReasoning,
+	openaiClassifierMaxOutputTokens,
 	resolveClassifierModel,
 	resolveClassifierProvider,
 	resolveOpenAIClassifierReasoningEffort,
@@ -159,15 +161,19 @@ async function runSingleWordClassifier(
 	const provider = resolveClassifierProvider();
 	if (supportProviderHasKey(provider)) {
 		if (provider === "openai") {
+			const model = resolveClassifierModel();
+			const effort = resolveOpenAIClassifierReasoningEffort();
 			const response = await withRetry(
 				() =>
 					getOpenAIClient().responses.create({
-						model: resolveClassifierModel(),
+						model,
 						input: [{ role: "user", content: prompt }],
-						max_output_tokens: maxOutputTokens,
-						reasoning: openaiReasoningConfig(
-							resolveOpenAIClassifierReasoningEffort(),
+						max_output_tokens: openaiClassifierMaxOutputTokens(
+							maxOutputTokens,
+							effort,
 						),
+						...(openAIModelSupportsReasoning(model) ? {} : { temperature: 0 }),
+						...openaiReasoningConfig(model, effort),
 					}),
 				2,
 				500,

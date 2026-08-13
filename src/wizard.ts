@@ -79,12 +79,13 @@ function writeEnvFile(data: WizardData): void {
 		existing.OPENAI_MODEL = data.openaiModel.trim();
 	}
 
-	const prefersOpenAI = !!data.openaiApiKey.trim();
-	if (!existing.CHAT_PROVIDER) {
-		existing.CHAT_PROVIDER = prefersOpenAI ? "openai" : "gemini";
+	const hasOpenAI = !!data.openaiApiKey.trim();
+	const hasGoogle = !!data.googleApiKey.trim();
+	if (!existing.CHAT_PROVIDER && !(hasOpenAI && hasGoogle)) {
+		existing.CHAT_PROVIDER = hasOpenAI ? "openai" : "gemini";
 	}
-	if (!existing.AI_PLATFORM) {
-		existing.AI_PLATFORM = prefersOpenAI ? "openai" : "gemini";
+	if (!existing.AI_PLATFORM && !(hasOpenAI && hasGoogle)) {
+		existing.AI_PLATFORM = hasOpenAI ? "openai" : "gemini";
 	}
 	if (!existing.SIMPLE_ASSISTANT_MODE) existing.SIMPLE_ASSISTANT_MODE = "false";
 	if (!existing.ENABLE_FOLLOW_UPS) existing.ENABLE_FOLLOW_UPS = "false";

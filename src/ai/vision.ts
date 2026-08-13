@@ -82,7 +82,7 @@ async function describeImageWithOpenAI(
 					],
 				},
 			],
-			reasoning: openaiReasoningConfig(),
+			...openaiReasoningConfig(resolveOpenAIVisionModel()),
 		}),
 	);
 	return response.output_text ?? "[image description failed]";

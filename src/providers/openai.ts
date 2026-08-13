@@ -47,7 +47,7 @@ export class OpenAIChatProvider implements ChatProvider {
 			const res = await this.client.responses.create({
 				model: this.model,
 				input,
-				reasoning: openaiReasoningConfig(),
+				...openaiReasoningConfig(this.model),
 			});
 			return res;
 		});
@@ -89,7 +89,7 @@ export class OpenAIChatProvider implements ChatProvider {
 						],
 					},
 				],
-				reasoning: openaiReasoningConfig(),
+				...openaiReasoningConfig(this.model),
 			});
 			return res;
 		});

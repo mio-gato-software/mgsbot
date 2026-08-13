@@ -28,7 +28,22 @@ export const DEFAULT_OPENAI_IMAGE_QUALITY = "high";
 export const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
 export const DEFAULT_OPENAI_EMBEDDING_DIM = 768;
 export const DEFAULT_OPENAI_REASONING_EFFORT = "low";
-export const DEFAULT_OPENAI_CLASSIFIER_REASONING_EFFORT = "low";
+export const DEFAULT_OPENAI_CLASSIFIER_REASONING_EFFORT = "none";
+export const OPENAI_MIN_OUTPUT_TOKENS = 16;
+export const OPENAI_CLASSIFIER_REASONING_OUTPUT_HEADROOM = 64;
+
+export const OPENAI_IMAGE_SIZES = [
+	"1024x1024",
+	"1024x1536",
+	"1536x1024",
+	"auto",
+] as const;
+export const OPENAI_IMAGE_QUALITIES = [
+	"low",
+	"medium",
+	"high",
+	"auto",
+] as const;
 
 export const OPENAI_REASONING_EFFORTS = [
 	"none",
@@ -243,11 +258,48 @@ export function resolveOpenAIImageModel(env: EnvMap = process.env): string {
 }
 
 export function resolveOpenAIImageSize(env: EnvMap = process.env): string {
-	return envString(env, "OPENAI_IMAGE_SIZE") ?? DEFAULT_OPENAI_IMAGE_SIZE;
+	const value = envString(env, "OPENAI_IMAGE_SIZE");
+	if (
+		value &&
+		OPENAI_IMAGE_SIZES.includes(value as (typeof OPENAI_IMAGE_SIZES)[number])
+	) {
+		return value;
+	}
+	return DEFAULT_OPENAI_IMAGE_SIZE;
 }
 
 export function resolveOpenAIImageQuality(env: EnvMap = process.env): string {
-	return envString(env, "OPENAI_IMAGE_QUALITY") ?? DEFAULT_OPENAI_IMAGE_QUALITY;
+	const value = envString(env, "OPENAI_IMAGE_QUALITY");
+	if (
+		value &&
+		OPENAI_IMAGE_QUALITIES.includes(
+			value as (typeof OPENAI_IMAGE_QUALITIES)[number],
+		)
+	) {
+		return value;
+	}
+	return DEFAULT_OPENAI_IMAGE_QUALITY;
+}
+
+export function openAIModelSupportsReasoning(model: string): boolean {
+	const id = model.trim().toLowerCase();
+	return (
+		id.startsWith("gpt-5") ||
+		id.startsWith("o1") ||
+		id.startsWith("o3") ||
+		id.startsWith("o4")
+	);
+}
+
+export function openaiClassifierMaxOutputTokens(
+	requested: number,
+	effort: OpenAIReasoningEffort = resolveOpenAIClassifierReasoningEffort(),
+): number {
+	const floor =
+		effort === "none"
+			? OPENAI_MIN_OUTPUT_TOKENS
+			: OPENAI_CLASSIFIER_REASONING_OUTPUT_HEADROOM;
+	return Math.max(requested, floor);
 }
 
 export function resolveOpenAIReasoningEffort(

@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import {
 	type OpenAIReasoningEffort,
+	openAIModelSupportsReasoning,
 	resolveOpenAIReasoningEffort,
 } from "./platform.ts";
 
@@ -16,7 +17,9 @@ export function getOpenAIClient(): OpenAI {
 }
 
 export function openaiReasoningConfig(
+	model: string,
 	effort: OpenAIReasoningEffort = resolveOpenAIReasoningEffort(),
-): { effort: OpenAIReasoningEffort } {
-	return { effort };
+): { reasoning?: { effort: OpenAIReasoningEffort } } {
+	if (!openAIModelSupportsReasoning(model)) return {};
+	return { reasoning: { effort } };
 }

@@ -23,6 +23,8 @@ import {
 	DEFAULT_OPENAI_TTS_VOICE,
 	DEFAULT_OPENAI_VISION_MODEL,
 	hasAnyAiKey,
+	openAIModelSupportsReasoning,
+	openaiClassifierMaxOutputTokens,
 	resolveAiPlatform,
 	resolveBackgroundModel,
 	resolveBackgroundProvider,
@@ -314,16 +316,37 @@ describe("OpenAI reasoning effort", () => {
 		).toBe("none");
 	});
 
-	test("classifier effort stays low unless set", () => {
+	test("classifier effort defaults to none", () => {
 		expect(
 			resolveOpenAIClassifierReasoningEffort({
 				OPENAI_REASONING_EFFORT: "max",
 			}),
-		).toBe("low");
+		).toBe("none");
 		expect(
 			resolveOpenAIClassifierReasoningEffort({
-				OPENAI_CLASSIFIER_REASONING_EFFORT: "none",
+				OPENAI_CLASSIFIER_REASONING_EFFORT: "low",
 			}),
-		).toBe("none");
+		).toBe("low");
+	});
+
+	test("only reasoning models receive the reasoning parameter", () => {
+		expect(openAIModelSupportsReasoning("gpt-5.6-luna")).toBe(true);
+		expect(openAIModelSupportsReasoning("gpt-4o")).toBe(false);
+		expect(openAIModelSupportsReasoning("o3-mini")).toBe(true);
+	});
+
+	test("classifier token budgets honor the Responses API minimum", () => {
+		expect(openaiClassifierMaxOutputTokens(5, "none")).toBe(16);
+		expect(openaiClassifierMaxOutputTokens(5, "low")).toBe(64);
+		expect(openaiClassifierMaxOutputTokens(80, "none")).toBe(80);
+	});
+
+	test("invalid OpenAI image size/quality fall back to defaults", () => {
+		expect(resolveOpenAIImageSize({ OPENAI_IMAGE_SIZE: "4K" })).toBe(
+			DEFAULT_OPENAI_IMAGE_SIZE,
+		);
+		expect(resolveOpenAIImageQuality({ OPENAI_IMAGE_QUALITY: "ultra" })).toBe(
+			DEFAULT_OPENAI_IMAGE_QUALITY,
+		);
 	});
 });

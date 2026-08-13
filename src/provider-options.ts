@@ -868,7 +868,7 @@ export function formatProviderCommandStatus(
 		"Independientes de /provider:",
 		`- STT: ${stt} (STT_PROVIDER)`,
 		`- TTS: ${tts} (TTS_PROVIDER)`,
-		`- Imágenes: ${imageSummary} (IMAGE_PROVIDER, GEMINI_IMAGE_MODEL, OPENAI_IMAGE_MODEL, FAL_IMAGE_MODEL)`,
+		`- Imágenes: ${imageSummary} (IMAGE_PROVIDER, GEMINI_IMAGE_MODEL, OPENAI_IMAGE_MODEL, FAL_IMAGE_MODEL, FAL_IMAGE_QUALITY)`,
 		"",
 		"/provider solo cambia el chat. Voz, transcripción e imágenes se combinan aparte por env vars.",
 	].join("\n");

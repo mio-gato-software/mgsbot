@@ -74,6 +74,9 @@ setInterval(() => {
 }, 60_000);
 
 function hashText(text: string): string {
+	// Include model+dim so a provider/model switch cannot reuse stale vectors.
+	// Existing cache entries from before this prefix become unreachable and
+	// age out via LRU.
 	return createHash("sha256")
 		.update(`${getEmbeddingModel()}:${getEmbeddingDim()}:${text}`)
 		.digest("hex");

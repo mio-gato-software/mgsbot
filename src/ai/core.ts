@@ -57,7 +57,9 @@ async function generateOpenAIBackgroundResponse(
 	model: string,
 ): Promise<string> {
 	const input = [
-		{ role: "system" as const, content: systemPrompt },
+		...(systemPrompt
+			? [{ role: "system" as const, content: systemPrompt }]
+			: []),
 		...messages.map((msg) => ({
 			role: msg.role as "user" | "assistant",
 			content: msg.content,
@@ -66,7 +68,7 @@ async function generateOpenAIBackgroundResponse(
 	const response = await getOpenAIClient().responses.create({
 		model,
 		input,
-		reasoning: openaiReasoningConfig(resolveOpenAIBackgroundReasoningEffort()),
+		...openaiReasoningConfig(model, resolveOpenAIBackgroundReasoningEffort()),
 	});
 	return response.output_text ?? "";
 }

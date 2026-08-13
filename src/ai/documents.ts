@@ -108,7 +108,7 @@ async function analyzePdfWithOpenAI(
 						],
 					},
 				],
-				reasoning: openaiReasoningConfig(),
+				...openaiReasoningConfig(resolveOpenAIDocumentModel()),
 			}),
 		);
 		const text = response.output_text?.trim();

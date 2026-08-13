@@ -215,7 +215,10 @@ export async function reembedStaleMemory(options?: {
 		`[reembed] ${reason}: ${current.provider}/${current.model} (${current.dim}-d). Updating ${stale.facts} facts and ${stale.episodes} episodes.`,
 	);
 
-	if (!options?.paths) {
+	// Only wipe the on-disk LRU when the embedding identity changed or the
+	// operator forced a full rewrite. A stale-vectors pass can reuse cache
+	// entries that already match the current model+dim.
+	if (!options?.paths && (options?.force || configChanged)) {
 		await clearEmbeddingCache();
 	}
 
@@ -260,6 +263,8 @@ export async function reembedStaleMemory(options?: {
 			dirty = true;
 		}
 		if (dirty) {
+			// Startup-only today (before handlers register). If this is ever
+			// triggered at runtime, wrap the write in withChatLock(chatId).
 			await atomicWriteFile(store.path, JSON.stringify(store.memory, null, 2));
 		}
 	}
