@@ -3,9 +3,14 @@ import {
 	findEnvCaseMismatches,
 	formatProviderCommandStatus,
 	formatProviderConfigurationFailure,
+	formatProviderStartupSummary,
+	isImageProviderName,
+	isSttProviderName,
+	isTtsProviderName,
 	resolveChatProviderName,
 	resolveFalImageModelName,
 	resolveFalImageQuality,
+	resolveImageProviderName,
 	resolveOpenRouterTransport,
 	resolveSttProviderOrder,
 	resolveTtsProviderName,
@@ -134,6 +139,76 @@ describe("provider options", () => {
 			OPENAI_API_KEY: "sk-test",
 		});
 		expect(result.errors).toEqual([]);
+		expect(result.warnings.some((w) => w.includes("YouTube"))).toBe(true);
+	});
+
+	test("rejects a setup with neither OpenAI nor Google keys", () => {
+		const result = validateProviderConfiguration({});
+		expect(
+			result.errors.some((error) => error.includes("OPENAI_API_KEY")),
+		).toBe(true);
+	});
+
+	test("IMAGE_PROVIDER=openai requires OPENAI_API_KEY", () => {
+		const result = validateProviderConfiguration({
+			GOOGLE_API_KEY: "google",
+			IMAGE_PROVIDER: "openai",
+		});
+		expect(result.errors).toContain(
+			"OpenAI images require OPENAI_API_KEY when IMAGE_PROVIDER=openai.",
+		);
+	});
+
+	test("explicit support axes require the matching key", () => {
+		const result = validateProviderConfiguration({
+			OPENAI_API_KEY: "sk-test",
+			EMBEDDING_PROVIDER: "gemini",
+			BACKGROUND_PROVIDER: "gemini",
+		});
+		expect(result.errors).toContain(
+			"Embeddings require GOOGLE_API_KEY when EMBEDDING_PROVIDER=gemini.",
+		);
+		expect(result.errors).toContain(
+			"Background work require GOOGLE_API_KEY when BACKGROUND_PROVIDER=gemini.",
+		);
+	});
+
+	test("accepts openai as STT, TTS, and image provider names", () => {
+		expect(isSttProviderName("openai")).toBe(true);
+		expect(isTtsProviderName("openai")).toBe(true);
+		expect(isImageProviderName("openai")).toBe(true);
+		expect(resolveImageProviderName({ IMAGE_PROVIDER: "openai" })).toBe(
+			"openai",
+		);
+	});
+
+	test("STT order prefers the AI platform key first", () => {
+		expect(
+			resolveSttProviderOrder({
+				GOOGLE_API_KEY: "google",
+				OPENAI_API_KEY: "sk-test",
+			}),
+		).toEqual(["gemini", "openai"]);
+		expect(
+			resolveSttProviderOrder({
+				AI_PLATFORM: "openai",
+				GOOGLE_API_KEY: "google",
+				OPENAI_API_KEY: "sk-test",
+			}),
+		).toEqual(["openai", "gemini"]);
+	});
+
+	test("startup summary reports platform, embeddings, and background", () => {
+		const lines = formatProviderStartupSummary({
+			OPENAI_API_KEY: "sk-test",
+		});
+		expect(lines).toContain("[startup] AI platform: openai");
+		expect(lines).toContain("[startup] Chat provider: openai");
+		expect(lines).toContain("[startup] Embeddings: openai");
+		expect(lines).toContain("[startup] Background: openai");
+		expect(lines).toContain("[startup] Image provider: openai");
+		expect(lines).toContain("[startup] STT provider order: openai");
+		expect(lines).toContain("[startup] TTS provider: openai");
 	});
 
 	test("validation requires the DeepSeek key when selected", () => {
@@ -215,6 +290,18 @@ describe("findEnvCaseMismatches", () => {
 	test("flags lowercase core credentials", () => {
 		const warnings = findEnvCaseMismatches(["bot_token", "google_api_key"]);
 		expect(warnings).toHaveLength(2);
+	});
+
+	test("flags new OpenAI/image env vars written with wrong case", () => {
+		const warnings = findEnvCaseMismatches([
+			"openai_image_model",
+			"ai_platform",
+			"embedding_provider",
+		]);
+		expect(warnings).toHaveLength(3);
+		expect(warnings.join("\n")).toContain("OPENAI_IMAGE_MODEL");
+		expect(warnings.join("\n")).toContain("AI_PLATFORM");
+		expect(warnings.join("\n")).toContain("EMBEDDING_PROVIDER");
 	});
 
 	test("does not flag correctly cased keys", () => {
