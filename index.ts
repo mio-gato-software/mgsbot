@@ -129,9 +129,8 @@ const { isBotOff, isSleepingHour, registerHandlers } = await import(
 const { retrySpooledPromotions } = await import("./src/conversation.ts");
 const { runSemanticJanitor } = await import("./src/janitor.ts");
 const { initIdentities } = await import("./src/identities.ts");
-const { initMemoryDirs, runExtractionHealthCheck } = await import(
-	"./src/memory/index.ts"
-);
+const { initMemoryDirs, reembedStaleMemory, runExtractionHealthCheck } =
+	await import("./src/memory/index.ts");
 const { initPersonality } = await import("./src/personality.ts");
 
 // --- Startup env validation ---
@@ -186,6 +185,9 @@ if (ownerUserId) {
 // Initialize directories
 if (!existsSync("./audios")) mkdirSync("./audios", { recursive: true });
 await initMemoryDirs();
+await reembedStaleMemory().catch((err) => {
+	log.error("[reembed] Startup embedding migration failed:", err);
+});
 await initIdentities();
 await initFollowUps();
 await initPersonality();

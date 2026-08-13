@@ -146,6 +146,7 @@ memory/                      ← Runtime data (gitignored)
   follow-ups.json            ← Pending/sent proactive follow-ups
   check-ins.json             ← Proactive check-in weekly slots and state per DM chat
   embedding-cache.json       ← LRU cache of vector embeddings (max 5000, SHA256-keyed)
+  embedding-config.json      ← Last embedding provider/model/dim used; startup re-embeds if this changes
   daily-weather.json         ← Cached daily weather data
   episodes/<chat_id>.json    ← Per-chat episode summaries with embeddings (max 20)
   sensory/<chat_id>.json     ← Per-chat recent messages (max 10) + image scheduling
@@ -189,7 +190,7 @@ The bot's own identity/personality prompt comes from `bot_config.json` (chat set
 
 Per-chat writes are serialized with `withChatLock()` (`src/memory/locks.ts`); state files are saved via `atomicWriteFile()` to avoid corruption on crash.
 
-**Embeddings** (`src/embeddings.ts`): Uses `EMBEDDING_PROVIDER` (`gemini-embedding-2` or `text-embedding-3-small`, both default 768-d). Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, auto-persisted every 60 seconds. Cache keys include model+dim so switching providers does not mix vectors. Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
+**Embeddings** (`src/embeddings.ts`): Uses `EMBEDDING_PROVIDER` (`gemini-embedding-2` or `text-embedding-3-small`, both default 768-d). Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, auto-persisted every 60 seconds. Cache keys include model+dim so switching providers does not mix vectors. Startup compares `memory/embedding-config.json` to the current provider/model/dim and rewrites stale fact/episode vectors (`src/memory/reembed.ts`; disable with `AUTO_REEMBED=false`). Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
 
 **Identities** (`src/identities.ts`): Maps Telegram user IDs to canonical names with alias tracking. Handles name changes by adding old names as aliases. Prefix matching (e.g., "Eliaquín" matches "Eliaquín Encarnación"). Used to link facts across name variations.
 

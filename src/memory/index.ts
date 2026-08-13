@@ -58,6 +58,12 @@ export {
 	normalizeName,
 } from "./queries.ts";
 export {
+	currentEmbeddingIdentity,
+	embeddingIdentitiesEqual,
+	itemNeedsReembed,
+	reembedStaleMemory,
+} from "./reembed.ts";
+export {
 	loadRelationshipMemory,
 	saveRelationshipMemory,
 	updateRelationshipMemory,

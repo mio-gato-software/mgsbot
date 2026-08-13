@@ -149,6 +149,12 @@ export async function flushEmbeddingCache(): Promise<void> {
 	await persistDiskCache();
 }
 
+export async function clearEmbeddingCache(): Promise<void> {
+	diskCache = new Map();
+	diskCacheDirty = true;
+	await persistDiskCache();
+}
+
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 	const results: number[][] = [];
 	const BATCH_SIZE = 10;

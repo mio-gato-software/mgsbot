@@ -500,7 +500,7 @@ Tests live in `tests/` and cover provider validation, prompt sections, response 
 
 ```bash
 bun run scripts/migrate-memory.ts      # Migrate from old memory format (long-term.json, members.json)
-bun run scripts/reembed-memory.ts      # Re-generate all vector embeddings
+bun run scripts/reembed-memory.ts      # Force-regenerate all vector embeddings (startup also does this when the embedding model changes)
 bun run scripts/merge-person-facts.ts  # Deduplicate person facts across name variants
 ```
 
