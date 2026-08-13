@@ -3,12 +3,11 @@ import {
 	createUserContent,
 	GoogleGenAI,
 } from "@google/genai";
+import { resolveGeminiSttModel } from "../ai/platform.ts";
 import { log } from "../logger.ts";
 import { isTutorActive } from "../prompt/modes.ts";
 import { withRetry } from "../utils.ts";
 import type { SttProvider } from "./types.ts";
-
-const MODEL = "gemini-3.6-flash";
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
@@ -57,7 +56,7 @@ export class GeminiSttProvider implements SttProvider {
 
 		const response = await withRetry(() =>
 			getAI().models.generateContent({
-				model: MODEL,
+				model: resolveGeminiSttModel(),
 				contents: createUserContent([
 					createPartFromUri(uploaded.uri ?? "", uploaded.mimeType ?? ""),
 					isTutorActive()

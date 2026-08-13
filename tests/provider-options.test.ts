@@ -13,8 +13,14 @@ import {
 } from "../src/provider-options.ts";
 
 describe("provider options", () => {
-	test("defaults chat provider to gemini", () => {
+	test("defaults chat provider to gemini when no keys are set", () => {
 		expect(resolveChatProviderName({})).toBe("gemini");
+	});
+
+	test("defaults chat provider to openai when only OpenAI is configured", () => {
+		expect(resolveChatProviderName({ OPENAI_API_KEY: "sk-test" })).toBe(
+			"openai",
+		);
 	});
 
 	test("rejects unknown chat providers", () => {
@@ -82,6 +88,12 @@ describe("provider options", () => {
 		).toEqual(["gemini", "fal", "lemonfox"]);
 	});
 
+	test("prefers OpenAI STT when only OpenAI is configured", () => {
+		expect(resolveSttProviderOrder({ OPENAI_API_KEY: "sk-test" })).toEqual([
+			"openai",
+		]);
+	});
+
 	test("explicit STT provider replaces fallback order", () => {
 		expect(
 			resolveSttProviderOrder({
@@ -101,6 +113,12 @@ describe("provider options", () => {
 		).toBe("lemonfox");
 	});
 
+	test("TTS falls back to OpenAI when only OPENAI_API_KEY is set", () => {
+		expect(resolveTtsProviderName({ OPENAI_API_KEY: "sk-test" })).toBe(
+			"openai",
+		);
+	});
+
 	test("validation reports missing explicit provider keys", () => {
 		const result = validateProviderConfiguration({
 			GOOGLE_API_KEY: "google",
@@ -109,6 +127,13 @@ describe("provider options", () => {
 		expect(result.errors).toContain(
 			"fal.ai TTS requires FAL_API_KEY when TTS_PROVIDER=fal.",
 		);
+	});
+
+	test("OpenAI-only configuration is valid", () => {
+		const result = validateProviderConfiguration({
+			OPENAI_API_KEY: "sk-test",
+		});
+		expect(result.errors).toEqual([]);
 	});
 
 	test("validation requires the DeepSeek key when selected", () => {

@@ -9,7 +9,7 @@ import { alertOwner } from "./alerts.ts";
 import { botNow } from "./bot-time.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
-import { EMBEDDING_MODEL, generateEmbedding } from "./embeddings.ts";
+import { generateEmbedding, getEmbeddingModel } from "./embeddings.ts";
 import {
 	checkAndCancelResolvedFollowUps,
 	detectAndStoreFollowUps,
@@ -677,7 +677,7 @@ export async function promoteToMemory(
 		timestamp: now,
 		importance: result.importance,
 		embedding: episodeEmbedding,
-		embeddingModel: EMBEDDING_MODEL,
+		embeddingModel: getEmbeddingModel(),
 		embeddingDim: episodeEmbedding.length,
 	};
 	await addEpisode(chatId, episode);
@@ -702,7 +702,7 @@ export async function promoteToMemory(
 			subject: fact.canonicalSubject,
 			context: fact.context,
 			embedding: fact.factEmbedding,
-			embeddingModel: EMBEDDING_MODEL,
+			embeddingModel: getEmbeddingModel(),
 			embeddingDim: fact.factEmbedding.length,
 			importance: fact.importance,
 			confidence: 1.0,

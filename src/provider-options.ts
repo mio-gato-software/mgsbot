@@ -1,4 +1,14 @@
 import { z } from "zod";
+import {
+	DEFAULT_GEMINI_CHAT_MODEL,
+	DEFAULT_OPENAI_CHAT_MODEL,
+	DEFAULT_OPENAI_IMAGE_MODEL,
+	resolveAiPlatform,
+	resolveBackgroundProvider,
+	resolveDefaultChatProviderName,
+	resolveDefaultImageProviderName,
+	resolveEmbeddingProvider,
+} from "./ai/platform.ts";
 
 type EnvMap = NodeJS.ProcessEnv;
 
@@ -17,7 +27,7 @@ export const CHAT_PROVIDERS = [
 		label: "Gemini",
 		requiredEnv: ["GOOGLE_API_KEY"],
 		modelEnv: "GEMINI_MODEL",
-		defaultModel: "gemini-3.6-flash",
+		defaultModel: DEFAULT_GEMINI_CHAT_MODEL,
 		description: "Main Google chat provider with native inline image support.",
 	},
 	{
@@ -65,9 +75,9 @@ export const CHAT_PROVIDERS = [
 		label: "OpenAI",
 		requiredEnv: ["OPENAI_API_KEY"],
 		modelEnv: "OPENAI_MODEL",
-		defaultModel: "gpt-5.4",
+		defaultModel: DEFAULT_OPENAI_CHAT_MODEL,
 		description:
-			"Chat through OpenAI; image descriptions can use vision models.",
+			"Chat through OpenAI (default gpt-5.6-luna). With only OPENAI_API_KEY, the same key can also cover embeddings, STT, TTS, images, PDFs, and background work.",
 	},
 	{
 		name: "deepseek",
@@ -115,6 +125,14 @@ export const TTS_PROVIDERS = [
 		requiredEnv: ["FAL_API_KEY"],
 		description: "Available only when TTS_PROVIDER=fal is set explicitly.",
 	},
+	{
+		name: "openai",
+		label: "OpenAI",
+		requiredEnv: ["OPENAI_API_KEY"],
+		modelEnv: "OPENAI_TTS_MODEL",
+		defaultModel: "gpt-4o-mini-tts",
+		description: "Auto-selected last when OPENAI_API_KEY is set.",
+	},
 ] as const satisfies readonly ProviderOption<string>[];
 
 export const STT_PROVIDERS = [
@@ -134,7 +152,15 @@ export const STT_PROVIDERS = [
 		name: "lemonfox",
 		label: "LemonFox",
 		requiredEnv: ["LEMON_FOX_API_KEY"],
-		description: "Third automatic fallback when LEMON_FOX_API_KEY is set.",
+		description: "Automatic fallback when LEMON_FOX_API_KEY is set.",
+	},
+	{
+		name: "openai",
+		label: "OpenAI",
+		requiredEnv: ["OPENAI_API_KEY"],
+		modelEnv: "OPENAI_STT_MODEL",
+		defaultModel: "gpt-4o-mini-transcribe",
+		description: "OpenAI transcription when OPENAI_API_KEY is set.",
 	},
 ] as const satisfies readonly ProviderOption<string>[];
 
@@ -152,6 +178,14 @@ export const IMAGE_PROVIDERS = [
 		modelEnv: "FAL_IMAGE_MODEL",
 		defaultModel: "nano-banana-pro",
 		description: "Alternative image provider using Nano Banana Pro by default.",
+	},
+	{
+		name: "openai",
+		label: "OpenAI",
+		requiredEnv: ["OPENAI_API_KEY"],
+		modelEnv: "OPENAI_IMAGE_MODEL",
+		defaultModel: DEFAULT_OPENAI_IMAGE_MODEL,
+		description: "OpenAI Images API (gpt-image-2 by default).",
 	},
 ] as const satisfies readonly ProviderOption<string>[];
 
@@ -184,6 +218,13 @@ interface ProviderEnv extends EnvMap {
 	STT_PROVIDER?: SttProviderName;
 	TTS_PROVIDER?: TtsProviderName;
 	IMAGE_PROVIDER?: ImageProviderName;
+	AI_PLATFORM?: "gemini" | "openai";
+	EMBEDDING_PROVIDER?: "gemini" | "openai";
+	VISION_PROVIDER?: "gemini" | "openai";
+	DOCUMENT_PROVIDER?: "gemini" | "openai";
+	BACKGROUND_PROVIDER?: "gemini" | "openai";
+	CLASSIFIER_PROVIDER?: "gemini" | "openai";
+	YOUTUBE_PROVIDER?: "gemini" | "openai";
 	OPENROUTER_TRANSPORT?: OpenRouterTransport;
 	FAL_IMAGE_MODEL?: string;
 	FAL_IMAGE_QUALITY?: string;
@@ -234,11 +275,20 @@ const ProviderEnvSchema = z.object({
 			"fal",
 		]),
 	),
-	STT_PROVIDER: optionalProviderString(z.enum(["gemini", "fal", "lemonfox"])),
-	TTS_PROVIDER: optionalProviderString(
-		z.enum(["elevenlabs", "inworld", "lemonfox", "fal"]),
+	STT_PROVIDER: optionalProviderString(
+		z.enum(["gemini", "fal", "lemonfox", "openai"]),
 	),
-	IMAGE_PROVIDER: optionalProviderString(z.enum(["gemini", "fal"])),
+	TTS_PROVIDER: optionalProviderString(
+		z.enum(["elevenlabs", "inworld", "lemonfox", "fal", "openai"]),
+	),
+	IMAGE_PROVIDER: optionalProviderString(z.enum(["gemini", "fal", "openai"])),
+	AI_PLATFORM: optionalProviderString(z.enum(["gemini", "openai"])),
+	EMBEDDING_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
+	VISION_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
+	DOCUMENT_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
+	BACKGROUND_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
+	CLASSIFIER_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
+	YOUTUBE_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
 	OPENROUTER_TRANSPORT: optionalProviderString(z.enum(["direct", "fal"])),
 	FAL_IMAGE_MODEL: optionalString,
 	FAL_IMAGE_QUALITY: optionalString,
@@ -266,7 +316,37 @@ const CORE_ENV_VARS = [
 	"ALLOWED_GROUP_ID",
 	"BOT_TIMEZONE",
 	"PROVIDER",
+	"AI_PLATFORM",
 	"GEMINI_MODEL",
+	"GEMINI_VISION_MODEL",
+	"GEMINI_DOCUMENT_MODEL",
+	"GEMINI_STT_MODEL",
+	"GEMINI_IMAGE_MODEL",
+	"GEMINI_IMAGE_SIZE",
+	"BACKGROUND_MODEL",
+	"BACKGROUND_PROVIDER",
+	"CLASSIFIER_MODEL",
+	"CLASSIFIER_PROVIDER",
+	"EMBEDDING_PROVIDER",
+	"EMBEDDING_MODEL",
+	"EMBEDDING_DIM",
+	"VISION_PROVIDER",
+	"DOCUMENT_PROVIDER",
+	"YOUTUBE_PROVIDER",
+	"OPENAI_MODEL",
+	"OPENAI_VISION_MODEL",
+	"OPENAI_DOCUMENT_MODEL",
+	"OPENAI_STT_MODEL",
+	"OPENAI_TTS_MODEL",
+	"OPENAI_TTS_VOICE",
+	"OPENAI_IMAGE_MODEL",
+	"OPENAI_IMAGE_SIZE",
+	"OPENAI_IMAGE_QUALITY",
+	"OPENAI_REASONING_EFFORT",
+	"OPENAI_BACKGROUND_REASONING_EFFORT",
+	"OPENAI_CLASSIFIER_REASONING_EFFORT",
+	"ELEVENLABS_MODEL",
+	"INWORLD_MODEL",
 	"OPENROUTER_MODEL",
 	"OPENROUTER_HTTP_REFERER",
 	"OPENROUTER_TITLE",
@@ -404,13 +484,17 @@ export function isImageProviderName(value: string): value is ImageProviderName {
 export function resolveChatProviderName(
 	env: EnvMap = process.env,
 ): ChatProviderName {
-	return parseProviderEnv(env).CHAT_PROVIDER ?? "gemini";
+	return (
+		parseProviderEnv(env).CHAT_PROVIDER ?? resolveDefaultChatProviderName(env)
+	);
 }
 
 export function resolveImageProviderName(
 	env: EnvMap = process.env,
 ): ImageProviderName {
-	return parseProviderEnv(env).IMAGE_PROVIDER ?? "gemini";
+	return (
+		parseProviderEnv(env).IMAGE_PROVIDER ?? resolveDefaultImageProviderName(env)
+	);
 }
 
 export function resolveOpenRouterTransport(
@@ -488,6 +572,7 @@ export function resolveTtsProviderName(
 	if (parsed.ELEVENLABS_API_KEY) return "elevenlabs";
 	if (parsed.INWORLD_API_KEY && parsed.INWORLD_VOICE_ID) return "inworld";
 	if (parsed.LEMON_FOX_API_KEY) return "lemonfox";
+	if (parsed.OPENAI_API_KEY) return "openai";
 	return null;
 }
 
@@ -505,7 +590,14 @@ export function resolveSttProviderOrder(
 	if (explicit) return [explicit];
 
 	const order: SttProviderName[] = [];
-	if (parsed.GOOGLE_API_KEY) order.push("gemini");
+	const platform = resolveAiPlatform(parsed);
+	if (platform === "openai") {
+		if (parsed.OPENAI_API_KEY) order.push("openai");
+		if (parsed.GOOGLE_API_KEY) order.push("gemini");
+	} else {
+		if (parsed.GOOGLE_API_KEY) order.push("gemini");
+		if (parsed.OPENAI_API_KEY) order.push("openai");
+	}
 	if (parsed.FAL_API_KEY) order.push("fal");
 	if (parsed.LEMON_FOX_API_KEY) order.push("lemonfox");
 	return order;
@@ -527,8 +619,10 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 	}
 
 	const providerEnv = parsed.data as ProviderEnv;
-	const chatProvider = providerEnv.CHAT_PROVIDER ?? "gemini";
-	const imageProvider = providerEnv.IMAGE_PROVIDER ?? "gemini";
+	const chatProvider =
+		providerEnv.CHAT_PROVIDER ?? resolveDefaultChatProviderName(providerEnv);
+	const imageProvider =
+		providerEnv.IMAGE_PROVIDER ?? resolveDefaultImageProviderName(providerEnv);
 	const falImageModel = normalizeFalImageModelName(providerEnv.FAL_IMAGE_MODEL);
 	const falImageQuality = normalizeFalImageQuality(
 		providerEnv.FAL_IMAGE_QUALITY,
@@ -618,6 +712,63 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 		);
 	}
 
+	if (!providerEnv.GOOGLE_API_KEY && !providerEnv.OPENAI_API_KEY) {
+		errors.push(
+			"Set OPENAI_API_KEY or GOOGLE_API_KEY. OpenAI alone covers chat, embeddings, STT, TTS, images, PDFs, and background work; Gemini remains optional for YouTube analysis and Gemini-specific models.",
+		);
+	}
+
+	const supportChecks: Array<{
+		label: string;
+		name: string;
+		provider: "gemini" | "openai" | undefined;
+	}> = [
+		{
+			label: "Embeddings",
+			name: "EMBEDDING_PROVIDER",
+			provider: providerEnv.EMBEDDING_PROVIDER,
+		},
+		{
+			label: "Vision",
+			name: "VISION_PROVIDER",
+			provider: providerEnv.VISION_PROVIDER,
+		},
+		{
+			label: "Documents",
+			name: "DOCUMENT_PROVIDER",
+			provider: providerEnv.DOCUMENT_PROVIDER,
+		},
+		{
+			label: "Background work",
+			name: "BACKGROUND_PROVIDER",
+			provider: providerEnv.BACKGROUND_PROVIDER,
+		},
+		{
+			label: "Classifiers",
+			name: "CLASSIFIER_PROVIDER",
+			provider: providerEnv.CLASSIFIER_PROVIDER,
+		},
+	];
+	for (const check of supportChecks) {
+		if (!check.provider) continue;
+		const required =
+			check.provider === "openai" ? "OPENAI_API_KEY" : "GOOGLE_API_KEY";
+		if (!providerEnv[required]) {
+			errors.push(
+				`${check.label} require ${required} when ${check.name}=${check.provider}.`,
+			);
+		}
+	}
+
+	if (
+		providerEnv.YOUTUBE_PROVIDER === "openai" ||
+		(!providerEnv.GOOGLE_API_KEY && resolveAiPlatform(providerEnv) === "openai")
+	) {
+		warnings.push(
+			"YouTube video analysis is Gemini-only. Without GOOGLE_API_KEY, YouTube links will not be analyzed.",
+		);
+	}
+
 	return { errors, warnings };
 }
 
@@ -625,7 +776,9 @@ export function formatProviderConfigurationFailure(
 	validation: { errors: string[] },
 	env: EnvMap = process.env,
 ): string {
-	const chatProvider = env.CHAT_PROVIDER?.trim() || "gemini (default)";
+	const chatProvider =
+		env.CHAT_PROVIDER?.trim() ||
+		`${resolveDefaultChatProviderName(env)} (default)`;
 	const lines = [
 		"Startup blocked: provider configuration is invalid.",
 		"",
@@ -664,7 +817,10 @@ export function formatProviderStartupSummary(
 				: image;
 
 	return [
+		`[startup] AI platform: ${resolveAiPlatform(env)}`,
 		`[startup] Chat provider: ${chat}${chatTransport}`,
+		`[startup] Embeddings: ${resolveEmbeddingProvider(env)}`,
+		`[startup] Background: ${resolveBackgroundProvider(env)}`,
 		`[startup] STT provider order: ${stt}`,
 		`[startup] TTS provider: ${tts}`,
 		`[startup] Image provider: ${imageSummary}`,
@@ -711,7 +867,7 @@ export function formatProviderCommandStatus(
 		"Independientes de /provider:",
 		`- STT: ${stt} (STT_PROVIDER)`,
 		`- TTS: ${tts} (TTS_PROVIDER)`,
-		`- Imágenes: ${imageSummary} (IMAGE_PROVIDER, FAL_IMAGE_MODEL, FAL_IMAGE_QUALITY)`,
+		`- Imágenes: ${imageSummary} (IMAGE_PROVIDER, GEMINI_IMAGE_MODEL, OPENAI_IMAGE_MODEL, FAL_IMAGE_MODEL)`,
 		"",
 		"/provider solo cambia el chat. Voz, transcripción e imágenes se combinan aparte por env vars.",
 	].join("\n");

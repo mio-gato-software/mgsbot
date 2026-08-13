@@ -3,6 +3,7 @@ import { resolveSttProviderOrder } from "../provider-options.ts";
 import { FalSttProvider } from "./fal.ts";
 import { GeminiSttProvider } from "./gemini.ts";
 import { LemonFoxSttProvider } from "./lemonfox.ts";
+import { OpenAISttProvider } from "./openai.ts";
 import type { SttProvider } from "./types.ts";
 
 export type { SttProvider } from "./types.ts";
@@ -30,6 +31,8 @@ function createSttProvider(): SttProvider | null {
 			cachedProvider = tryBuild("fal", () => new FalSttProvider());
 		} else if (candidate === "lemonfox") {
 			cachedProvider = tryBuild("lemonfox", () => new LemonFoxSttProvider());
+		} else if (candidate === "openai") {
+			cachedProvider = tryBuild("openai", () => new OpenAISttProvider());
 		} else {
 			cachedProvider = tryBuild("gemini", () => new GeminiSttProvider());
 		}

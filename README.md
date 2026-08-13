@@ -6,7 +6,7 @@
   <sub>Character image generated with Gemini from a prompt by my daughter</sub>
 </p>
 
-A conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities. Built with [grammY](https://grammy.dev), [Google Gemini](https://ai.google.dev), and [Bun](https://bun.sh).
+A conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities. Built with [grammY](https://grammy.dev), [OpenAI](https://platform.openai.com) or [Google Gemini](https://ai.google.dev), and [Bun](https://bun.sh).
 
 MGS Bot isn't a typical chatbot — it remembers conversations across several layers, develops personality traits over time, recognizes users across name changes, and proactively reaches out like a real friend. It handles text, voice notes, photos, PDFs, public web pages, and YouTube links out of the box, while still supporting a simpler assistant mode when you do not want the personality system.
 
@@ -18,8 +18,8 @@ MGS Bot isn't a typical chatbot — it remembers conversations across several la
 - **Self-maintaining memory** — failed promotions are spooled and retried (no data loss on API errors), often-recalled facts decay more slowly (capped so repetition never reads as certainty), and a daily janitor retires contradicted or duplicate facts
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
 - **Multi-modal input** — text, voice notes, audio files, photos/images, PDFs (including scans, embedded images, charts, and tables), public web pages, and YouTube link analysis
-- **Image generation** — generates character images using Gemini or fal.ai with an optional reference image
-- **Voice responses** — text-to-speech replies via ElevenLabs, LemonFox, Inworld, or fal.ai
+- **Image generation** — generates character images using OpenAI, Gemini, or fal.ai with an optional reference image
+- **Voice responses** — text-to-speech replies via ElevenLabs, LemonFox, Inworld, OpenAI, or fal.ai
 - **Proactive behavior** — follow-up questions about mentioned plans and periodic check-in messages
 - **User identity tracking** — canonical names with alias support, handles name changes gracefully
 - **Multi-provider chat** — swap between Gemini, OpenRouter, Anthropic, Azure, Alibaba, Fireworks, OpenAI, DeepSeek, or fal.ai at runtime
@@ -120,32 +120,36 @@ Memory, audio files, and logs persist via volume mounts. The bot auto-creates al
 
 All configuration is via environment variables. Copy `.env.sample` to `.env` and fill in the values.
 
-There are four independent provider axes:
+There are independent provider axes. `AI_PLATFORM` (`gemini` or `openai`) sets the default for chat and support work when a more specific provider is unset. With only `OPENAI_API_KEY`, the bot defaults to OpenAI for almost everything.
 
 | Axis | Env var | Controls | Default / fallback | Shared keys |
 | --- | --- | --- | --- | --- |
-| Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` | Provider-specific chat key |
-| Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | `gemini` -> `fal` -> `lemonfox` by available keys | `GOOGLE_API_KEY`, `FAL_API_KEY`, or `LEMON_FOX_API_KEY` |
-| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` by available keys; `fal` only when explicit | `ELEVENLABS_API_KEY`, `INWORLD_API_KEY`, `LEMON_FOX_API_KEY`, or `FAL_API_KEY` |
-| Images | `IMAGE_PROVIDER` + `FAL_IMAGE_MODEL` | Character image generation/editing | `gemini`; fal defaults to `nano-banana-pro` | `GOOGLE_API_KEY` or `FAL_API_KEY` |
+| Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` if Google is set, else `openai` | Provider-specific chat key |
+| Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | platform key -> `fal` -> `lemonfox` | `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `FAL_API_KEY`, or `LEMON_FOX_API_KEY` |
+| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` -> `openai`; `fal` only when explicit | `ELEVENLABS_API_KEY`, `INWORLD_API_KEY`, `LEMON_FOX_API_KEY`, `OPENAI_API_KEY`, or `FAL_API_KEY` |
+| Images | `IMAGE_PROVIDER` + model env | Character image generation/editing | `openai` or `gemini` from `AI_PLATFORM`; fal defaults to `nano-banana-pro` | `OPENAI_API_KEY`, `GOOGLE_API_KEY`, or `FAL_API_KEY` |
+| Embeddings | `EMBEDDING_PROVIDER` | Memory search / dedup | `AI_PLATFORM` | `OPENAI_API_KEY` or `GOOGLE_API_KEY` |
+| Background | `BACKGROUND_PROVIDER` | Fact extraction, narrative, janitor | `AI_PLATFORM` | Same as embeddings |
 
-`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work (fact extraction, narrative updates, memory janitor) is pinned to a cheap Gemini model (`BACKGROUND_MODEL`) whenever `GOOGLE_API_KEY` is set, so choosing an expensive chat model doesn't multiply background costs.
+`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work uses `BACKGROUND_MODEL` on the configured background provider so an expensive chat model doesn't multiply background costs.
 
 ### Required
 
 | Variable | Description |
 | --- | --- |
 | `BOT_TOKEN` | Telegram bot token from @BotFather |
-| `GOOGLE_API_KEY` | Google AI API key — always required, even when using a different chat provider. Used for embeddings, image/PDF analysis, YouTube analysis, image generation, and Gemini-based audio transcription when LemonFox is not used or `STT_PROVIDER=gemini`. |
+| `OPENAI_API_KEY` or `GOOGLE_API_KEY` | At least one AI key. OpenAI alone covers chat, embeddings, STT, TTS, images, PDFs, classifiers, and background work. Google remains optional and is still required for YouTube analysis and Gemini-specific models. |
 | `OWNER_USER_ID` | Your Telegram user ID. The bot only responds to DMs from this user. |
 
 ### Chat Provider
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `CHAT_PROVIDER` | `gemini` | Chat provider: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, or `fal` |
-| `GEMINI_MODEL` | `gemini-3.6-flash` | Gemini model when `CHAT_PROVIDER=gemini` (other Gemini-only paths in code use fixed models; see **Google AI usage** below) |
-| `BACKGROUND_MODEL` | `gemini-3.6-flash` | Pinned model for background memory work — fact extraction, narrative updates, and the memory janitor. Falls back to the chat provider when `GOOGLE_API_KEY` is missing. |
+| `AI_PLATFORM` | *(auto)* | Default platform for chat + support work: `gemini` or `openai`. Auto-selects `openai` when only `OPENAI_API_KEY` is set. |
+| `CHAT_PROVIDER` | *(auto)* | Chat provider: `gemini`, `openai`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `deepseek`, or `fal` |
+| `GEMINI_MODEL` | `gemini-3.6-flash` | Gemini chat model when `CHAT_PROVIDER=gemini` |
+| `GEMINI_IMAGE_MODEL` | `gemini-3-pro-image` | Gemini image generation model (`IMAGE_PROVIDER=gemini`) |
+| `BACKGROUND_MODEL` | platform default | Pinned model for background memory work — fact extraction, narrative updates, and the memory janitor. Defaults to `gpt-5.6-luna` on OpenAI or `gemini-3.6-flash` on Gemini. |
 | `OPENROUTER_API_KEY` | — | Required if using OpenRouter direct transport |
 | `OPENROUTER_MODEL` | `anthropic/claude-3.5-sonnet` | OpenRouter model |
 | `OPENROUTER_TRANSPORT` | *(auto)* | `direct` uses `OPENROUTER_API_KEY`; `fal` uses `FAL_API_KEY` with fal.ai's `openrouter/router` endpoint. If unset, direct is used when `OPENROUTER_API_KEY` exists; otherwise fal is used when `FAL_API_KEY` exists. |
@@ -158,8 +162,11 @@ There are four independent provider axes:
 | `DASHSCOPE_MODEL` | `qwen3.5-plus` | Alibaba DashScope model |
 | `FIREWORKS_API_KEY` | — | Required if using Fireworks |
 | `FIREWORKS_MODEL` | `accounts/fireworks/models/glm-5` | Fireworks model |
-| `OPENAI_API_KEY` | — | Required if using OpenAI |
-| `OPENAI_MODEL` | `gpt-5.4` | OpenAI model |
+| `OPENAI_API_KEY` | — | Required for OpenAI chat/support. Enough on its own for most of the bot. |
+| `OPENAI_MODEL` | `gpt-5.6-luna` | OpenAI chat model (GPT-5.6 cheap tier) |
+| `OPENAI_IMAGE_MODEL` | `gpt-image-2` | OpenAI image generation model (`IMAGE_PROVIDER=openai`) |
+| `OPENAI_STT_MODEL` | `gpt-4o-mini-transcribe` | OpenAI transcription model |
+| `OPENAI_TTS_MODEL` | `gpt-4o-mini-tts` | OpenAI speech model |
 | `DEEPSEEK_API_KEY` | — | Required if using DeepSeek |
 | `DEEPSEEK_MODEL` | `deepseek-v4-pro` | DeepSeek model |
 | `FAL_API_KEY` | — | Required if using fal.ai for chat, OpenRouter via fal, TTS, STT, or image generation |
@@ -169,8 +176,9 @@ There are four independent provider axes:
 
 | Goal | Provider | Model | Notes |
 | --- | --- | --- | --- |
-| **Best compatibility** | `gemini` | `gemini-3.1-pro-preview` | Best overall experience — native support for all features including function calling and vision |
-| **Best value** | `fireworks` | `accounts/fireworks/models/kimi-k2.5` | Strong performance at low cost |
+| **OpenAI-only** | `openai` | `gpt-5.6-luna` | Cheap GPT-5.6 tier; one key covers chat, memory, STT, TTS, images, and PDFs |
+| **Best Gemini compatibility** | `gemini` | `gemini-3.1-pro-preview` | Native support including YouTube analysis |
+| **Best value (other)** | `fireworks` | `accounts/fireworks/models/kimi-k2.5` | Strong performance at low cost |
 
 You can switch providers at runtime via the `/provider` Telegram command (DM only, owner only):
 
@@ -185,9 +193,11 @@ You can switch providers at runtime via the `/provider` Telegram command (DM onl
 
 **OpenRouter via fal.ai:** Set `CHAT_PROVIDER=openrouter`, `OPENROUTER_TRANSPORT=fal`, `FAL_API_KEY`, and `OPENROUTER_MODEL=<provider/model>` to use fal.ai's OpenRouter gateway without a separate OpenRouter key. If `OPENROUTER_TRANSPORT` is unset and `OPENROUTER_API_KEY` is missing, the bot automatically uses the fal transport when `FAL_API_KEY` is available.
 
-**Provider combinations:** You can mix providers across axes. For example, `CHAT_PROVIDER=anthropic`, `STT_PROVIDER=gemini`, `TTS_PROVIDER=elevenlabs`, and `IMAGE_PROVIDER=fal` is valid as long as the matching keys are set. A single `FAL_API_KEY` can satisfy OpenRouter via fal, fal.ai chat, STT, TTS, and images. A single `GOOGLE_API_KEY` powers Gemini chat plus the Google-only support paths.
+**Provider combinations:** You can mix providers across axes. For example, `CHAT_PROVIDER=openai`, `STT_PROVIDER=openai`, `TTS_PROVIDER=openai`, and `IMAGE_PROVIDER=openai` is a complete OpenAI-only stack. Mixing still works: `CHAT_PROVIDER=anthropic`, `STT_PROVIDER=gemini`, `TTS_PROVIDER=elevenlabs`, and `IMAGE_PROVIDER=fal` is valid as long as the matching keys are set.
 
-**Google AI usage (independent of chat provider):** Embeddings use `gemini-embedding-2`. Character image generation uses `gemini-3-pro-image`. Transcription (Gemini path), image/PDF analysis, and YouTube analysis use `gemini-3.6-flash`. Background memory work uses `BACKGROUND_MODEL` (default `gemini-3.6-flash`, pinned explicitly rather than a `-latest` alias so extraction-quality changes stay attributable).
+**OpenAI-only usage:** set `OPENAI_API_KEY` (and optionally `AI_PLATFORM=openai`). Defaults: chat/background/classifiers/vision/documents `gpt-5.6-luna`, embeddings `text-embedding-3-small` (768-d), STT `gpt-4o-mini-transcribe`, TTS `gpt-4o-mini-tts`, images `gpt-image-2`. YouTube analysis remains Gemini-only.
+
+**Google AI usage:** Embeddings use `gemini-embedding-2`. Character image generation uses `GEMINI_IMAGE_MODEL` (default `gemini-3-pro-image`). Transcription, image/PDF analysis, and YouTube analysis use the matching `GEMINI_*_MODEL` vars (default `gemini-3.6-flash`).
 
 ### Access Control
 
@@ -202,18 +212,18 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `TTS_PROVIDER` | *(auto)* | TTS provider: `elevenlabs`, `lemonfox`, `inworld`, or `fal`. Auto-detected from available API keys if unset (fal requires explicit selection). |
+| `TTS_PROVIDER` | *(auto)* | TTS provider: `elevenlabs`, `lemonfox`, `inworld`, `openai`, or `fal`. Auto-detected from available API keys if unset (fal requires explicit selection). |
 | `LEMON_FOX_API_KEY` | — | Enables LemonFox TTS and audio transcription |
 | `ELEVENLABS_API_KEY` | — | Enables ElevenLabs TTS |
 | `ELEVENLABS_VOICE_ID` | — | ElevenLabs voice ID (default: `JBFqnCBsd6RMkjVDRZzb`) |
 | `INWORLD_API_KEY` | — | Enables Inworld TTS |
 | `INWORLD_VOICE_ID` | — | Inworld voice ID (required if using Inworld) |
 | `FAL_VOICE` | `Sarah` | ElevenLabs voice name for fal.ai TTS (Aria, Roger, Sarah, Charlotte, Rachel) |
-| `STT_PROVIDER` | *(auto)* | STT provider: `gemini`, `lemonfox` *(auto if key set)*, or `fal` (ElevenLabs Scribe v2 via fal.ai) |
+| `STT_PROVIDER` | *(auto)* | STT provider: `gemini`, `openai`, `lemonfox`, or `fal` |
 | `ENABLE_GROUP_VOICE_CONTEXT` | `true` | Transcribe passive group voice notes for memory/context. Set to `false` to return to placeholder-only observation. |
 | `GROUP_PASSIVE_VOICE_MAX_SECONDS` | `120` | Maximum duration for passive group voice-note transcription. Direct replies/mentions are still transcribed. |
 | `GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS` | `1200` | Maximum transcript characters stored for passive group voice context. |
-| `IMAGE_PROVIDER` | `gemini` | Image generation provider: `gemini` or `fal` |
+| `IMAGE_PROVIDER` | *(auto)* | Image generation provider: `gemini`, `openai`, or `fal` |
 | `FAL_IMAGE_MODEL` | `nano-banana-pro` | fal.ai image model: `nano-banana-pro` or `gpt-image-2` |
 | `FAL_IMAGE_QUALITY` | `high` | fal.ai GPT Image 2 quality: `low`, `medium`, or `high` |
 | `FAL_IMAGE_TIMEOUT_MS` | `300000` | fal.ai generation timeout in milliseconds |
@@ -258,7 +268,7 @@ src/
   setup.ts                   In-Telegram personality setup conversation
   wizard.ts                  Browser-based .env setup wizard
   provider-options.ts        Provider metadata, env validation, runtime status formatting
-  embeddings.ts              Vector embeddings (gemini-embedding-2) with disk-persisted LRU cache
+  embeddings.ts              Vector embeddings (Gemini or OpenAI) with disk-persisted LRU cache
   personality.ts             Emergent personality: trait growth, decay, momentum, AI description
   identities.ts              User identity tracking: canonical names, aliases, name changes
   check-ins.ts               Proactive check-in scheduling and delivery
@@ -272,9 +282,10 @@ src/
   utils.ts                   Atomic file writes
   types.ts                   TypeScript interfaces for all data structures
   ai/
-    core.ts                  Chat generation delegation to the active provider
+    core.ts                  Chat generation + background work (Gemini or OpenAI)
+    platform.ts              AI_PLATFORM + independent support-axis resolution
     vision.ts                Image and YouTube analysis helpers
-    documents.ts             PDF text, scan, image, chart, and table analysis
+    documents.ts             PDF analysis via Gemini or OpenAI
     evaluation.ts            Memory extraction, personality signals, relationship/chapter updates
     classifiers.ts           Lightweight AI classifiers used by proactive features
   memory/
@@ -312,6 +323,7 @@ src/
     types.ts                 Speech-to-text provider interface
     index.ts                 STT provider order and fallback handling
     gemini.ts                Gemini transcription provider
+    openai.ts                OpenAI transcription provider
     fal.ts                   fal.ai transcription provider
     lemonfox.ts              LemonFox transcription provider
   tts/
@@ -320,11 +332,13 @@ src/
     elevenlabs.ts            ElevenLabs TTS provider
     lemonfox.ts              LemonFox TTS provider
     inworld.ts               Inworld TTS provider
+    openai.ts                OpenAI TTS provider
     fal.ts                   fal.ai TTS provider (ElevenLabs via fal.ai)
   image/
     types.ts                 ImageProvider interface
     index.ts                 Image provider factory and selection
     gemini.ts                Gemini image generation (character images)
+    openai.ts                OpenAI Images API (gpt-image-2 by default)
     fal.ts                   fal.ai image generation (GPT Image 2 or Nano Banana Pro)
 ```
 
@@ -435,8 +449,9 @@ The bot develops emergent personality traits that evolve over time:
 The bot generates character images on a weekly schedule:
 
 - One random day per week, at a random time between 8 AM and 11 PM (bot timezone)
-- Pluggable provider: Gemini (`IMAGE_PROVIDER=gemini`, default) or fal.ai (`IMAGE_PROVIDER=fal`)
-- Gemini uses `gemini-3-pro-image` with a base character image (`memory/base.{png,jpg,jpeg}`)
+- Pluggable provider: OpenAI (`IMAGE_PROVIDER=openai`), Gemini (`IMAGE_PROVIDER=gemini`), or fal.ai (`IMAGE_PROVIDER=fal`)
+- Gemini uses `GEMINI_IMAGE_MODEL` (default `gemini-3-pro-image`) with a base character image (`memory/base.{png,jpg,jpeg}`)
+- OpenAI uses `OPENAI_IMAGE_MODEL` (default `gpt-image-2`) independently of the chat model
 - fal.ai defaults to Nano Banana Pro (`FAL_IMAGE_MODEL=nano-banana-pro`) and can be switched to GPT Image 2 with `FAL_IMAGE_MODEL=gpt-image-2`
 - fal.ai sends `FAL_IMAGE_QUALITY=high` only when GPT Image 2 is selected; lower values can reduce latency and cost
 - fal.ai uses the model's `/edit` endpoint when a base image exists (character images) and its base text-to-image endpoint for standalone generation (e.g., full-access mode illustrations)
@@ -535,7 +550,7 @@ The bot's conversational language is configured during setup and stored in `memo
 
 - **Runtime:** [Bun](https://bun.sh)
 - **Bot framework:** [grammY](https://grammy.dev)
-- **AI:** [Google GenAI](https://ai.google.dev) — default chat: `gemini-3.6-flash`; character images: `gemini-3-pro-image`; embeddings: `gemini-embedding-2`
+- **AI:** [OpenAI](https://platform.openai.com) (default chat `gpt-5.6-luna`) and/or [Google GenAI](https://ai.google.dev)
 - **Language:** TypeScript (strict mode)
 - **Linter/Formatter:** [Biome](https://biomejs.dev) — tabs, double quotes, auto-organized imports
 

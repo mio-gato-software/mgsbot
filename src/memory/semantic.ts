@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { cosineSimilarity, EMBEDDING_MODEL } from "../embeddings.ts";
+import { cosineSimilarity, getEmbeddingModel } from "../embeddings.ts";
 import { getAllAliasesForCanonical } from "../identities.ts";
 import { log } from "../logger.ts";
 import type { SemanticFact } from "../types.ts";
@@ -164,7 +164,7 @@ export async function addSemanticFacts(
 
 		for (const rawNewFact of newFacts) {
 			const newFact = normalizeFactShape(rawNewFact);
-			newFact.embeddingModel ??= EMBEDDING_MODEL;
+			newFact.embeddingModel ??= getEmbeddingModel();
 			newFact.embeddingDim = newFact.embedding.length;
 			newFact.scope = inferDefaultScope(newFact);
 

@@ -4,11 +4,10 @@ import {
 	GoogleGenAI,
 	type Part,
 } from "@google/genai";
+import { DEFAULT_GEMINI_CHAT_MODEL } from "../ai/platform.ts";
 import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
-
-const DEFAULT_MODEL = "gemini-3.6-flash";
 
 function logTokenUsage(label: string, response: GenerateContentResponse): void {
 	const usage = response.usageMetadata;
@@ -54,7 +53,7 @@ export class GeminiChatProvider implements ChatProvider {
 			);
 		}
 		this.ai = new GoogleGenAI({ apiKey });
-		this.model = model ?? process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
+		this.model = model ?? process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_CHAT_MODEL;
 	}
 
 	async generateResponse(

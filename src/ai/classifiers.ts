@@ -3,10 +3,14 @@ import { log } from "../logger.ts";
 import { createChatProvider } from "../providers/index.ts";
 import type { ConversationMessage } from "../types.ts";
 import { withRetry } from "../utils.ts";
+import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
+import {
+	resolveClassifierModel,
+	resolveClassifierProvider,
+	resolveOpenAIClassifierReasoningEffort,
+	supportProviderHasKey,
+} from "./platform.ts";
 
-// Pinned explicitly (not the `-latest` alias) so routing behaviour only changes
-// when we change it.
-const CLASSIFIER_MODEL = "gemini-3.5-flash-lite";
 const GROUP_ROUTER_MAX_MESSAGES = 6;
 const GROUP_ROUTER_MAX_MESSAGE_CHARS = 500;
 const GROUP_ROUTER_MAX_TOTAL_CHARS = 3000;
@@ -152,12 +156,29 @@ async function runSingleWordClassifier(
 	prompt: string,
 	maxOutputTokens: number,
 ): Promise<string> {
-	const useGemini = !!process.env.GOOGLE_API_KEY;
-	if (useGemini) {
+	const provider = resolveClassifierProvider();
+	if (supportProviderHasKey(provider)) {
+		if (provider === "openai") {
+			const response = await withRetry(
+				() =>
+					getOpenAIClient().responses.create({
+						model: resolveClassifierModel(),
+						input: [{ role: "user", content: prompt }],
+						max_output_tokens: maxOutputTokens,
+						reasoning: openaiReasoningConfig(
+							resolveOpenAIClassifierReasoningEffort(),
+						),
+					}),
+				2,
+				500,
+			);
+			return response.output_text ?? "";
+		}
+
 		const response = await withRetry(
 			() =>
 				getAI().models.generateContent({
-					model: CLASSIFIER_MODEL,
+					model: resolveClassifierModel(),
 					contents: createUserContent([prompt]),
 					config: {
 						temperature: 0,
@@ -170,9 +191,9 @@ async function runSingleWordClassifier(
 		return response.text ?? "";
 	}
 
-	const provider = createChatProvider();
+	const chat = createChatProvider();
 	return await withRetry(
-		() => provider.generateResponse("", [{ role: "user", content: prompt }]),
+		() => chat.generateResponse("", [{ role: "user", content: prompt }]),
 		2,
 		500,
 	);
@@ -209,9 +230,9 @@ function parseGroupSocialDecision(text: string): GroupSocialDecision | null {
 
 /**
  * Decide whether the caption expresses intent to edit/modify an attached image.
- * Uses Gemini Flash for a cheap, fast classification when GOOGLE_API_KEY is
- * available; otherwise falls back to the configured chat provider. Returns
- * null on failure so the caller can fall back to a regex heuristic.
+ * Uses the configured classifier provider when its API key is available;
+ * otherwise falls back to the configured chat provider. Returns null on
+ * failure so the caller can fall back to a regex heuristic.
  */
 export async function classifyEditIntent(
 	caption: string,
@@ -219,11 +240,11 @@ export async function classifyEditIntent(
 	const trimmed = caption.trim();
 	if (!trimmed) return false;
 
-	const useGemini = !!process.env.GOOGLE_API_KEY;
-	if (!useGemini && !warnedClassifierFallback) {
+	const provider = resolveClassifierProvider();
+	if (!supportProviderHasKey(provider) && !warnedClassifierFallback) {
 		warnedClassifierFallback = true;
 		log.warn(
-			"[classifyEditIntent] GOOGLE_API_KEY not set — falling back to the configured chat provider for edit-intent classification.",
+			`[classifyEditIntent] ${provider === "openai" ? "OPENAI_API_KEY" : "GOOGLE_API_KEY"} not set — falling back to the configured chat provider for edit-intent classification.`,
 		);
 	}
 
@@ -265,11 +286,11 @@ export async function classifyGroupSocialIntent(
 		return { addressing: "ambient", action: "silence", confidence: 1 };
 	}
 
-	const useGemini = !!process.env.GOOGLE_API_KEY;
-	if (!useGemini && !warnedClassifierFallback) {
+	const provider = resolveClassifierProvider();
+	if (!supportProviderHasKey(provider) && !warnedClassifierFallback) {
 		warnedClassifierFallback = true;
 		log.warn(
-			"[classifyGroupMessageIntent] GOOGLE_API_KEY not set — falling back to the configured chat provider for group-intent classification.",
+			`[classifyGroupMessageIntent] ${provider === "openai" ? "OPENAI_API_KEY" : "GOOGLE_API_KEY"} not set — falling back to the configured chat provider for group-intent classification.`,
 		);
 	}
 

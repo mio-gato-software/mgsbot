@@ -27,7 +27,7 @@ export class InworldTtsProvider implements TtsProvider {
 			body: JSON.stringify({
 				text,
 				voiceId: this.voiceId,
-				modelId: "inworld-tts-1.5-max",
+				modelId: process.env.INWORLD_MODEL || "inworld-tts-1.5-max",
 				audioConfig: {
 					audioEncoding: "MP3",
 				},

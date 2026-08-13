@@ -3,10 +3,17 @@ import {
 	createUserContent,
 	GoogleGenAI,
 } from "@google/genai";
+import { toFile } from "openai";
 import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
+import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
+import {
+	resolveDocumentProvider,
+	resolveGeminiDocumentModel,
+	resolveOpenAIDocumentModel,
+	supportProviderHasKey,
+} from "./platform.ts";
 
-const MODEL = "gemini-3.6-flash";
 const MAX_POLL_ATTEMPTS = 30;
 const POLL_INTERVAL_MS = 1000;
 
@@ -30,7 +37,7 @@ export function analyzePdfPrompt(userRequest?: string): string {
 	].join(" ");
 }
 
-export async function analyzePdf(
+async function analyzePdfWithGemini(
 	filePath: string,
 	userRequest?: string,
 ): Promise<string> {
@@ -57,7 +64,7 @@ export async function analyzePdf(
 
 		const response = await withRetry(() =>
 			client.models.generateContent({
-				model: MODEL,
+				model: resolveGeminiDocumentModel(),
 				contents: createUserContent([
 					createPartFromUri(file.uri ?? "", file.mimeType ?? "application/pdf"),
 					analyzePdfPrompt(userRequest),
@@ -66,7 +73,6 @@ export async function analyzePdf(
 		);
 		const text = response.text?.trim();
 		if (!text) throw new Error("Gemini returned an empty PDF analysis");
-		log.debug("[analyzePdf] Result:", text.slice(0, 200));
 		return text;
 	} finally {
 		if (uploaded.name) {
@@ -75,4 +81,63 @@ export async function analyzePdf(
 			});
 		}
 	}
+}
+
+async function analyzePdfWithOpenAI(
+	filePath: string,
+	userRequest?: string,
+): Promise<string> {
+	const client = getOpenAIClient();
+	const uploaded = await client.files.create({
+		file: await toFile(Bun.file(filePath).stream(), "document.pdf", {
+			type: "application/pdf",
+		}),
+		purpose: "user_data",
+	});
+
+	try {
+		const response = await withRetry(() =>
+			client.responses.create({
+				model: resolveOpenAIDocumentModel(),
+				input: [
+					{
+						role: "user",
+						content: [
+							{ type: "input_file", file_id: uploaded.id },
+							{ type: "input_text", text: analyzePdfPrompt(userRequest) },
+						],
+					},
+				],
+				reasoning: openaiReasoningConfig(),
+			}),
+		);
+		const text = response.output_text?.trim();
+		if (!text) throw new Error("OpenAI returned an empty PDF analysis");
+		return text;
+	} finally {
+		await client.files.delete(uploaded.id).catch((error) => {
+			log.warn("[analyzePdf] Failed to delete uploaded OpenAI file:", error);
+		});
+	}
+}
+
+export async function analyzePdf(
+	filePath: string,
+	userRequest?: string,
+): Promise<string> {
+	const provider = resolveDocumentProvider();
+	if (!supportProviderHasKey(provider)) {
+		throw new Error(
+			provider === "openai"
+				? "OPENAI_API_KEY is required for PDF analysis"
+				: "GOOGLE_API_KEY is required for PDF analysis",
+		);
+	}
+
+	const text =
+		provider === "openai"
+			? await analyzePdfWithOpenAI(filePath, userRequest)
+			: await analyzePdfWithGemini(filePath, userRequest);
+	log.debug("[analyzePdf] Result:", text.slice(0, 200));
+	return text;
 }

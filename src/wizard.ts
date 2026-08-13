@@ -4,7 +4,9 @@ import { atomicWriteFileSync, parseEnvFile } from "./utils.ts";
 interface WizardData {
 	botToken: string;
 	googleApiKey: string;
+	openaiApiKey: string;
 	geminiModel: string;
+	openaiModel: string;
 	ownerUserId: string;
 	allowedGroupId?: string;
 	language: BotLanguage;
@@ -25,10 +27,13 @@ function validateInputs(data: WizardData): ValidationResult {
 			: "Invalid bot token format. It should look like: 123456789:ABCdefGHI...";
 	}
 
-	if (!data.googleApiKey || data.googleApiKey.trim().length === 0) {
+	if (
+		(!data.googleApiKey || data.googleApiKey.trim().length === 0) &&
+		(!data.openaiApiKey || data.openaiApiKey.trim().length === 0)
+	) {
 		errors.googleApiKey = isEs
-			? "La clave API de Google es requerida."
-			: "Google API key is required.";
+			? "Se requiere una clave de OpenAI o de Google."
+			: "An OpenAI or Google API key is required.";
 	}
 
 	if (!data.ownerUserId || !/^\d+$/.test(data.ownerUserId.trim())) {
@@ -55,18 +60,32 @@ function writeEnvFile(data: WizardData): void {
 
 	// Wizard-managed keys
 	existing.BOT_TOKEN = data.botToken.trim();
-	existing.GOOGLE_API_KEY = data.googleApiKey.trim();
+	if (data.googleApiKey.trim()) {
+		existing.GOOGLE_API_KEY = data.googleApiKey.trim();
+	}
+	if (data.openaiApiKey.trim()) {
+		existing.OPENAI_API_KEY = data.openaiApiKey.trim();
+	}
 	existing.OWNER_USER_ID = data.ownerUserId.trim();
 
 	if (data.allowedGroupId && data.allowedGroupId.trim() !== "") {
 		existing.ALLOWED_GROUP_ID = data.allowedGroupId.trim();
 	}
 
-	// Wizard-managed model selection
-	existing.GEMINI_MODEL = data.geminiModel.trim() || "gemini-3.6-flash";
+	if (data.geminiModel.trim()) {
+		existing.GEMINI_MODEL = data.geminiModel.trim();
+	}
+	if (data.openaiModel.trim()) {
+		existing.OPENAI_MODEL = data.openaiModel.trim();
+	}
 
-	// Set sensible defaults only if not already present
-	if (!existing.CHAT_PROVIDER) existing.CHAT_PROVIDER = "gemini";
+	const prefersOpenAI = !!data.openaiApiKey.trim();
+	if (!existing.CHAT_PROVIDER) {
+		existing.CHAT_PROVIDER = prefersOpenAI ? "openai" : "gemini";
+	}
+	if (!existing.AI_PLATFORM) {
+		existing.AI_PLATFORM = prefersOpenAI ? "openai" : "gemini";
+	}
 	if (!existing.SIMPLE_ASSISTANT_MODE) existing.SIMPLE_ASSISTANT_MODE = "false";
 	if (!existing.ENABLE_FOLLOW_UPS) existing.ENABLE_FOLLOW_UPS = "false";
 	if (!existing.NODE_ENV) existing.NODE_ENV = "production";
@@ -305,7 +324,7 @@ function buildWizardHtml(
       <p class="hint" style="margin-top: 16px;" data-i18n="needList">You'll need the following:</p>
       <ul class="welcome-list">
         <li data-i18n="needToken">A Telegram Bot Token (from @BotFather)</li>
-        <li data-i18n="needApiKey">A Google AI API Key (from Google AI Studio)</li>
+        <li data-i18n="needApiKey">An OpenAI API key, or a Google AI API key</li>
         <li data-i18n="needUserId">Your Telegram User ID (from @userinfobot)</li>
       </ul>
       <div class="btn-row" style="justify-content:flex-end;">
@@ -329,30 +348,35 @@ function buildWizardHtml(
       </div>
     </div>
 
-    <!-- Step 2: Google API Key -->
+    <!-- Step 2: API keys -->
     <div class="step" data-step="2">
-      <h1 data-i18n="apiKeyTitle">Google AI API Key</h1>
+      <h1 data-i18n="apiKeyTitle">AI API Keys</h1>
       <p class="hint" data-i18n-html="apiKeyHint">
-        Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, sign in, and create an API key. This is used for the AI model, embeddings, audio, images, and more.
+        Provide an <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI API key</a> and/or a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> key. OpenAI alone covers most features (chat, memory, STT, TTS, images, PDFs). Gemini is optional and still required for YouTube analysis.
       </p>
-      <label for="googleApiKey" data-i18n="apiKeyLabel">API Key</label>
+      <label for="openaiApiKey" data-i18n="openaiKeyLabel">OpenAI API Key</label>
+      <input type="text" id="openaiApiKey" name="openaiApiKey" placeholder="${sp("openaiApiKey", "sk-...")}" value="${v("openaiApiKey")}" autocomplete="off" spellcheck="false">
+      <label for="googleApiKey" style="margin-top: 16px;" data-i18n="apiKeyLabel">Google AI API Key</label>
       <input type="text" id="googleApiKey" name="googleApiKey" placeholder="${sp("googleApiKey", "AIza...")}" value="${v("googleApiKey")}" class="${errors?.googleApiKey ? "has-error" : ""}" autocomplete="off" spellcheck="false">
       ${e("googleApiKey")}
 
-      <label style="margin-top: 20px;" data-i18n="modelLabel">AI Model</label>
+      <label style="margin-top: 20px;" data-i18n="modelLabel">Default OpenAI model</label>
+      <input type="text" id="openaiModel" name="openaiModel" placeholder="gpt-5.6-luna" value="${v("openaiModel") || "gpt-5.6-luna"}" autocomplete="off" spellcheck="false">
+
+      <label style="margin-top: 20px;" data-i18n="geminiModelLabel">Gemini model (if using Google)</label>
       <div class="model-options">
         <label class="model-option${(prefilled?.geminiModel ?? "gemini-3.6-flash") === "gemini-3.6-flash" ? " selected" : ""}" id="opt-flash">
           <input type="radio" name="geminiModel" value="gemini-3.6-flash" ${(prefilled?.geminiModel ?? "gemini-3.6-flash") === "gemini-3.6-flash" ? "checked" : ""}>
           <div class="model-info">
-            <div class="model-name" data-i18n="flashName">Gemini 3.6 Flash (Recommended)</div>
-            <div class="model-desc" data-i18n="flashDesc">Fast, capable, and cheap per token. The right default for most use cases.</div>
+            <div class="model-name" data-i18n="flashName">Gemini 3.6 Flash</div>
+            <div class="model-desc" data-i18n="flashDesc">Fast, capable, and cheap per token.</div>
           </div>
         </label>
         <label class="model-option${prefilled?.geminiModel === "gemini-3.1-pro-preview" ? " selected" : ""}" id="opt-pro">
           <input type="radio" name="geminiModel" value="gemini-3.1-pro-preview" ${prefilled?.geminiModel === "gemini-3.1-pro-preview" ? "checked" : ""}>
           <div class="model-info">
             <div class="model-name" data-i18n="proName">Gemini 3.1 Pro</div>
-            <div class="model-desc" data-i18n="proDesc">Smarter and more nuanced, but costs more. Best for deeper conversations.</div>
+            <div class="model-desc" data-i18n="proDesc">Smarter and more nuanced, but costs more.</div>
           </div>
         </label>
       </div>
@@ -403,7 +427,7 @@ function buildWizardHtml(
       langHint: "Choose the language for your bot's personality and responses.",
       needList: "You'll need the following:",
       needToken: "A Telegram Bot Token (from @BotFather)",
-      needApiKey: "A Google AI API Key (from Google AI Studio)",
+      needApiKey: "An OpenAI API key, or a Google AI API key",
       needUserId: "Your Telegram User ID (from @userinfobot)",
       getStarted: "Get Started",
       tokenTitle: "Telegram Bot Token",
@@ -412,12 +436,14 @@ function buildWizardHtml(
       tokenFormat: "Format: 123456789:ABCdefGHIjklMNO...",
       back: "Back",
       next: "Next",
-      apiKeyTitle: "Google AI API Key",
-      apiKeyHint: 'Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, sign in, and create an API key. This is used for the AI model, embeddings, audio, images, and more.',
-      apiKeyLabel: "API Key",
-      modelLabel: "AI Model",
-      flashName: "Gemini 3.6 Flash (Recommended)",
-      flashDesc: "Fast, capable, and cheap per token. The right default for most use cases.",
+      apiKeyTitle: "AI API Keys",
+      apiKeyHint: 'Provide an <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI API key</a> and/or a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> key. OpenAI alone covers most features. Gemini remains optional.',
+      apiKeyLabel: "Google AI API Key",
+      openaiKeyLabel: "OpenAI API Key",
+      modelLabel: "Default OpenAI model",
+      geminiModelLabel: "Gemini model (if using Google)",
+      flashName: "Gemini 3.6 Flash",
+      flashDesc: "Fast, capable, and cheap per token.",
       proName: "Gemini 3.1 Pro",
       proDesc: "Smarter and more nuanced, but costs more. Best for deeper conversations.",
       userIdTitle: "Telegram User ID",
@@ -439,7 +465,7 @@ function buildWizardHtml(
       langHint: "Elige el idioma para la personalidad y respuestas de tu bot.",
       needList: "Necesitar\\u00e1s lo siguiente:",
       needToken: "Un Token de Bot de Telegram (de @BotFather)",
-      needApiKey: "Una Clave API de Google AI (de Google AI Studio)",
+      needApiKey: "Una clave de OpenAI o una clave de Google AI",
       needUserId: "Tu ID de Usuario de Telegram (de @userinfobot)",
       getStarted: "Comenzar",
       tokenTitle: "Token del Bot de Telegram",
@@ -448,12 +474,14 @@ function buildWizardHtml(
       tokenFormat: "Formato: 123456789:ABCdefGHIjklMNO...",
       back: "Volver",
       next: "Siguiente",
-      apiKeyTitle: "Clave API de Google AI",
-      apiKeyHint: 'Ve a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>, inicia sesi\\u00f3n y crea una clave API. Se usa para el modelo de IA, embeddings, audio, im\\u00e1genes y m\\u00e1s.',
-      apiKeyLabel: "Clave API",
-      modelLabel: "Modelo de IA",
-      flashName: "Gemini 3.6 Flash (Recomendado)",
-      flashDesc: "R\\u00e1pido, capaz y econ\\u00f3mico por token. Ideal para la mayor\\u00eda de usos.",
+      apiKeyTitle: "Claves API de IA",
+      apiKeyHint: 'Proporciona una <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">clave de OpenAI</a> y/o una de <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>. Con solo OpenAI cubres casi todo. Gemini es opcional.',
+      apiKeyLabel: "Clave API de Google AI",
+      openaiKeyLabel: "Clave API de OpenAI",
+      modelLabel: "Modelo OpenAI por defecto",
+      geminiModelLabel: "Modelo Gemini (si usas Google)",
+      flashName: "Gemini 3.6 Flash",
+      flashDesc: "R\\u00e1pido, capaz y econ\\u00f3mico por token.",
       proName: "Gemini 3.1 Pro",
       proDesc: "M\\u00e1s inteligente y matizado, pero cuesta m\\u00e1s. Mejor para conversaciones profundas.",
       userIdTitle: "ID de Usuario de Telegram",
@@ -637,7 +665,9 @@ export async function runSetupWizard(): Promise<void> {
 	const prefilled: Record<string, string> = {
 		botToken: "",
 		googleApiKey: "",
+		openaiApiKey: "",
 		geminiModel: existing.GEMINI_MODEL ?? "gemini-3.6-flash",
+		openaiModel: existing.OPENAI_MODEL ?? "gpt-5.6-luna",
 		ownerUserId: existing.OWNER_USER_ID ?? "",
 		allowedGroupId: existing.ALLOWED_GROUP_ID ?? "",
 		language: existingConfig.language ?? "es",
@@ -645,6 +675,7 @@ export async function runSetupWizard(): Promise<void> {
 	const configuredSecrets: Record<string, boolean> = {
 		botToken: Boolean(existing.BOT_TOKEN),
 		googleApiKey: Boolean(existing.GOOGLE_API_KEY),
+		openaiApiKey: Boolean(existing.OPENAI_API_KEY),
 	};
 
 	// Per-run CSRF token; also validate Host/Origin against loopback origins
@@ -706,11 +737,14 @@ export async function runSetupWizard(): Promise<void> {
 					// Blank secret fields keep the previously configured values
 					const submittedBotToken = (fields.botToken ?? "").trim();
 					const submittedApiKey = (fields.googleApiKey ?? "").trim();
+					const submittedOpenAiKey = (fields.openaiApiKey ?? "").trim();
 
 					const data: WizardData = {
 						botToken: submittedBotToken || (existing.BOT_TOKEN ?? ""),
 						googleApiKey: submittedApiKey || (existing.GOOGLE_API_KEY ?? ""),
+						openaiApiKey: submittedOpenAiKey || (existing.OPENAI_API_KEY ?? ""),
 						geminiModel: fields.geminiModel ?? "gemini-3.6-flash",
+						openaiModel: fields.openaiModel ?? "gpt-5.6-luna",
 						ownerUserId: fields.ownerUserId ?? "",
 						allowedGroupId: fields.allowedGroupId ?? "",
 						language: (fields.language === "en" ? "en" : "es") as BotLanguage,
@@ -724,7 +758,9 @@ export async function runSetupWizard(): Promise<void> {
 						const filled: Record<string, string> = {
 							botToken: submittedBotToken,
 							googleApiKey: submittedApiKey,
+							openaiApiKey: submittedOpenAiKey,
 							geminiModel: data.geminiModel,
+							openaiModel: data.openaiModel,
 							ownerUserId: data.ownerUserId,
 							allowedGroupId: data.allowedGroupId ?? "",
 							language: data.language,

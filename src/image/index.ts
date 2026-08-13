@@ -2,6 +2,7 @@ import { log } from "../logger.ts";
 import { resolveImageProviderName } from "../provider-options.ts";
 import { FalImageProvider } from "./fal.ts";
 import { GeminiImageProvider } from "./gemini.ts";
+import { OpenAIImageProvider } from "./openai.ts";
 import type { ImageProvider } from "./types.ts";
 
 export type { ImageProvider } from "./types.ts";
@@ -16,6 +17,9 @@ function createImageProvider(): ImageProvider {
 	switch (providerName) {
 		case "fal":
 			cachedProvider = new FalImageProvider();
+			break;
+		case "openai":
+			cachedProvider = new OpenAIImageProvider();
 			break;
 		case "gemini":
 			cachedProvider = new GeminiImageProvider();

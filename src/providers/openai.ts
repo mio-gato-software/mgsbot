@@ -1,4 +1,6 @@
-import OpenAI from "openai";
+import type OpenAI from "openai";
+import { getOpenAIClient, openaiReasoningConfig } from "../ai/openai-client.ts";
+import { resolveOpenAIChatModel } from "../ai/platform.ts";
 import { describeImagePrompt } from "../ai/vision.ts";
 import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
@@ -17,8 +19,8 @@ export class OpenAIChatProvider implements ChatProvider {
 		if (!apiKey) {
 			throw new Error("OPENAI_API_KEY is required when CHAT_PROVIDER=openai");
 		}
-		this.client = new OpenAI({ apiKey });
-		this.model = model ?? process.env.OPENAI_MODEL ?? "gpt-5.4";
+		this.client = getOpenAIClient();
+		this.model = model ?? resolveOpenAIChatModel();
 	}
 
 	async generateResponse(
@@ -45,6 +47,7 @@ export class OpenAIChatProvider implements ChatProvider {
 			const res = await this.client.responses.create({
 				model: this.model,
 				input,
+				reasoning: openaiReasoningConfig(),
 			});
 			return res;
 		});
@@ -86,6 +89,7 @@ export class OpenAIChatProvider implements ChatProvider {
 						],
 					},
 				],
+				reasoning: openaiReasoningConfig(),
 			});
 			return res;
 		});

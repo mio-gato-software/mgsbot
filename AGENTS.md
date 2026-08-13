@@ -6,7 +6,7 @@ This file provides guidance to AI coding agents working with this repository.
 
 ## Project Overview
 
-MGS Bot is a conversational Telegram bot built with **grammY** + **Google Gemini**, running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, voice notes, audio files, photos/images, and YouTube links. It can also generate images of its character and respond with TTS voice notes.
+MGS Bot is a conversational Telegram bot built with **grammY** + pluggable AI providers (**OpenAI** or **Google Gemini**), running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, voice notes, audio files, photos/images, and YouTube links. It can also generate images of its character and respond with TTS voice notes. OpenAI alone (`OPENAI_API_KEY`, default chat model `gpt-5.6-luna`) covers most functionality; Gemini remains optional.
 
 ## Commands
 
@@ -65,7 +65,7 @@ src/
   media-handlers.ts          ← Telegram media download and preprocessing (voice, audio, photo, PDF)
   commands.ts                ← Telegram commands: /provider, /allowphotorequest, /help, /on, /off, /optimize
   provider-options.ts        ← Provider metadata, env validation, /provider runtime status formatting
-  embeddings.ts              ← Gemini embedding generation (gemini-embedding-2) with disk-persisted LRU cache
+  embeddings.ts              ← Embedding generation (Gemini or OpenAI) with disk-persisted LRU cache
   personality.ts             ← Emergent personality: 8 fixed traits with momentum, growth events, prompt tiers
   identities.ts              ← User identity tracking: canonical names, aliases, name change handling
   check-ins.ts               ← Proactive check-in messages: cadence-driven weekly scheduling, strategy rotation
@@ -87,11 +87,12 @@ src/
                                per-modality switching (typing/upload_photo/record_voice), proactive typing pulse
   utils.ts                   ← atomicWriteFile(), withRetry(), env file parsing, misc helpers
   ai/
-    core.ts                  ← GoogleGenAI instance, generateResponse() delegation to chat provider
+    core.ts                  ← generateResponse() + background work (Gemini or OpenAI)
+    platform.ts              ← AI_PLATFORM + independent support-axis model/provider resolution
     classifiers.ts           ← Lightweight LLM classifiers (routing decisions)
     evaluation.ts            ← Background memory evaluation: semantic facts, personality signals, follow-ups
     vision.ts                ← Image description, YouTube analysis
-    documents.ts             ← Native Gemini PDF analysis (text, scans, images, charts, tables)
+    documents.ts             ← PDF analysis via Gemini or OpenAI
   prompt/
     pipeline.ts              ← Section pipeline: ordered, mode-aware prompt assembly
     assemble.ts              ← buildSystemPrompt() entry point
@@ -128,9 +129,9 @@ src/
     openai.ts                ← OpenAI provider implementation (OpenAI SDK, Responses API)
     deepseek.ts              ← DeepSeek provider implementation (OpenAI SDK)
     fal.ts                   ← fal.ai provider implementation
-  stt/                       ← Speech-to-text providers: gemini, fal, lemonfox (+ index factory)
-  image/                     ← Image generation providers: gemini, fal (+ index factory)
-  tts/                       ← Text-to-speech providers: elevenlabs, inworld, lemonfox, fal (+ index factory)
+  stt/                       ← Speech-to-text providers: gemini, openai, fal, lemonfox (+ index factory)
+  image/                     ← Image generation providers: gemini, openai, fal (+ index factory)
+  tts/                       ← Text-to-speech providers: elevenlabs, inworld, lemonfox, openai, fal (+ index factory)
 scripts/                     ← One-off maintenance utilities: migrate-memory, reembed-memory, merge-person-facts
 tests/                       ← bun test suite (config, handlers, locks, memory, prompt, provider-options,
                                response-markers, sensory, utils)
@@ -166,12 +167,12 @@ There are four independent provider axes:
 
 | Axis | Env var | Controls | Default / fallback |
 | --- | --- | --- | --- |
-| Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` |
-| Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | `gemini` -> `fal` -> `lemonfox` by available keys |
-| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` by available keys; `fal` only when explicit |
-| Images | `IMAGE_PROVIDER` + `FAL_IMAGE_MODEL` | Character image generation/editing | `gemini`; fal defaults to `nano-banana-pro` |
+| Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` if Google is set, else `openai` |
+| Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | platform key -> `fal` -> `lemonfox` |
+| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` -> `openai`; `fal` only when explicit |
+| Images | `IMAGE_PROVIDER` + model env | Character image generation/editing | `openai` or `gemini` from `AI_PLATFORM`; fal defaults to `nano-banana-pro` |
 
-`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work (fact extraction, narrative updates, janitor) is likewise pinned to `BACKGROUND_MODEL` (cheap Gemini) whenever `GOOGLE_API_KEY` is set, so the chat model choice doesn't multiply background costs.
+`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work is pinned to `BACKGROUND_MODEL` on `BACKGROUND_PROVIDER` (defaults to `AI_PLATFORM`) so the chat model choice doesn't multiply background costs.
 
 ### Memory System
 
@@ -188,7 +189,7 @@ The bot's own identity/personality prompt comes from `bot_config.json` (chat set
 
 Per-chat writes are serialized with `withChatLock()` (`src/memory/locks.ts`); state files are saved via `atomicWriteFile()` to avoid corruption on crash.
 
-**Embeddings** (`src/embeddings.ts`): Uses `gemini-embedding-2` model. Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, auto-persisted every 60 seconds. Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
+**Embeddings** (`src/embeddings.ts`): Uses `EMBEDDING_PROVIDER` (`gemini-embedding-2` or `text-embedding-3-small`, both default 768-d). Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, auto-persisted every 60 seconds. Cache keys include model+dim so switching providers does not mix vectors. Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
 
 **Identities** (`src/identities.ts`): Maps Telegram user IDs to canonical names with alias tracking. Handles name changes by adding old names as aliases. Prefix matching (e.g., "Eliaquín" matches "Eliaquín Encarnación"). Used to link facts across name variations.
 
@@ -235,7 +236,7 @@ Proactive check-in feature (`src/check-ins.ts`), enabled via `ENABLE_CHECK_INS=t
 
 Three setup paths:
 
-- **Env wizard** (`src/wizard.ts`): browser-based form for `.env` credentials. Runs on `--setup` or when `BOT_TOKEN` / `GOOGLE_API_KEY` are missing. Writes `.env` atomically, preserving unmanaged keys.
+- **Env wizard** (`src/wizard.ts`): browser-based form for `.env` credentials. Runs on `--setup` or when `BOT_TOKEN` or both AI keys are missing. Writes `.env` atomically, preserving unmanaged keys.
 - **In-chat setup** (`src/setup.ts` + `src/config.ts`): first-run conversation asks for bot name, birth year, gender, personality description. Saves to `memory/bot_config.json`. Bot won't respond normally until setup completes.
 - **Headless profile/rules** (`src/config.ts` + `src/bot-rules.ts`): `profile:init`/`profile:sync` manage `memory/bot_profile.json` (overrides chat setup); `rules:init` manages `memory/bot_rules.json` for behavior/style rules.
 - Migration: if legacy `memory/permanent.md` exists but config doesn't, it is auto-migrated into `bot_config.json`.
@@ -255,7 +256,7 @@ Three setup paths:
 
 ### Image Generation
 
-Once weekly (random day and time between 8am–11pm DR time), the bot includes an `[IMAGE: ...]` marker. The prompt is sent to `gemini-3-pro-image` along with the base character image. Weekly schedule tracked per-chat via `lastImageDate`, `imageTargetDate`, and `imageTargetTime` in sensory buffer. Photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command).
+Once weekly (random day and time between 8am–11pm DR time), the bot includes an `[IMAGE: ...]` marker. The prompt is sent to the configured image provider (`GEMINI_IMAGE_MODEL`, `OPENAI_IMAGE_MODEL`, or fal) along with the base character image. Weekly schedule tracked per-chat via `lastImageDate`, `imageTargetDate`, and `imageTargetTime` in sensory buffer. Photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command).
 
 ### Sleep Schedule
 
@@ -266,29 +267,32 @@ Bot sleeps 11:30 PM – 6:00 AM DR time by default. Controlled by `ENABLE_SLEEP_
 Requires a `.env` file (see `.env.sample`). Key variables:
 
 - `BOT_TOKEN` (required): Telegram bot token
-- `CHAT_PROVIDER`: `gemini` (default), `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, or `fal`
-- `GOOGLE_API_KEY`: Always required — used for embeddings, image analysis, YouTube analysis, and image generation regardless of chat provider (also used for audio transcription when `STT_PROVIDER=gemini`)
+- `CHAT_PROVIDER`: `gemini` or `openai` by available key, plus `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `deepseek`, or `fal`
+- `AI_PLATFORM`: Default for chat + support axes (`gemini` or `openai`). Auto-selects `openai` when only `OPENAI_API_KEY` is set.
+- `OPENAI_API_KEY`: Enough on its own for most features. Default chat model is `gpt-5.6-luna`.
+- `GOOGLE_API_KEY`: Optional if OpenAI is set. Still required for Gemini chat/support and YouTube analysis.
 - `GEMINI_MODEL`: Gemini chat model (default: `gemini-3.6-flash`)
-- `BACKGROUND_MODEL`: Pinned model for background memory work — fact extraction, narrative updates, janitor (default: `gemini-3.6-flash`, pinned explicitly so extraction-quality shifts stay attributable; falls back to the chat provider without `GOOGLE_API_KEY`)
+- `BACKGROUND_MODEL`: Pinned model for background memory work — fact extraction, narrative updates, janitor (defaults to `gpt-5.6-luna` or `gemini-3.6-flash` from `BACKGROUND_PROVIDER`)
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/claude-3.5-sonnet`)
 - `OPENROUTER_HTTP_REFERER` / `OPENROUTER_TITLE`: Optional attribution headers for OpenRouter requests
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `claude-sonnet-4-5-20250929`)
 - `AZURE_API_KEY` / `AZURE_ENDPOINT` / `AZURE_MODEL`: Required if using Azure (default model: `Kimi-K2.5`)
 - `DASHSCOPE_API_KEY` / `DASHSCOPE_MODEL`: Required if using Alibaba (default model: `qwen3.5-plus`)
 - `FIREWORKS_API_KEY` / `FIREWORKS_MODEL`: Required if using Fireworks (default model: `accounts/fireworks/models/glm-5`)
-- `OPENAI_API_KEY` / `OPENAI_MODEL`: Required if using OpenAI (default model: `gpt-5.4`)
+- `OPENAI_MODEL`: OpenAI chat model (default: `gpt-5.6-luna`)
+- `OPENAI_IMAGE_MODEL` / `GEMINI_IMAGE_MODEL`: Independent image-generation models
 - `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL`: Required if using DeepSeek (default model: `deepseek-v4-pro`)
 - `FAL_API_KEY` / `FAL_MODEL`: Required if using fal.ai chat (default model: `google/gemini-2.5-pro`)
 - `ALLOWED_GROUP_ID` / `OWNER_USER_ID`: Access control
 - `LEMON_FOX_API_KEY`: For TTS voice responses (if `TTS_PROVIDER=lemonfox`) and audio transcription (STT)
 - `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`: For ElevenLabs TTS voice responses (default voice ID if not set)
 - `INWORLD_API_KEY` / `INWORLD_VOICE_ID`: For Inworld TTS voice responses
-- `TTS_PROVIDER`: `elevenlabs`, `inworld`, `lemonfox`, or `fal`. When unset, auto-detects in order: elevenlabs -> inworld -> lemonfox; fal requires explicit selection
-- `STT_PROVIDER`: `gemini`, `fal`, or `lemonfox`. When unset, falls back in order: gemini -> fal -> lemonfox (first with a key wins)
+- `TTS_PROVIDER`: `elevenlabs`, `inworld`, `lemonfox`, or `fal`. When unset, auto-detects in order: elevenlabs -> inworld -> lemonfox -> openai; fal requires explicit selection
+- `STT_PROVIDER`: `gemini`, `openai`, `fal`, or `lemonfox`. When unset, prefers the AI platform key, then fal, then lemonfox
 - `ENABLE_GROUP_VOICE_CONTEXT`: Set `false` to stop transcribing passive group voice notes; direct voice replies/mentions still transcribe
 - `GROUP_PASSIVE_VOICE_MAX_SECONDS`: Maximum duration for passive group voice-note transcription (default: `120`)
 - `GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS`: Maximum transcript characters stored for passive group voice context (default: `1200`)
-- `IMAGE_PROVIDER`: `gemini` (default) or `fal`
+- `IMAGE_PROVIDER`: `gemini`, `openai`, or `fal` (defaults from `AI_PLATFORM`)
 - `FAL_IMAGE_MODEL`: fal.ai image model, `nano-banana-pro` (default) or `gpt-image-2`
 - `FAL_IMAGE_QUALITY`: fal.ai GPT Image 2 quality, `low`, `medium`, or `high` (default)
 - `FAL_IMAGE_TIMEOUT_MS`: fal.ai generation timeout in milliseconds (default: `300000`)
@@ -309,7 +313,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 
 - **Runtime:** Bun v1.3.14 (pinned in CI)
 - **Bot framework:** grammY (`grammy` ^1.42.0)
-- **AI:** Google GenAI (`@google/genai` ^2) — Gemini 3 Flash Preview (chat), Gemini 3 Pro Image Preview (image gen), gemini-embedding-2 (embeddings)
+- **AI:** OpenAI (`openai` ^7, default chat `gpt-5.6-luna`) and/or Google GenAI (`@google/genai` ^2)
 - **Language:** TypeScript (strict mode incl. `noUncheckedIndexedAccess`, ESNext target, bundler module resolution; checked via `bun run typecheck`)
 - **Source code language:** English (variables, functions, comments, file names)
 - **Linter/Formatter:** Biome (`@biomejs/biome` 2.4.16, config in `biome.json`)

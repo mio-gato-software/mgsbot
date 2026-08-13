@@ -1,5 +1,9 @@
 import * as fs from "node:fs";
 import { createUserContent, GoogleGenAI } from "@google/genai";
+import {
+	resolveGeminiImageModel,
+	resolveGeminiImageSize,
+} from "../ai/platform.ts";
 import { log } from "../logger.ts";
 import type { ImageProvider } from "./types.ts";
 
@@ -49,11 +53,11 @@ export class GeminiImageProvider implements ImageProvider {
 		}
 
 		const response = await getAI().models.generateContentStream({
-			model: "gemini-3-pro-image",
+			model: resolveGeminiImageModel(),
 			contents: createUserContent(parts),
 			config: {
 				imageConfig: {
-					imageSize: "1K",
+					imageSize: resolveGeminiImageSize(),
 				},
 				responseModalities: ["IMAGE", "TEXT"],
 			},
@@ -84,7 +88,7 @@ export class GeminiImageProvider implements ImageProvider {
 		const base64Data = fs.readFileSync(imagePath, { encoding: "base64" });
 
 		const response = await getAI().models.generateContentStream({
-			model: "gemini-3-pro-image",
+			model: resolveGeminiImageModel(),
 			contents: createUserContent([
 				{ inlineData: { mimeType, data: base64Data } },
 				{
@@ -93,7 +97,7 @@ export class GeminiImageProvider implements ImageProvider {
 			]),
 			config: {
 				imageConfig: {
-					imageSize: "1K",
+					imageSize: resolveGeminiImageSize(),
 				},
 				responseModalities: ["IMAGE", "TEXT"],
 			},

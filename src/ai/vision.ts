@@ -9,13 +9,19 @@ import { log } from "../logger.ts";
 import { createChatProvider } from "../providers/index.ts";
 import { supportsVision } from "../providers/types.ts";
 import { withRetry } from "../utils.ts";
-
-const MODEL = "gemini-3.6-flash";
+import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
+import {
+	hasGoogleApiKey,
+	resolveGeminiVisionModel,
+	resolveOpenAIVisionModel,
+	resolveVisionProvider,
+	resolveYouTubeProvider,
+	supportProviderHasKey,
+} from "./platform.ts";
 
 export const DESCRIBE_IMAGE_PROMPT =
 	"The user sent this image. Describe what you see briefly so you can reference it in conversation.";
 
-// Shared across vision-capable providers so the prompt stays consistent.
 export function describeImagePrompt(caption?: string): string {
 	return caption
 		? `The user sent this image with the caption: "${caption}". Describe what you see briefly so you can reference it in conversation.`
@@ -36,6 +42,52 @@ function logTokenUsage(label: string, response: GenerateContentResponse): void {
 	);
 }
 
+async function describeImageWithGemini(
+	base64Data: string,
+	mimeType: string,
+	caption?: string,
+): Promise<string> {
+	const parts: Part[] = [
+		{ inlineData: { mimeType, data: base64Data } },
+		{ text: describeImagePrompt(caption) },
+	];
+	const response = await withRetry(() =>
+		getAI().models.generateContent({
+			model: resolveGeminiVisionModel(),
+			contents: createUserContent(parts),
+		}),
+	);
+	logTokenUsage("describeImage", response);
+	return response.text ?? "[image description failed]";
+}
+
+async function describeImageWithOpenAI(
+	base64Data: string,
+	mimeType: string,
+	caption?: string,
+): Promise<string> {
+	const response = await withRetry(() =>
+		getOpenAIClient().responses.create({
+			model: resolveOpenAIVisionModel(),
+			input: [
+				{
+					role: "user",
+					content: [
+						{ type: "input_text", text: describeImagePrompt(caption) },
+						{
+							type: "input_image",
+							image_url: `data:${mimeType};base64,${base64Data}`,
+							detail: "auto",
+						},
+					],
+				},
+			],
+			reasoning: openaiReasoningConfig(),
+		}),
+	);
+	return response.output_text ?? "[image description failed]";
+}
+
 export async function describeImage(
 	filePath: string,
 	mimeType: string,
@@ -53,30 +105,25 @@ export async function describeImage(
 				return await provider.describeImage(base64Data, mimeType, caption);
 			} catch (error) {
 				log.error(
-					`[describeImage] Provider ${provider.name} failed, falling back to Gemini:`,
+					`[describeImage] Provider ${provider.name} failed, falling back to configured vision provider:`,
 					error,
 				);
 			}
 		}
 
-		log.debug("[describeImage] Using Gemini, mimeType:", mimeType);
+		const visionProvider = resolveVisionProvider();
+		if (supportProviderHasKey(visionProvider)) {
+			log.debug(`[describeImage] Using ${visionProvider}, mimeType:`, mimeType);
+			const text =
+				visionProvider === "openai"
+					? await describeImageWithOpenAI(base64Data, mimeType, caption)
+					: await describeImageWithGemini(base64Data, mimeType, caption);
+			log.debug("[describeImage] Result:", text.slice(0, 200));
+			return text;
+		}
 
-		const parts: Part[] = [
-			{ inlineData: { mimeType, data: base64Data } },
-			{ text: describeImagePrompt(caption) },
-		];
-
-		const response = await withRetry(() =>
-			getAI().models.generateContent({
-				model: MODEL,
-				contents: createUserContent(parts),
-			}),
-		);
-
-		logTokenUsage("describeImage", response);
-		const text = response.text ?? "[image description failed]";
-		log.debug("[describeImage] Result:", text.slice(0, 200));
-		return text;
+		log.error("[describeImage] No vision provider available");
+		return "[image description failed]";
 	} catch (error) {
 		log.error("[describeImage] Error:", error);
 		return "[image description failed]";
@@ -87,6 +134,13 @@ export async function analyzeYouTube(
 	videoUrl: string,
 	userQuestion?: string,
 ): Promise<string> {
+	if (resolveYouTubeProvider() !== "gemini" || !hasGoogleApiKey()) {
+		log.warn(
+			"[analyzeYouTube] YouTube analysis is Gemini-only and requires GOOGLE_API_KEY.",
+		);
+		return "[video analysis unavailable without GOOGLE_API_KEY]";
+	}
+
 	try {
 		const prompt = userQuestion
 			? `The user shared this YouTube video and said: "${userQuestion}". Watch the video and respond to what they said.`
@@ -100,7 +154,7 @@ export async function analyzeYouTube(
 		log.debug("[analyzeYouTube] URL:", videoUrl);
 
 		const response = await getAI().models.generateContent({
-			model: MODEL,
+			model: resolveGeminiVisionModel(),
 			contents: createUserContent(parts),
 		});
 

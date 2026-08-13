@@ -4,6 +4,7 @@ import { ElevenLabsTtsProvider } from "./elevenlabs.ts";
 import { FalTtsProvider } from "./fal.ts";
 import { InworldTtsProvider } from "./inworld.ts";
 import { LemonFoxTtsProvider } from "./lemonfox.ts";
+import { OpenAITtsProvider } from "./openai.ts";
 import type { TtsProvider } from "./types.ts";
 
 export type { TtsProvider } from "./types.ts";
@@ -25,6 +26,8 @@ function createTtsProvider(): TtsProvider | null {
 		cachedProvider = new LemonFoxTtsProvider();
 	} else if (providerName === "fal") {
 		cachedProvider = new FalTtsProvider();
+	} else if (providerName === "openai") {
+		cachedProvider = new OpenAITtsProvider();
 	}
 
 	if (cachedProvider) {

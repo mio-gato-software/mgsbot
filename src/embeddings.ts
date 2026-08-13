@@ -2,6 +2,12 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import { GoogleGenAI } from "@google/genai";
+import { getOpenAIClient } from "./ai/openai-client.ts";
+import {
+	resolveEmbeddingDim,
+	resolveEmbeddingModel,
+	resolveEmbeddingProvider,
+} from "./ai/platform.ts";
 import { log } from "./logger.ts";
 import { isFileNotFound } from "./utils.ts";
 
@@ -10,13 +16,18 @@ function getAI(): GoogleGenAI {
 	if (!_ai) _ai = new GoogleGenAI({});
 	return _ai;
 }
-export const EMBEDDING_MODEL = "gemini-embedding-2";
-export const EMBEDDING_DIM = 768;
+
+export function getEmbeddingModel(): string {
+	return resolveEmbeddingModel();
+}
+
+export function getEmbeddingDim(): number {
+	return resolveEmbeddingDim();
+}
 
 const CACHE_PATH = "./memory/embedding-cache.json";
 const MAX_CACHE_ENTRIES = 5000;
 
-// Disk-persisted embedding cache: hash(text) → embedding vector
 let diskCache: Map<string, number[]> = new Map();
 let diskCacheDirty = false;
 
@@ -41,7 +52,6 @@ function loadDiskCache(): void {
 async function persistDiskCache(): Promise<void> {
 	if (!diskCacheDirty) return;
 	try {
-		// LRU eviction: keep the most recent entries (Map preserves insertion order)
 		if (diskCache.size > MAX_CACHE_ENTRIES) {
 			const entries = [...diskCache.entries()];
 			diskCache = new Map(entries.slice(entries.length - MAX_CACHE_ENTRIES));
@@ -55,10 +65,8 @@ async function persistDiskCache(): Promise<void> {
 	}
 }
 
-// Load cache on module init
 loadDiskCache();
 
-// Persist every 60 seconds if dirty (non-blocking)
 setInterval(() => {
 	persistDiskCache().catch((err) =>
 		log.error("[embeddings] Persist interval error:", err),
@@ -66,7 +74,32 @@ setInterval(() => {
 }, 60_000);
 
 function hashText(text: string): string {
-	return createHash("sha256").update(text).digest("hex");
+	return createHash("sha256")
+		.update(`${getEmbeddingModel()}:${getEmbeddingDim()}:${text}`)
+		.digest("hex");
+}
+
+async function embedWithGemini(text: string): Promise<number[]> {
+	const response = await getAI().models.embedContent({
+		model: getEmbeddingModel(),
+		contents: text,
+		config: { outputDimensionality: getEmbeddingDim() },
+	});
+	const embedding = response.embeddings?.[0]?.values;
+	if (!embedding) throw new Error("No embedding returned from Gemini");
+	return embedding;
+}
+
+async function embedWithOpenAI(text: string): Promise<number[]> {
+	const response = await getOpenAIClient().embeddings.create({
+		model: getEmbeddingModel(),
+		input: text,
+		dimensions: getEmbeddingDim(),
+		encoding_format: "float",
+	});
+	const embedding = response.data[0]?.embedding;
+	if (!embedding) throw new Error("No embedding returned from OpenAI");
+	return embedding;
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
@@ -76,26 +109,19 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
 	const MAX_RETRIES = 3;
 	let lastError: unknown;
+	const provider = resolveEmbeddingProvider();
 
 	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 		try {
-			const response = await getAI().models.embedContent({
-				model: EMBEDDING_MODEL,
-				contents: text,
-				// The model defaults to 3072 dims; every stored embedding is 768-dim,
-				// so pin it — mixed dimensions silently break cosine similarity.
-				config: { outputDimensionality: EMBEDDING_DIM },
-			});
-
-			const embedding = response.embeddings?.[0]?.values;
-			if (!embedding) {
-				throw new Error("No embedding returned from API");
-			}
+			const embedding =
+				provider === "openai"
+					? await embedWithOpenAI(text)
+					: await embedWithGemini(text);
 
 			diskCache.set(hash, embedding);
 			diskCacheDirty = true;
 			log.debug(
-				`[embeddings] Generated embedding for: "${text.slice(0, 60)}..."`,
+				`[embeddings:${provider}] Generated embedding for: "${text.slice(0, 60)}..."`,
 			);
 			return embedding;
 		} catch (err: unknown) {
@@ -119,14 +145,12 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 	throw lastError;
 }
 
-/** Flush the embedding cache to disk immediately (e.g. on shutdown). */
 export async function flushEmbeddingCache(): Promise<void> {
 	await persistDiskCache();
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 	const results: number[][] = [];
-	// Process in batches to avoid rate limits
 	const BATCH_SIZE = 10;
 
 	for (let i = 0; i < texts.length; i += BATCH_SIZE) {

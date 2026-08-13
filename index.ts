@@ -104,7 +104,9 @@ if (initProfile || showProfile || syncProfile || initRules || showRules) {
 
 const forceSetup = process.argv.includes("--setup");
 const needsSetup =
-	forceSetup || !process.env.BOT_TOKEN || !process.env.GOOGLE_API_KEY;
+	forceSetup ||
+	!process.env.BOT_TOKEN ||
+	(!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY);
 
 if (needsSetup) {
 	const { runSetupWizard } = await import("./src/wizard.ts");
@@ -137,8 +139,10 @@ const { initPersonality } = await import("./src/personality.ts");
 const token = process.env.BOT_TOKEN;
 if (!token) throw new Error("BOT_TOKEN environment variable is required");
 
-if (!process.env.GOOGLE_API_KEY) {
-	throw new Error("GOOGLE_API_KEY environment variable is required");
+if (!process.env.GOOGLE_API_KEY && !process.env.OPENAI_API_KEY) {
+	throw new Error(
+		"Set OPENAI_API_KEY or GOOGLE_API_KEY. OpenAI alone is enough for most features.",
+	);
 }
 
 if (!process.env.ALLOWED_GROUP_ID) {
