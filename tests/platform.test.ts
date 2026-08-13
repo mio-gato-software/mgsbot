@@ -329,16 +329,19 @@ describe("OpenAI reasoning effort", () => {
 		).toBe("low");
 	});
 
-	test("only reasoning models receive the reasoning parameter", () => {
+	test("assumes reasoning unless the model is a known pre-reasoning family", () => {
 		expect(openAIModelSupportsReasoning("gpt-5.6-luna")).toBe(true);
-		expect(openAIModelSupportsReasoning("gpt-4o")).toBe(false);
+		expect(openAIModelSupportsReasoning("gpt-6")).toBe(true);
 		expect(openAIModelSupportsReasoning("o3-mini")).toBe(true);
+		expect(openAIModelSupportsReasoning("gpt-4o")).toBe(false);
+		expect(openAIModelSupportsReasoning("chatgpt-4o-latest")).toBe(false);
 	});
 
 	test("classifier token budgets honor the Responses API minimum", () => {
 		expect(openaiClassifierMaxOutputTokens(5, "none")).toBe(16);
-		expect(openaiClassifierMaxOutputTokens(5, "low")).toBe(64);
+		expect(openaiClassifierMaxOutputTokens(5, "low")).toBe(80);
 		expect(openaiClassifierMaxOutputTokens(80, "none")).toBe(80);
+		expect(openaiClassifierMaxOutputTokens(80, "low")).toBe(144);
 	});
 
 	test("invalid OpenAI image size/quality fall back to defaults", () => {

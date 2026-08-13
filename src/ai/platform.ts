@@ -283,11 +283,10 @@ export function resolveOpenAIImageQuality(env: EnvMap = process.env): string {
 
 export function openAIModelSupportsReasoning(model: string): boolean {
 	const id = model.trim().toLowerCase();
-	return (
-		id.startsWith("gpt-5") ||
-		id.startsWith("o1") ||
-		id.startsWith("o3") ||
-		id.startsWith("o4")
+	return !(
+		id.startsWith("gpt-4") ||
+		id.startsWith("gpt-3") ||
+		id.startsWith("chatgpt")
 	);
 }
 
@@ -295,11 +294,9 @@ export function openaiClassifierMaxOutputTokens(
 	requested: number,
 	effort: OpenAIReasoningEffort = resolveOpenAIClassifierReasoningEffort(),
 ): number {
-	const floor =
-		effort === "none"
-			? OPENAI_MIN_OUTPUT_TOKENS
-			: OPENAI_CLASSIFIER_REASONING_OUTPUT_HEADROOM;
-	return Math.max(requested, floor);
+	const outputFloor = Math.max(requested, OPENAI_MIN_OUTPUT_TOKENS);
+	if (effort === "none") return outputFloor;
+	return outputFloor + OPENAI_CLASSIFIER_REASONING_OUTPUT_HEADROOM;
 }
 
 export function resolveOpenAIReasoningEffort(
