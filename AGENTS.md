@@ -6,7 +6,7 @@ This file provides guidance to AI coding agents working with this repository.
 
 ## Project Overview
 
-MGS Bot is a conversational Telegram bot built with **grammY** + pluggable AI providers (**OpenAI** or **Google Gemini**), running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, voice notes, audio files, photos/images, and YouTube links. It can also generate images of its character and respond with TTS voice notes. OpenAI alone (`OPENAI_API_KEY`, default chat model `gpt-5.6-luna`) covers most functionality; Gemini remains optional.
+MGS Bot is a conversational Telegram bot built with **grammY** + pluggable AI providers (**OpenAI** or **Google Gemini**), running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, `.txt` attachments, voice notes, audio files, photos/images, PDFs, and YouTube links. It can also generate images of its character and respond with TTS voice notes. OpenAI alone (`OPENAI_API_KEY`, default chat model `gpt-5.6-luna`) covers most functionality; Gemini remains optional.
 
 ## Commands
 
@@ -62,7 +62,7 @@ src/
                                provider call, response send, episode promotion, background evaluation
   response-processor.ts      ← Response marker handling ([SILENCE], [REACT], [IMAGE], [TTS], [QUOTE_REPLY]),
                                image/TTS sending, Markdown fallback
-  media-handlers.ts          ← Telegram media download and preprocessing (voice, audio, photo, PDF)
+  media-handlers.ts          ← Telegram media download and preprocessing (voice, audio, photo, PDF, `.txt`)
   commands.ts                ← Telegram commands: /provider, /allowphotorequest, /help, /on, /off, /optimize
   provider-options.ts        ← Provider metadata, env validation, /provider runtime status formatting
   embeddings.ts              ← Embedding generation (Gemini or OpenAI) with disk-persisted LRU cache

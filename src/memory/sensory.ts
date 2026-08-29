@@ -28,6 +28,10 @@ const MEDIA_MESSAGE_PATTERNS = [
 		regex: /^(\[YouTube video[^\]]*\]:)\s*([\s\S]+)$/u,
 		label: "Previous summary compacted",
 	},
+	{
+		regex: /^(\[Plain-text attachment[^\]]*\])\s*([\s\S]+)$/u,
+		label: "Previous text attachment compacted",
+	},
 ] as const;
 
 function normalizeForCompactPreview(text: string): string {

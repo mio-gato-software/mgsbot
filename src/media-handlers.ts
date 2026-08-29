@@ -4,6 +4,8 @@ import { log } from "./logger.ts";
 import { transcribeAudio } from "./stt/index.ts";
 import { safeMediaExtension } from "./utils.ts";
 
+export const MAX_TEXT_ATTACHMENT_BYTES = 1_000_000;
+
 async function cleanupFile(filePath: string): Promise<void> {
 	try {
 		await unlink(filePath);
@@ -156,6 +158,114 @@ export async function downloadPdfByFileId(
 	await Bun.write(filePath, buffer);
 	log.debug("[downloadPdf] Saved to:", filePath, `(${buffer.length} bytes)`);
 	return filePath;
+}
+
+function decodeTextBytes(buffer: Uint8Array): string {
+	let encoding: "utf-8" | "utf-16" = "utf-8";
+	let offset = 0;
+	let bytes = buffer;
+	if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+		offset = 3;
+	} else if (buffer[0] === 0xff && buffer[1] === 0xfe) {
+		encoding = "utf-16";
+		offset = 2;
+	} else if (buffer[0] === 0xfe && buffer[1] === 0xff) {
+		encoding = "utf-16";
+		const bigEndianBytes = buffer.subarray(2);
+		if (bigEndianBytes.byteLength % 2 !== 0) {
+			throw new Error(
+				"Text attachment is not valid UTF-8 or BOM-marked UTF-16",
+			);
+		}
+		bytes = new Uint8Array(bigEndianBytes.byteLength);
+		for (let index = 0; index < bigEndianBytes.byteLength; index += 2) {
+			bytes[index] = bigEndianBytes[index + 1] ?? 0;
+			bytes[index + 1] = bigEndianBytes[index] ?? 0;
+		}
+	}
+
+	let text: string;
+	try {
+		text = new TextDecoder(encoding, { fatal: true }).decode(
+			bytes.subarray(offset),
+		);
+	} catch {
+		throw new Error("Text attachment is not valid UTF-8 or BOM-marked UTF-16");
+	}
+
+	if (text.includes("\0")) {
+		throw new Error("Text attachment contains binary data");
+	}
+
+	const normalized = text.replace(/^\uFEFF/u, "");
+	if (!normalized.trim()) throw new Error("Text attachment is empty");
+	return normalized;
+}
+
+export function readTextAttachmentBytes(buffer: Uint8Array): string {
+	if (buffer.byteLength > MAX_TEXT_ATTACHMENT_BYTES) {
+		throw new Error("Text attachment is too large");
+	}
+	return decodeTextBytes(buffer);
+}
+
+async function readLimitedTextResponse(
+	response: Response,
+): Promise<Uint8Array> {
+	const contentLength = Number(response.headers.get("content-length"));
+	if (
+		Number.isFinite(contentLength) &&
+		contentLength > MAX_TEXT_ATTACHMENT_BYTES
+	) {
+		throw new Error("Text attachment is too large");
+	}
+
+	if (!response.body) return new Uint8Array();
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let totalBytes = 0;
+
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		totalBytes += value.byteLength;
+		if (totalBytes > MAX_TEXT_ATTACHMENT_BYTES) {
+			await reader.cancel().catch(() => {});
+			throw new Error("Text attachment is too large");
+		}
+		chunks.push(value);
+	}
+
+	const buffer = new Uint8Array(totalBytes);
+	let offset = 0;
+	for (const chunk of chunks) {
+		buffer.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return buffer;
+}
+
+export async function downloadTextByFileId(
+	api: Context["api"],
+	botToken: string,
+	fileId: string,
+): Promise<string> {
+	const file = await api.getFile(fileId);
+	if (!file.file_path)
+		throw new Error("Telegram did not return a text file path");
+	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
+	log.debug("[downloadText] Downloading file:", file.file_path);
+
+	const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+	if (!response.ok) {
+		throw new Error(
+			`Download failed: ${response.status} ${response.statusText}`,
+		);
+	}
+
+	const buffer = await readLimitedTextResponse(response);
+	log.debug("[downloadText] Read text attachment:", `(${buffer.length} bytes)`);
+	return readTextAttachmentBytes(buffer);
 }
 
 export { cleanupFile };

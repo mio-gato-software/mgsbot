@@ -99,6 +99,30 @@ describe("sensory buffer", () => {
 		expect(first.content.length).toBeLessThan(longTranscript.length);
 	});
 
+	test("plain-text attachments are compacted once they are not among the most recent 2", async () => {
+		if (!existsSync(SENSORY_DIR)) await mkdir(SENSORY_DIR, { recursive: true });
+		const longText = "lorem ipsum ".repeat(60).trim();
+		const buf = makeBuffer();
+
+		await addMessageToSensory(
+			buf,
+			userMsg(
+				`[Plain-text attachment from tester, file: "notes.txt"]\n\n${longText}`,
+				0,
+			),
+		);
+		await addMessageToSensory(buf, userMsg("ok", 1));
+		await addMessageToSensory(buf, userMsg("vale", 2));
+
+		const first = buf.messages[0];
+		if (!first) throw new Error("expected a first message");
+		expect(first.content.startsWith("[Plain-text attachment from tester")).toBe(
+			true,
+		);
+		expect(first.content).toContain("[Previous text attachment compacted]");
+		expect(first.content.length).toBeLessThan(longText.length);
+	});
+
 	test("messageCountSincePromotion increments on every append", async () => {
 		if (!existsSync(SENSORY_DIR)) await mkdir(SENSORY_DIR, { recursive: true });
 		const buf = makeBuffer();

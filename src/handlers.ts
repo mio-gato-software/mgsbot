@@ -22,7 +22,7 @@ import {
 	registerSpontaneousReplyEvaluation,
 } from "./group-state.ts";
 import {
-	handlePdfDocument,
+	handleDocument,
 	registerDocumentHandler,
 } from "./handlers/document.ts";
 import { registerPhotoHandler } from "./handlers/photo.ts";
@@ -146,7 +146,7 @@ export function registerHandlers(bot: Bot): void {
 	// Photos
 	registerPhotoHandler(bot, botToken);
 
-	// PDF documents, including scanned pages and embedded images
+	// PDF documents and plain-text attachments
 	registerDocumentHandler(bot, botToken);
 
 	// Text messages (catch-all)
@@ -241,7 +241,7 @@ export function registerHandlers(bot: Bot): void {
 			return;
 		}
 
-		// Reply-to-audio/photo/PDF: process media from the replied message
+		// Reply-to-audio/photo/document: process media from the replied message
 		{
 			const replyMsg = ctx.message.reply_to_message;
 			const replyVoice = replyMsg?.voice;
@@ -256,7 +256,7 @@ export function registerHandlers(bot: Bot): void {
 						documentSenderUser.username ??
 						"Unknown")
 					: "Unknown";
-				const handled = await handlePdfDocument(ctx, botToken, replyDocument, {
+				const handled = await handleDocument(ctx, botToken, replyDocument, {
 					requestText: text,
 					documentSender,
 					messageId: replyMsg?.message_id,
