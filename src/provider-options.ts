@@ -100,6 +100,14 @@ export const CHAT_PROVIDERS = [
 
 export const TTS_PROVIDERS = [
 	{
+		name: "cartesia",
+		label: "Cartesia",
+		requiredEnv: ["CARTESIA_API_KEY", "CARTESIA_VOICE_ID"],
+		modelEnv: "CARTESIA_MODEL",
+		defaultModel: "sonic-3.6",
+		description: "Available only when TTS_PROVIDER=cartesia is set explicitly.",
+	},
+	{
 		name: "elevenlabs",
 		label: "ElevenLabs",
 		requiredEnv: ["ELEVENLABS_API_KEY"],
@@ -279,7 +287,7 @@ const ProviderEnvSchema = z.object({
 		z.enum(["gemini", "fal", "lemonfox", "openai"]),
 	),
 	TTS_PROVIDER: optionalProviderString(
-		z.enum(["elevenlabs", "inworld", "lemonfox", "fal", "openai"]),
+		z.enum(["cartesia", "elevenlabs", "inworld", "lemonfox", "fal", "openai"]),
 	),
 	IMAGE_PROVIDER: optionalProviderString(z.enum(["gemini", "fal", "openai"])),
 	AI_PLATFORM: optionalProviderString(z.enum(["gemini", "openai"])),
@@ -302,6 +310,8 @@ const ProviderEnvSchema = z.object({
 	OPENAI_API_KEY: optionalString,
 	DEEPSEEK_API_KEY: optionalString,
 	FAL_API_KEY: optionalString,
+	CARTESIA_API_KEY: optionalString,
+	CARTESIA_VOICE_ID: optionalString,
 	ELEVENLABS_API_KEY: optionalString,
 	LEMON_FOX_API_KEY: optionalString,
 	INWORLD_API_KEY: optionalString,
@@ -340,6 +350,7 @@ const CORE_ENV_VARS = [
 	"OPENAI_STT_MODEL",
 	"OPENAI_TTS_MODEL",
 	"OPENAI_TTS_VOICE",
+	"CARTESIA_LANGUAGE",
 	"OPENAI_IMAGE_MODEL",
 	"OPENAI_IMAGE_SIZE",
 	"OPENAI_IMAGE_QUALITY",

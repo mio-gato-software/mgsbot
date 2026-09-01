@@ -19,7 +19,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations across several la
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
 - **Multi-modal input** — text, `.txt` attachments (UTF-8 or BOM-marked UTF-16, up to 1 MB; the first 32,000 characters are included in the conversation), voice notes, audio files, photos/images, PDFs (including scans, embedded images, charts, and tables), public web pages, and YouTube link analysis
 - **Image generation** — generates character images using OpenAI, Gemini, or fal.ai with an optional reference image
-- **Voice responses** — text-to-speech replies via ElevenLabs, LemonFox, Inworld, OpenAI, or fal.ai
+- **Voice responses** — text-to-speech replies via Cartesia, ElevenLabs, LemonFox, Inworld, OpenAI, or fal.ai
 - **Proactive behavior** — follow-up questions about mentioned plans and periodic check-in messages
 - **User identity tracking** — canonical names with alias support, handles name changes gracefully
 - **Multi-provider chat** — swap between Gemini, OpenRouter, Anthropic, Azure, Alibaba, Fireworks, OpenAI, DeepSeek, or fal.ai at runtime
@@ -126,7 +126,7 @@ There are independent provider axes. `AI_PLATFORM` (`gemini` or `openai`) sets t
 | --- | --- | --- | --- | --- |
 | Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` if Google is set, else `openai` | Provider-specific chat key |
 | Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | platform key -> `fal` -> `lemonfox` | `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `FAL_API_KEY`, or `LEMON_FOX_API_KEY` |
-| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` -> `openai`; `fal` only when explicit | `ELEVENLABS_API_KEY`, `INWORLD_API_KEY`, `LEMON_FOX_API_KEY`, `OPENAI_API_KEY`, or `FAL_API_KEY` |
+| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` -> `openai`; Cartesia and fal only when explicit | `CARTESIA_API_KEY`, `ELEVENLABS_API_KEY`, `INWORLD_API_KEY`, `LEMON_FOX_API_KEY`, `OPENAI_API_KEY`, or `FAL_API_KEY` |
 | Images | `IMAGE_PROVIDER` + model env | Character image generation/editing | `openai` or `gemini` from `AI_PLATFORM`; fal defaults to `nano-banana-pro` | `OPENAI_API_KEY`, `GOOGLE_API_KEY`, or `FAL_API_KEY` |
 | Embeddings | `EMBEDDING_PROVIDER` | Memory search / dedup | `AI_PLATFORM` | `OPENAI_API_KEY` or `GOOGLE_API_KEY` |
 | Background | `BACKGROUND_PROVIDER` | Fact extraction, narrative, janitor | `AI_PLATFORM` | Same as embeddings |
@@ -212,7 +212,11 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `TTS_PROVIDER` | *(auto)* | TTS provider: `elevenlabs`, `lemonfox`, `inworld`, `openai`, or `fal`. Auto-detected from available API keys if unset (fal requires explicit selection). |
+| `TTS_PROVIDER` | *(auto)* | TTS provider: `cartesia`, `elevenlabs`, `lemonfox`, `inworld`, `openai`, or `fal`. Auto-detected from available API keys if unset (Cartesia and fal require explicit selection). |
+| `CARTESIA_API_KEY` | — | Cartesia API key (required with `TTS_PROVIDER=cartesia`) |
+| `CARTESIA_VOICE_ID` | — | Cartesia voice ID (required with `TTS_PROVIDER=cartesia`) |
+| `CARTESIA_MODEL` | `sonic-3.6` | Cartesia TTS model |
+| `CARTESIA_LANGUAGE` | *(auto)* | Optional Cartesia language code, such as `es` |
 | `LEMON_FOX_API_KEY` | — | Enables LemonFox TTS and audio transcription |
 | `ELEVENLABS_API_KEY` | — | Enables ElevenLabs TTS |
 | `ELEVENLABS_VOICE_ID` | — | ElevenLabs voice ID (default: `JBFqnCBsd6RMkjVDRZzb`) |
@@ -329,6 +333,7 @@ src/
   tts/
     types.ts                 TTS provider interface
     index.ts                 TTS provider factory and selection
+    cartesia.ts              Cartesia Sonic TTS provider
     elevenlabs.ts            ElevenLabs TTS provider
     lemonfox.ts              LemonFox TTS provider
     inworld.ts               Inworld TTS provider

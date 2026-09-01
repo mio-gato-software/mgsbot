@@ -1,5 +1,6 @@
 import { log } from "../logger.ts";
 import { resolveTtsProviderName } from "../provider-options.ts";
+import { CartesiaTtsProvider } from "./cartesia.ts";
 import { ElevenLabsTtsProvider } from "./elevenlabs.ts";
 import { FalTtsProvider } from "./fal.ts";
 import { InworldTtsProvider } from "./inworld.ts";
@@ -18,7 +19,9 @@ function createTtsProvider(): TtsProvider | null {
 
 	const providerName = resolveTtsProviderName();
 
-	if (providerName === "elevenlabs") {
+	if (providerName === "cartesia") {
+		cachedProvider = new CartesiaTtsProvider();
+	} else if (providerName === "elevenlabs") {
 		cachedProvider = new ElevenLabsTtsProvider();
 	} else if (providerName === "inworld") {
 		cachedProvider = new InworldTtsProvider();

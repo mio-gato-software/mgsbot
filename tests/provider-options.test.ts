@@ -182,6 +182,27 @@ describe("provider options", () => {
 		);
 	});
 
+	test("accepts Cartesia as an explicit TTS provider", () => {
+		expect(isTtsProviderName("cartesia")).toBe(true);
+		expect(
+			resolveTtsProviderName({
+				TTS_PROVIDER: "cartesia",
+				CARTESIA_API_KEY: "sk-car-test",
+				CARTESIA_VOICE_ID: "voice-test",
+			}),
+		).toBe("cartesia");
+	});
+
+	test("Cartesia validation requires its API key and voice ID", () => {
+		const result = validateProviderConfiguration({
+			GOOGLE_API_KEY: "google",
+			TTS_PROVIDER: "cartesia",
+		});
+		expect(result.errors).toContain(
+			"Cartesia TTS requires CARTESIA_API_KEY, CARTESIA_VOICE_ID when TTS_PROVIDER=cartesia.",
+		);
+	});
+
 	test("STT order prefers the AI platform key first", () => {
 		expect(
 			resolveSttProviderOrder({

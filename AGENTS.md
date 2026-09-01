@@ -131,7 +131,7 @@ src/
     fal.ts                   ← fal.ai provider implementation
   stt/                       ← Speech-to-text providers: gemini, openai, fal, lemonfox (+ index factory)
   image/                     ← Image generation providers: gemini, openai, fal (+ index factory)
-  tts/                       ← Text-to-speech providers: elevenlabs, inworld, lemonfox, openai, fal (+ index factory)
+  tts/                       ← Text-to-speech providers: cartesia, elevenlabs, inworld, lemonfox, openai, fal (+ index factory)
 scripts/                     ← One-off maintenance utilities: migrate-memory, reembed-memory, merge-person-facts
 tests/                       ← bun test suite (config, handlers, locks, memory, prompt, provider-options,
                                response-markers, sensory, utils)
@@ -170,7 +170,7 @@ There are four independent provider axes:
 | --- | --- | --- | --- |
 | Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` if Google is set, else `openai` |
 | Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | platform key -> `fal` -> `lemonfox` |
-| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` -> `openai`; `fal` only when explicit |
+| Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` -> `openai`; Cartesia and fal only when explicit |
 | Images | `IMAGE_PROVIDER` + model env | Character image generation/editing | `openai` or `gemini` from `AI_PLATFORM`; fal defaults to `nano-banana-pro` |
 
 `/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work is pinned to `BACKGROUND_MODEL` on `BACKGROUND_PROVIDER` (defaults to `AI_PLATFORM`) so the chat model choice doesn't multiply background costs.
@@ -286,9 +286,10 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `FAL_API_KEY` / `FAL_MODEL`: Required if using fal.ai chat (default model: `google/gemini-2.5-pro`)
 - `ALLOWED_GROUP_ID` / `OWNER_USER_ID`: Access control
 - `LEMON_FOX_API_KEY`: For TTS voice responses (if `TTS_PROVIDER=lemonfox`) and audio transcription (STT)
+- `CARTESIA_API_KEY` / `CARTESIA_VOICE_ID`: Required for Cartesia TTS; `CARTESIA_MODEL` defaults to `sonic-3.6` and `CARTESIA_LANGUAGE` is optional
 - `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`: For ElevenLabs TTS voice responses (default voice ID if not set)
 - `INWORLD_API_KEY` / `INWORLD_VOICE_ID`: For Inworld TTS voice responses
-- `TTS_PROVIDER`: `elevenlabs`, `inworld`, `lemonfox`, or `fal`. When unset, auto-detects in order: elevenlabs -> inworld -> lemonfox -> openai; fal requires explicit selection
+- `TTS_PROVIDER`: `cartesia`, `elevenlabs`, `inworld`, `lemonfox`, `openai`, or `fal`. When unset, auto-detects in order: elevenlabs -> inworld -> lemonfox -> openai; Cartesia and fal require explicit selection
 - `STT_PROVIDER`: `gemini`, `openai`, `fal`, or `lemonfox`. When unset, prefers the AI platform key, then fal, then lemonfox
 - `ENABLE_GROUP_VOICE_CONTEXT`: Set `false` to stop transcribing passive group voice notes; direct voice replies/mentions still transcribe
 - `GROUP_PASSIVE_VOICE_MAX_SECONDS`: Maximum duration for passive group voice-note transcription (default: `120`)
