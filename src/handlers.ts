@@ -27,6 +27,7 @@ import {
 } from "./handlers/document.ts";
 import { registerPhotoHandler } from "./handlers/photo.ts";
 import {
+	buildGroupResponseOptions,
 	buildReplyAwareTextContent,
 	detectMentionType,
 	getLastBotMessageBeforeLatest,
@@ -62,6 +63,7 @@ const MAX_NOTIFIED_UNAUTHORIZED_USERS = 1000;
 
 export { isBotOff, isSleepingHour } from "./bot-state.ts";
 export {
+	buildGroupResponseOptions,
 	buildPassiveVoiceContent,
 	buildReplyAwareTextContent,
 	buildUntranscribedVoiceContent,
@@ -519,12 +521,10 @@ export function registerHandlers(bot: Bot): void {
 					undefined,
 					undefined,
 					undefined,
-					{
-						skipHistoricalContext: true,
-						userTurnAlreadyRecorded: true,
+					buildGroupResponseOptions({
 						groupAutoReply: canStartSpontaneously,
 						groupContinuation: canContinue,
-					},
+					}),
 				);
 			}
 			return;

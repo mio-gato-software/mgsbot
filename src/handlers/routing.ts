@@ -41,6 +41,18 @@ interface ClassifierReplyContext {
 	isBot: boolean;
 }
 
+export function buildGroupResponseOptions(input: {
+	groupAutoReply: boolean;
+	groupContinuation: boolean;
+}) {
+	return {
+		skipHistoricalContext: input.groupAutoReply && !input.groupContinuation,
+		userTurnAlreadyRecorded: true,
+		groupAutoReply: input.groupAutoReply,
+		groupContinuation: input.groupContinuation,
+	};
+}
+
 /**
  * Regex fallback for edit intent detection when the LLM classifier is unavailable.
  */
@@ -333,12 +345,10 @@ export async function routeGroupNameMention(
 		undefined,
 		options?.isVoiceMessage,
 		undefined,
-		{
-			skipHistoricalContext: true,
-			userTurnAlreadyRecorded: true,
+		buildGroupResponseOptions({
 			groupAutoReply: decision.addressing !== "continuation",
 			groupContinuation: decision.addressing === "continuation",
-		},
+		}),
 	);
 
 	return "handled";

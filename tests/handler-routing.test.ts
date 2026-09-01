@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { getBotName } from "../src/config.ts";
 import { isGroupChat } from "../src/conversation.ts";
 import {
+	buildGroupResponseOptions,
 	buildPassiveVoiceContent,
 	buildReplyAwareTextContent,
 	buildUntranscribedVoiceContent,
@@ -258,6 +259,22 @@ describe("voice content builders", () => {
 		expect(result.endsWith(" [truncated]")).toBe(true);
 		expect(result).toContain("y".repeat(1200));
 		expect(result).not.toContain("y".repeat(1201));
+	});
+});
+
+describe("group response memory context", () => {
+	test("continuations retain long-term historical context", () => {
+		expect(
+			buildGroupResponseOptions({
+				groupAutoReply: false,
+				groupContinuation: true,
+			}),
+		).toEqual({
+			skipHistoricalContext: false,
+			userTurnAlreadyRecorded: true,
+			groupAutoReply: false,
+			groupContinuation: true,
+		});
 	});
 });
 
