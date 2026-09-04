@@ -1,11 +1,11 @@
-import { readFile } from "node:fs/promises";
-import { log } from "../logger.ts";
+import { memoryPath } from "../runtime-paths.ts";
 import type { RelationshipMemory } from "../types.ts";
-import { atomicWriteFile, isFileNotFound } from "../utils.ts";
 import { withRelationshipLock } from "./locks.ts";
+import { relationshipSchema } from "./schemas.ts";
+import { readStore, writeStore } from "./storage.ts";
 import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
 
-export const RELATIONSHIPS_DIR = "./memory/relationships";
+export const RELATIONSHIPS_DIR = memoryPath("relationships");
 
 function relationshipPath(chatId: number): string {
 	return `${RELATIONSHIPS_DIR}/${chatId}.json`;
@@ -14,15 +14,11 @@ function relationshipPath(chatId: number): string {
 export async function loadRelationshipMemory(
 	chatId: number,
 ): Promise<RelationshipMemory | null> {
-	try {
-		const data = await readFile(relationshipPath(chatId), "utf-8");
-		return JSON.parse(data) as RelationshipMemory;
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error(`[memory] Error loading relationship ${chatId}:`, err);
-		}
-		return null;
-	}
+	return readStore(
+		relationshipPath(chatId),
+		relationshipSchema.nullable(),
+		() => null,
+	);
 }
 
 export async function saveRelationshipMemory(
@@ -30,9 +26,10 @@ export async function saveRelationshipMemory(
 ): Promise<void> {
 	await withRelationshipLock(memory.chatId, async () => {
 		memory.schemaVersion = CURRENT_SCHEMA_VERSION;
-		await atomicWriteFile(
+		await writeStore(
 			relationshipPath(memory.chatId),
-			JSON.stringify(memory, null, 2),
+			memory,
+			relationshipSchema,
 		);
 	});
 }
@@ -50,9 +47,6 @@ export async function updateRelationshipMemory(
 		const existing = await loadRelationshipMemory(chatId);
 		const updated = updater(existing);
 		updated.schemaVersion = CURRENT_SCHEMA_VERSION;
-		await atomicWriteFile(
-			relationshipPath(chatId),
-			JSON.stringify(updated, null, 2),
-		);
+		await writeStore(relationshipPath(chatId), updated, relationshipSchema);
 	});
 }

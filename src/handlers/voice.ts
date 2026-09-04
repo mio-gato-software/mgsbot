@@ -51,11 +51,12 @@ async function routeGroupTranscribedVoice(
 			ctx,
 			buildReplyAwareTextContent(content, replyContext),
 			userName,
-			initialMentionType,
-			isBotOff(),
-			isSleepingHour(),
-			undefined,
-			true,
+			{
+				mentionType: initialMentionType,
+				botOff: isBotOff(),
+				isSleepingHour: isSleepingHour(),
+				isVoiceMessage: true,
+			},
 		);
 		return;
 	}
@@ -85,11 +86,12 @@ async function routeGroupTranscribedVoice(
 			ctx,
 			buildReplyAwareTextContent(content, replyContext),
 			userName,
-			"name",
-			isBotOff(),
-			isSleepingHour(),
-			undefined,
-			true,
+			{
+				mentionType: "name",
+				botOff: isBotOff(),
+				isSleepingHour: isSleepingHour(),
+				isVoiceMessage: true,
+			},
 		);
 		return;
 	}
@@ -122,13 +124,11 @@ async function routeGroupTranscribedVoice(
 		ctx,
 		passiveContent,
 		userName,
-		"none",
-		isBotOff(),
-		isSleepingHour(),
-		undefined,
-		true,
-		undefined,
 		{
+			mentionType: "none",
+			botOff: isBotOff(),
+			isSleepingHour: isSleepingHour(),
+			isVoiceMessage: true,
 			skipHistoricalContext: true,
 			userTurnAlreadyRecorded: true,
 			groupContinuation: true,
@@ -188,11 +188,12 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 				ctx,
 				content,
 				userName,
-				mentionType,
-				isBotOff(),
-				isSleepingHour(),
-				undefined,
-				true,
+				{
+					mentionType,
+					botOff: isBotOff(),
+					isSleepingHour: isSleepingHour(),
+					isVoiceMessage: true,
+				},
 			);
 		} catch (error) {
 			log.error("[voice handler] Error:", error);
@@ -238,9 +239,11 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 				ctx,
 				content,
 				userName,
-				mentionType,
-				isBotOff(),
-				isSleepingHour(),
+				{
+					mentionType,
+					botOff: isBotOff(),
+					isSleepingHour: isSleepingHour(),
+				},
 			);
 		} catch (error) {
 			log.error("[audio handler] Error:", error);

@@ -118,7 +118,11 @@ if (needsSetup) {
 
 const { unlink } = await import("node:fs/promises");
 const { Bot } = await import("grammy");
-const { flushEmbeddingCache } = await import("./src/embeddings.ts");
+const { flushEmbeddingCache, initEmbeddingCache } = await import(
+	"./src/embeddings.ts"
+);
+const { backgroundTasks } = await import("./src/background-tasks.ts");
+const { decayConfidence } = await import("./src/memory/semantic.ts");
 const { runMemoryBackup } = await import("./src/memory-backup.ts");
 const { checkAndSendFollowUps, initFollowUps } = await import(
 	"./src/follow-ups.ts"
@@ -185,6 +189,9 @@ if (ownerUserId) {
 // Initialize directories
 if (!existsSync("./audios")) mkdirSync("./audios", { recursive: true });
 await initMemoryDirs();
+// A failed backup must stop startup before migrations can change existing data.
+await runMemoryBackup();
+initEmbeddingCache();
 await reembedStaleMemory().catch((err) => {
 	log.error("[reembed] Startup embedding migration failed:", err);
 });
@@ -200,90 +207,45 @@ bot.catch((err) => {
 	alertOwner("bot-middleware", `Middleware error: ${errorSummary(err.error)}`);
 });
 
-bot.start();
+bot.start().catch((error) => {
+	log.error("[polling] Bot stopped unexpectedly:", error);
+	process.exit(1);
+});
 
-const intervals: ReturnType<typeof setInterval>[] = [];
-
-// Liveness heartbeat for container healthchecks (see docker-compose.yml)
 const HEARTBEAT_FILE = "/tmp/mgsbot-heartbeat";
-intervals.push(
-	setInterval(() => {
-		Bun.write(HEARTBEAT_FILE, String(Date.now())).catch((err) => {
-			log.debug("[heartbeat] Failed to write heartbeat:", err);
-		});
-	}, 30_000),
+backgroundTasks.every("heartbeat", 30_000, () =>
+	Bun.write(HEARTBEAT_FILE, String(Date.now())),
 );
-
-// Daily memory snapshot (runs at startup, then re-checks hourly for rollover)
-runMemoryBackup().catch((err) => {
-	log.error("[backup] Memory backup failed:", err);
-});
-intervals.push(
-	setInterval(() => {
-		runMemoryBackup().catch((err) => {
-			log.error("[backup] Memory backup failed:", err);
-		});
-	}, 3_600_000),
+backgroundTasks.every("embedding-cache", 60_000, flushEmbeddingCache);
+backgroundTasks.every("backup", 3_600_000, () => runMemoryBackup());
+backgroundTasks.every(
+	"promotion-retry",
+	3_600_000,
+	retrySpooledPromotions,
+	true,
 );
-
-// Retry promotions that failed or were captured by the inactivity wipe
-// (runs at startup, then hourly)
-retrySpooledPromotions().catch((err) => {
-	log.error("[spool] Startup promotion retry failed:", err);
-});
-intervals.push(
-	setInterval(() => {
-		retrySpooledPromotions().catch((err) => {
-			log.error("[spool] Promotion retry failed:", err);
-		});
-	}, 3_600_000),
+backgroundTasks.every("confidence-decay", 3_600_000, decayConfidence, true);
+backgroundTasks.every(
+	"extraction-health",
+	3_600_000,
+	() => runExtractionHealthCheck(alertOwner),
+	true,
 );
-
-// Extraction-quality watch: rolling 7-day report on how the cheap background
-// model is extracting, with an owner alert when it degrades (checked hourly,
-// runs at most once per day)
-runExtractionHealthCheck(alertOwner).catch((err) => {
-	log.debug("[promote-metrics] Startup health check failed:", err);
-});
-intervals.push(
-	setInterval(() => {
-		runExtractionHealthCheck(alertOwner).catch((err) => {
-			log.debug("[promote-metrics] Health check failed:", err);
-		});
-	}, 3_600_000),
-);
-
-// Semantic janitor: reviews same-subject fact clusters for contradictions
-// and duplicates (checked hourly, runs at most once per day)
 if (process.env.ENABLE_MEMORY_JANITOR !== "false") {
-	intervals.push(
-		setInterval(() => {
-			runSemanticJanitor().catch((err) => {
-				log.error("[janitor] Semantic janitor failed:", err);
-			});
-		}, 3_600_000),
-	);
+	backgroundTasks.every("semantic-janitor", 3_600_000, runSemanticJanitor);
 }
-
-// Follow-up checker (only if enabled)
 if (process.env.ENABLE_FOLLOW_UPS === "true") {
-	intervals.push(
-		setInterval(() => {
-			checkAndSendFollowUps(bot.api, isBotOff, isSleepingHour).catch(log.error);
-		}, 60_000),
+	backgroundTasks.every("follow-ups", 60_000, () =>
+		checkAndSendFollowUps(bot.api, isBotOff, isSleepingHour),
 	);
 }
-
-// Check-in proactive messages (only if enabled)
 if (process.env.ENABLE_CHECK_INS === "true") {
 	const { initCheckIns, checkAndSendCheckIns } = await import(
 		"./src/check-ins.ts"
 	);
 	await initCheckIns();
-	intervals.push(
-		setInterval(() => {
-			checkAndSendCheckIns(bot.api, isBotOff, isSleepingHour).catch(log.error);
-		}, 60_000),
+	backgroundTasks.every("check-ins", 60_000, () =>
+		checkAndSendCheckIns(bot.api, isBotOff, isSleepingHour),
 	);
 }
 
@@ -304,10 +266,11 @@ async function shutdown(signal: string): Promise<void> {
 		process.exit(1);
 	}, SHUTDOWN_TIMEOUT_MS);
 
-	for (const interval of intervals) clearInterval(interval);
+	backgroundTasks.stopTimers();
 
 	try {
 		await bot.stop();
+		await backgroundTasks.close();
 		await flushEmbeddingCache();
 		await unlink(HEARTBEAT_FILE).catch(() => {});
 		log.info("[shutdown] Embedding cache flushed. Goodbye.");

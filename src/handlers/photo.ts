@@ -59,12 +59,13 @@ export function registerPhotoHandler(bot: Bot, botToken: string): void {
 						ctx,
 						content,
 						userName,
-						mentionType,
-						isBotOff(),
-						isSleepingHour(),
-						{ data, mimeType },
-						undefined,
-						filePath,
+						{
+							mentionType,
+							botOff: isBotOff(),
+							isSleepingHour: isSleepingHour(),
+							mediaAttachment: { data, mimeType },
+							userImagePath: filePath,
+						},
 					);
 				} else {
 					// Non-vision provider. Skip describeImage only when the caption
@@ -91,12 +92,12 @@ export function registerPhotoHandler(bot: Bot, botToken: string): void {
 						ctx,
 						content,
 						userName,
-						mentionType,
-						isBotOff(),
-						isSleepingHour(),
-						undefined,
-						undefined,
-						filePath,
+						{
+							mentionType,
+							botOff: isBotOff(),
+							isSleepingHour: isSleepingHour(),
+							userImagePath: filePath,
+						},
 					);
 				}
 			} finally {

@@ -1,5 +1,6 @@
 import { describeImagePrompt } from "../ai/vision.ts";
 import { log } from "../logger.ts";
+import { resolveChatModel } from "../provider-options.ts";
 import {
 	OpenAiCompatibleChatProvider,
 	requireEnv,
@@ -20,10 +21,7 @@ export class FireworksChatProvider extends OpenAiCompatibleChatProvider {
 			errorLabel: "Fireworks",
 			endpoint: "https://api.fireworks.ai/inference/v1/chat/completions",
 			apiKey: requireEnv("FIREWORKS_API_KEY", "fireworks"),
-			model:
-				model ??
-				process.env.FIREWORKS_MODEL ??
-				"accounts/fireworks/models/glm-5",
+			model: model ?? resolveChatModel("fireworks"),
 			timeoutMs: 60_000,
 			extraHeaders: {
 				Accept: "application/json",

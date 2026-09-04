@@ -4,6 +4,7 @@ import { unlink } from "node:fs/promises";
 import {
 	listSpooledChatIds,
 	loadPromotionSpool,
+	messageIdentity,
 	PROMOTION_SPOOL_DIR,
 	recordSpoolAttempt,
 	removeSpooledChunk,
@@ -11,7 +12,7 @@ import {
 } from "../src/memory/promotion-spool.ts";
 import type { ConversationMessage } from "../src/types.ts";
 
-// Use a reserved high chatId unlikely to collide with real data.
+// Distinct fixture ID within the disposable test memory root.
 const TEST_CHAT_ID = 999_999_902;
 
 async function cleanup(): Promise<void> {
@@ -30,6 +31,25 @@ function messages(count: number): ConversationMessage[] {
 
 describe("promotion spool", () => {
 	afterEach(cleanup);
+
+	test("legacy message identity is independent of JSON property order", () => {
+		const message: ConversationMessage = {
+			role: "user",
+			content: "same message",
+			timestamp: 123,
+			name: "Ana",
+		};
+		const reordered: ConversationMessage = {
+			name: "Ana",
+			timestamp: 123,
+			content: "same message",
+			role: "user",
+		};
+		expect(messageIdentity(message)).toBe(messageIdentity(reordered));
+		expect(messageIdentity({ ...message, content: "different" })).not.toBe(
+			messageIdentity(message),
+		);
+	});
 
 	test("spooled chunk round-trips through load", async () => {
 		await spoolChunk({

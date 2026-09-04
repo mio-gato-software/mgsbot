@@ -1,6 +1,9 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { z } from "zod";
 import { log } from "./logger.ts";
 import { withPersonalityLock } from "./memory/locks.ts";
+import { readStore, writeStore } from "./memory/storage.ts";
+import { memoryPath } from "./runtime-paths.ts";
+
 import {
 	type PersonalityGrowthEvent,
 	type PersonalitySignals,
@@ -9,9 +12,8 @@ import {
 	TRAIT_NAMES,
 	type TraitName,
 } from "./types.ts";
-import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
-const PERSONALITY_PATH = "./memory/personality.json";
+const PERSONALITY_PATH = memoryPath("personality.json");
 
 const MAX_RECENT_GROWTH = 10;
 const MOMENTUM_DECAY = 0.7;
@@ -178,7 +180,34 @@ const MIGRATION_MAP: Array<{ keywords: string[]; target: TraitName }> = [
 
 // --- State management ---
 
-let cachedState: PersonalityState | null = null;
+const personalitySchema = z
+	.object({
+		version: z.number().int().min(1).max(CURRENT_VERSION).optional(),
+		traits: z.record(
+			z.string(),
+			z
+				.object({
+					value: z.number().finite(),
+					momentum: z.number().finite().optional(),
+					lastReinforced: z.number().finite().optional(),
+				})
+				.passthrough(),
+		),
+		recentGrowth: z
+			.array(
+				z
+					.object({
+						change: z.string(),
+						trigger: z.string(),
+						timestamp: z.number(),
+						traitsAffected: z.array(z.string()),
+					})
+					.passthrough(),
+			)
+			.default([]),
+		appliedPromotionIds: z.array(z.string()).optional(),
+	})
+	.passthrough();
 
 function createDefaultTrait(): PersonalityTrait {
 	return { value: 0.5, momentum: 0, lastReinforced: Date.now() };
@@ -249,61 +278,38 @@ export function migrateState(old: Record<string, unknown>): PersonalityState {
 }
 
 async function loadPersonality(): Promise<PersonalityState> {
-	if (cachedState) return cachedState;
-	try {
-		const data = await readFile(PERSONALITY_PATH, "utf-8");
-		const raw = JSON.parse(data) as Record<string, unknown>;
-
-		if (
-			typeof raw.version === "number" &&
-			raw.version >= CURRENT_VERSION &&
-			typeof raw.traits === "object" &&
-			raw.traits !== null
-		) {
-			// Ensure all fixed traits exist (in case new traits were added)
-			const state = raw as unknown as PersonalityState;
-			for (const name of TRAIT_NAMES) {
-				if (!state.traits[name]) {
-					state.traits[name] = createDefaultTrait();
-				}
-			}
-			cachedState = state;
-		} else {
-			// Needs migration
-			cachedState = migrateState(raw);
-			await savePersonality(cachedState);
-		}
-
-		return cachedState;
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error("[personality] Error loading personality.json:", err);
-		}
-		cachedState = createEmptyState();
-		return cachedState;
+	const raw = await readStore(PERSONALITY_PATH, personalitySchema, () =>
+		personalitySchema.parse(createEmptyState()),
+	);
+	if (raw.version !== CURRENT_VERSION) {
+		const migrated = migrateState(raw);
+		await savePersonality(migrated);
+		return migrated;
 	}
+	const traits: PersonalityState["traits"] = {};
+	for (const name of TRAIT_NAMES) {
+		const trait = raw.traits[name];
+		traits[name] = trait
+			? {
+					value: Math.max(0, Math.min(1, trait.value)),
+					momentum: trait.momentum ?? 0,
+					lastReinforced: trait.lastReinforced ?? Date.now(),
+				}
+			: createDefaultTrait();
+	}
+	return { ...raw, traits };
 }
 
 async function savePersonality(state: PersonalityState): Promise<void> {
-	cachedState = state;
-	await atomicWriteFile(PERSONALITY_PATH, JSON.stringify(state, null, 2));
+	await writeStore(
+		PERSONALITY_PATH,
+		personalitySchema.parse(state),
+		personalitySchema,
+	);
 }
 
 export async function initPersonality(): Promise<void> {
-	try {
-		await readFile(PERSONALITY_PATH, "utf-8");
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error("[personality] Error reading personality.json:", err);
-		}
-		await writeFile(
-			PERSONALITY_PATH,
-			JSON.stringify(createEmptyState(), null, 2),
-		);
-		log.debug("[personality] Created personality.json");
-	}
-	// Trigger load (and migration if needed)
-	await loadPersonality();
+	await savePersonality(await loadPersonality());
 }
 
 // --- Apply signals (constrained to fixed traits) ---
@@ -361,11 +367,18 @@ export function applySignalsToState(
 export async function applyPersonalitySignals(
 	signals: PersonalitySignals,
 	conversationContext: string,
+	promotionId?: string,
 ): Promise<void> {
 	// Serialize load-modify-save: concurrent background promotions would
-	// otherwise race on the shared cached state and the file.
+	// otherwise overwrite each other's changes to the file.
 	await withPersonalityLock(async () => {
-		const state = await loadPersonality();
+		const state = structuredClone(await loadPersonality());
+		if (promotionId && state.appliedPromotionIds?.includes(promotionId)) return;
+		if (promotionId)
+			state.appliedPromotionIds = [
+				...(state.appliedPromotionIds ?? []),
+				promotionId,
+			];
 		applySignalsToState(state, signals, conversationContext);
 		await savePersonality(state);
 	});

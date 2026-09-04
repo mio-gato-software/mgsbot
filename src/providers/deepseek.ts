@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { log } from "../logger.ts";
+import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
@@ -35,7 +36,7 @@ export class DeepSeekChatProvider implements ChatProvider {
 			baseURL: "https://api.deepseek.com",
 			apiKey,
 		});
-		this.model = model ?? process.env.DEEPSEEK_MODEL ?? "deepseek-v4-pro";
+		this.model = model ?? resolveChatModel("deepseek");
 	}
 
 	async generateResponse(

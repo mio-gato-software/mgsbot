@@ -9,13 +9,15 @@ import {
 	getEmbeddingModel,
 } from "../embeddings.ts";
 import { log } from "../logger.ts";
+import { memoryPath } from "../runtime-paths.ts";
 import type { SemanticFact, WorkingMemory } from "../types.ts";
 import { atomicWriteFile, isFileNotFound } from "../utils.ts";
 import { EPISODES_DIR } from "./episodes.ts";
+import { episodesSchema, factsSchema } from "./schemas.ts";
 import { SEMANTIC_PATH, saveSemanticStore } from "./semantic.ts";
-import { unwrapVersioned } from "./versioning.ts";
+import { readStore, writeStore } from "./storage.ts";
 
-export const EMBEDDING_CONFIG_PATH = "./memory/embedding-config.json";
+export const EMBEDDING_CONFIG_PATH = memoryPath("embedding-config.json");
 
 export interface EmbeddingIdentity {
 	provider: string;
@@ -115,8 +117,7 @@ function autoReembedEnabled(): boolean {
 
 async function loadSemanticFacts(path: string): Promise<SemanticFact[]> {
 	if (!existsSync(path)) return [];
-	const raw = await readFile(path, "utf-8");
-	return unwrapVersioned<SemanticFact[]>(JSON.parse(raw));
+	return readStore(path, factsSchema, () => []);
 }
 
 async function loadEpisodeStores(
@@ -129,8 +130,12 @@ async function loadEpisodeStores(
 	const stores: Array<{ path: string; memory: WorkingMemory }> = [];
 	for (const file of files) {
 		const path = `${episodesDir}/${file}`;
-		const raw = await readFile(path, "utf-8");
-		stores.push({ path, memory: JSON.parse(raw) as WorkingMemory });
+		stores.push({
+			path,
+			memory: await readStore(path, episodesSchema, () => {
+				throw new Error(`Missing episode store ${path}`);
+			}),
+		});
 	}
 	return stores;
 }
@@ -242,7 +247,7 @@ export async function reembedStaleMemory(options?: {
 		if (semanticPath === SEMANTIC_PATH) {
 			await saveSemanticStore(facts);
 		} else {
-			await atomicWriteFile(semanticPath, JSON.stringify(facts, null, 2));
+			await writeStore(semanticPath, facts, factsSchema);
 		}
 	}
 
@@ -265,7 +270,7 @@ export async function reembedStaleMemory(options?: {
 		if (dirty) {
 			// Startup-only today (before handlers register). If this is ever
 			// triggered at runtime, wrap the write in withChatLock(chatId).
-			await atomicWriteFile(store.path, JSON.stringify(store.memory, null, 2));
+			await writeStore(store.path, store.memory, episodesSchema);
 		}
 	}
 

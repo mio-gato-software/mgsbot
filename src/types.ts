@@ -8,6 +8,7 @@
 export type MentionType = "none" | "reply" | "tag" | "name";
 
 export interface ConversationMessage {
+	id?: string; // stable identity across durable promotion retries
 	role: "user" | "model";
 	name?: string;
 	userId?: number;
@@ -48,6 +49,7 @@ export interface WorkingMemory {
 }
 
 export interface RelationshipMemory {
+	appliedEpisodeIds?: string[];
 	schemaVersion?: number; // absent in legacy files; stamped on save
 	chatId: number;
 	summary: string; // 80-140 words about the relationship dynamic
@@ -71,6 +73,7 @@ export interface MemoryChapter {
 }
 
 export interface SemanticFact {
+	appliedFactIds?: string[]; // idempotency receipts for merged extracted facts
 	id: string;
 	content: string; // atomic fact
 	category: "person" | "group" | "rule" | "event";
@@ -134,6 +137,7 @@ export interface PersonalityGrowthEvent {
 }
 
 export interface PersonalityState {
+	appliedPromotionIds?: string[];
 	version?: number;
 	traits: Record<string, PersonalityTrait>;
 	recentGrowth: PersonalityGrowthEvent[]; // max 10

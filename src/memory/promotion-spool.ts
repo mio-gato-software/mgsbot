@@ -1,21 +1,117 @@
-import { readdir, readFile, unlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readdir, unlink } from "node:fs/promises";
+import { z } from "zod";
+import type { LongTermMemoryUpdate } from "../ai/evaluation.ts";
 import { log } from "../logger.ts";
-import type { ConversationMessage } from "../types.ts";
-import { atomicWriteFile, isFileNotFound } from "../utils.ts";
+import { withPersistenceLock } from "../persistence-coordination.ts";
+import { memoryPath } from "../runtime-paths.ts";
+import type {
+	ConversationMessage,
+	Episode,
+	PersonalitySignals,
+	SemanticFact,
+} from "../types.ts";
+import { isFileNotFound } from "../utils.ts";
 import { withPromotionSpoolLock } from "./locks.ts";
 import type { PromotionSource } from "./promotion-metrics.ts";
-import { unwrapVersioned, wrapVersioned } from "./versioning.ts";
+import { episodeSchema, factsSchema, messageSchema } from "./schemas.ts";
+import { readStore, writeStore } from "./storage.ts";
 
-export const PROMOTION_SPOOL_DIR = "./memory/promotion-spool";
+export const PROMOTION_SPOOL_DIR = memoryPath("promotion-spool");
 
-// A chat whose promotions keep failing drops its oldest chunks first.
-const MAX_SPOOLED_CHUNKS_PER_CHAT = 20;
+export const MAX_PROMOTION_ATTEMPTS = 10;
+
+export interface PreparedPromotion {
+	narrative?: LongTermMemoryUpdate;
+	narrativeBase?: { relationship: string; chapter: string };
+	episode: Episode;
+	facts: SemanticFact[];
+	personalitySignals?: PersonalitySignals;
+	recentText: string;
+}
+const preparedSchema = z.object({
+	narrativeBase: z
+		.object({ relationship: z.string(), chapter: z.string() })
+		.optional(),
+	narrative: z
+		.object({
+			relationship: z.object({
+				summary: z.string(),
+				tone: z.string(),
+				notableDynamics: z.array(z.string()),
+				openThreads: z.array(z.string()),
+			}),
+			chapter: z.object({
+				title: z.string(),
+				summary: z.string(),
+				importance: z.number().min(1).max(5),
+			}),
+		})
+		.optional(),
+	episode: episodeSchema,
+	facts: factsSchema,
+	recentText: z.string(),
+	personalitySignals: z
+		.object({
+			traitChanges: z.array(
+				z.object({
+					trait: z.string(),
+					delta: z.number().finite(),
+					reason: z.string(),
+				}),
+			),
+		})
+		.optional(),
+});
+const spoolSchema = z.array(
+	z
+		.object({
+			id: z.string(),
+			chatId: z.number(),
+			messages: z.array(messageSchema),
+			reason: z.enum(["promotion-failed", "inactivity-wipe", "overflow"]),
+			minImportance: z.number().min(1).max(5).optional(),
+			source: z.enum(["active", "passive"]).optional(),
+			spooledAt: z.number(),
+			attempts: z.number().int().nonnegative(),
+			prepared: preparedSchema.optional(),
+			failed: z.boolean().optional(),
+		})
+		.passthrough(),
+);
+
+export function messageIdentity(message: ConversationMessage): string {
+	return (
+		message.id ??
+		createHash("sha256")
+			.update(
+				JSON.stringify([
+					message.timestamp,
+					message.role,
+					message.name ?? null,
+					message.userId ?? null,
+					message.content,
+				]),
+			)
+			.digest("hex")
+	);
+}
+export function promotionId(
+	chatId: number,
+	messages: ConversationMessage[],
+): string {
+	return `chunk_${createHash("sha256")
+		.update(`${chatId}:${messages.map(messageIdentity).join(":")}`)
+		.digest("hex")}`;
+}
 
 export interface SpooledChunk {
 	id: string;
 	chatId: number;
 	messages: ConversationMessage[];
-	reason: "promotion-failed" | "inactivity-wipe";
+	reason: "promotion-failed" | "inactivity-wipe" | "overflow";
+	prepared?: PreparedPromotion;
+	failed?: boolean;
 	/** Importance bar the chunk was originally promoted under (see promoteToMemory). */
 	minImportance?: number;
 	/** Promotion path the chunk came from, kept so retries stay attributable. */
@@ -31,15 +127,7 @@ function spoolPath(chatId: number): string {
 export async function loadPromotionSpool(
 	chatId: number,
 ): Promise<SpooledChunk[]> {
-	try {
-		const data = await readFile(spoolPath(chatId), "utf-8");
-		return unwrapVersioned<SpooledChunk[]>(JSON.parse(data));
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error(`[spool] Error loading promotion spool ${chatId}:`, err);
-		}
-		return [];
-	}
+	return readStore(spoolPath(chatId), spoolSchema, () => []);
 }
 
 async function saveSpool(
@@ -47,15 +135,12 @@ async function saveSpool(
 	chunks: SpooledChunk[],
 ): Promise<void> {
 	if (chunks.length === 0) {
-		await unlink(spoolPath(chatId)).catch((err) => {
+		await withPersistenceLock(() => unlink(spoolPath(chatId))).catch((err) => {
 			if (!isFileNotFound(err)) throw err;
 		});
 		return;
 	}
-	await atomicWriteFile(
-		spoolPath(chatId),
-		JSON.stringify(wrapVersioned(chunks), null, 2),
-	);
+	await writeStore(spoolPath(chatId), chunks, spoolSchema, true);
 }
 
 /**
@@ -74,9 +159,7 @@ export async function spoolChunk(input: {
 	if (input.messages.length === 0) return;
 	await withPromotionSpoolLock(input.chatId, async () => {
 		const chunks = await loadPromotionSpool(input.chatId);
-		const id =
-			input.id ??
-			`chunk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+		const id = input.id ?? promotionId(input.chatId, input.messages);
 		if (chunks.some((chunk) => chunk.id === id)) return;
 		chunks.push({
 			id,
@@ -88,13 +171,7 @@ export async function spoolChunk(input: {
 			spooledAt: Date.now(),
 			attempts: 0,
 		});
-		const bounded = chunks.slice(-MAX_SPOOLED_CHUNKS_PER_CHAT);
-		if (bounded.length < chunks.length) {
-			log.warn(
-				`[spool] Spool full for chat ${input.chatId} — dropped ${chunks.length - bounded.length} oldest chunk(s)`,
-			);
-		}
-		await saveSpool(input.chatId, bounded);
+		await saveSpool(input.chatId, chunks);
 	});
 }
 
@@ -124,6 +201,7 @@ export async function recordSpoolAttempt(
 		const chunk = chunks.find((c) => c.id === id);
 		if (!chunk) return 0;
 		chunk.attempts += 1;
+		if (chunk.attempts >= MAX_PROMOTION_ATTEMPTS) chunk.failed = true;
 		await saveSpool(chatId, chunks);
 		return chunk.attempts;
 	});
@@ -142,4 +220,19 @@ export async function listSpooledChatIds(): Promise<number[]> {
 		}
 		return [];
 	}
+}
+
+/** Checkpoint generated content before applying effects to any store. */
+export async function savePreparedPromotion(
+	chatId: number,
+	id: string,
+	prepared: PreparedPromotion,
+): Promise<void> {
+	await withPromotionSpoolLock(chatId, async () => {
+		const chunks = await loadPromotionSpool(chatId);
+		const chunk = chunks.find((item) => item.id === id);
+		if (!chunk) throw new Error(`Missing promotion journal entry: ${id}`);
+		chunk.prepared = prepared;
+		await saveSpool(chatId, chunks);
+	});
 }

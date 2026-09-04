@@ -1,9 +1,9 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import type { Api } from "grammy";
 import { generateResponse } from "./ai/core.ts";
+import { trackBackground } from "./background-tasks.ts";
 import { botNow, clampToReasonableHours, getWeekStart } from "./bot-time.ts";
 import { pulseTypingBeforeSend } from "./chat-actions.ts";
-import { generateEmbedding } from "./embeddings.ts";
 import {
 	ACTIVE_CONVERSATION_MS,
 	getRecentFollowUpEvents,
@@ -12,30 +12,27 @@ import {
 import { log } from "./logger.ts";
 import {
 	addMessageToSensory,
-	getFactsForSubjects,
-	getPermanentFacts,
-	getQueryEmbedding,
-	getRecentChapters,
-	getRelevantEpisodes,
-	getRelevantFacts,
-	loadRelationshipMemory,
 	loadSensory,
 	withChatLock,
 	withCheckInsLock,
 } from "./memory/index.ts";
-import { unwrapVersioned, wrapVersioned } from "./memory/versioning.ts";
+import { drainPromotionSpool } from "./memory/promotion.ts";
+import { checkInsSchema } from "./memory/schemas.ts";
+import { readStore, writeStore } from "./memory/storage.ts";
 import { assembleSystemPrompt } from "./prompt/assemble.ts";
 import { buildPromptContext } from "./prompt/context.ts";
 import { buildMessages } from "./prompt/history.ts";
+import { retrieveMemoryContext } from "./prompt/retrieval.ts";
+import { memoryPath } from "./runtime-paths.ts";
 import type {
 	CheckInSlot,
 	CheckInState,
 	ConversationMessage,
 } from "./types.ts";
-import { atomicWriteFile, isFileNotFound } from "./utils.ts";
+import { isFileNotFound } from "./utils.ts";
 
-const CHECK_INS_PATH = "./memory/check-ins.json";
-const SENSORY_DIR = "./memory/sensory";
+const CHECK_INS_PATH = memoryPath("check-ins.json");
+const SENSORY_DIR = memoryPath("sensory");
 
 const POSTPONE_MS = 60 * 60 * 1000; // 1 hour
 
@@ -59,22 +56,11 @@ type CheckInStrategy = (typeof CHECK_IN_STRATEGIES)[number];
 // --- Storage ---
 
 async function loadCheckIns(): Promise<CheckInState[]> {
-	try {
-		const data = await readFile(CHECK_INS_PATH, "utf-8");
-		return unwrapVersioned<CheckInState[]>(JSON.parse(data));
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error("[check-ins] Error loading check-ins.json:", err);
-		}
-		return [];
-	}
+	return readStore(CHECK_INS_PATH, checkInsSchema, () => []);
 }
 
 async function saveCheckIns(states: CheckInState[]): Promise<void> {
-	await atomicWriteFile(
-		CHECK_INS_PATH,
-		JSON.stringify(wrapVersioned(states), null, 2),
-	);
+	await writeStore(CHECK_INS_PATH, states, checkInsSchema, true);
 }
 
 // --- Scheduling ---
@@ -254,54 +240,15 @@ async function generateCheckInMessage(
 ): Promise<string> {
 	const buffer = await loadSensory(chatId);
 
-	// Build query embedding from recent messages or generic greeting
-	let queryEmbedding: number[];
-	if (buffer.messages.length > 0) {
-		const result = await getQueryEmbedding(buffer.messages);
-		queryEmbedding = result.embedding;
-	} else {
-		queryEmbedding = await generateEmbedding(
-			"casual greeting everyday conversation how are you",
-		);
-	}
-
-	// Gather context
-	const [episodes, facts, permanentFacts, relationshipMemory, recentChapters] =
-		await Promise.all([
-			getRelevantEpisodes(chatId, queryEmbedding),
-			getRelevantFacts(queryEmbedding, { chatId }),
-			getPermanentFacts(),
-			loadRelationshipMemory(chatId),
-			getRecentChapters(chatId),
-		]);
-
-	// Get person-specific facts from recent conversation participants
-	const participantNames = new Set<string>();
-	for (const msg of buffer.messages) {
-		if (msg.name) participantNames.add(msg.name);
-	}
-	const subjectFacts =
-		participantNames.size > 0
-			? await getFactsForSubjects([...participantNames])
-			: [];
-
-	// Combine and deduplicate facts
-	const allFacts = [...facts];
-	for (const sf of subjectFacts) {
-		if (!allFacts.some((f) => f.id === sf.id)) {
-			allFacts.push(sf);
-		}
-	}
-
-	const systemPrompt = await assembleSystemPrompt(
-		buildPromptContext({
-			relevantEpisodes: episodes,
-			relevantFacts: allFacts,
-			permanentFacts,
-			relationshipMemory,
-			recentChapters,
-		}),
-	);
+	const context = await retrieveMemoryContext({
+		chatId,
+		messages: buffer.messages,
+		episodeLimit: 5,
+		factLimit: 15,
+		participantFactLimit: 10,
+		nameWindow: buffer.messages.length || 1,
+	});
+	const systemPrompt = await assembleSystemPrompt(buildPromptContext(context));
 
 	const strategyInstruction = getStrategyInstruction(strategy);
 
@@ -501,7 +448,12 @@ export async function checkAndSendCheckIns(
 				};
 				await withChatLock(chatId, async () => {
 					const fresh = await loadSensory(chatId);
-					await addMessageToSensory(fresh, botMessage);
+					const overflow = await addMessageToSensory(fresh, botMessage);
+					if (overflow)
+						trackBackground(
+							"proactive-promotion",
+							drainPromotionSpool(fresh.chatId),
+						);
 				});
 			} catch (error) {
 				log.error("[check-ins] Error sending check-in:", error);
@@ -517,16 +469,5 @@ export async function checkAndSendCheckIns(
 // --- Initialization ---
 
 export async function initCheckIns(): Promise<void> {
-	try {
-		await readFile(CHECK_INS_PATH, "utf-8");
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error("[check-ins] Error reading check-ins.json:", err);
-		}
-		await atomicWriteFile(
-			CHECK_INS_PATH,
-			JSON.stringify(wrapVersioned([]), null, 2),
-		);
-		log.debug("[check-ins] Created check-ins.json");
-	}
+	await saveCheckIns(await loadCheckIns());
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
 	chmodSync,
 	existsSync,
@@ -6,8 +7,9 @@ import {
 	renameSync,
 	writeFileSync,
 } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
+import { withPersistenceLock } from "./persistence-coordination.ts";
 
 /**
  * Write a file atomically: write to a .tmp file first, then rename.
@@ -17,11 +19,25 @@ export async function atomicWriteFile(
 	filePath: string,
 	data: string,
 ): Promise<void> {
-	const dir = dirname(filePath);
-	if (!existsSync(dir)) await mkdir(dir, { recursive: true });
-	const tmpPath = `${filePath}.tmp`;
-	await writeFile(tmpPath, data);
-	await rename(tmpPath, filePath);
+	return withPersistenceLock(async () => {
+		const dir = dirname(filePath);
+		if (!existsSync(dir)) await mkdir(dir, { recursive: true });
+		const tmpPath = `${filePath}.${randomUUID()}.tmp`;
+		try {
+			const file = await open(tmpPath, "wx", 0o600);
+			try {
+				await file.writeFile(data);
+				await file.sync();
+			} finally {
+				await file.close();
+			}
+			await rename(tmpPath, filePath);
+		} finally {
+			await unlink(tmpPath).catch((error) => {
+				if (!isFileNotFound(error)) throw error;
+			});
+		}
+	});
 }
 
 /**
@@ -34,7 +50,7 @@ export function atomicWriteFileSync(
 ): void {
 	const dir = dirname(filePath);
 	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-	const tmpPath = `${filePath}.tmp`;
+	const tmpPath = `${filePath}.${randomUUID()}.tmp`;
 	writeFileSync(tmpPath, data, mode !== undefined ? { mode } : undefined);
 	renameSync(tmpPath, filePath);
 	// rename preserves the temp file's mode, which may predate the mode option

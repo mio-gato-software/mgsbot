@@ -1,3 +1,4 @@
+import { resolveChatModel } from "../provider-options.ts";
 import {
 	OpenAiCompatibleChatProvider,
 	requireEnv,
@@ -11,7 +12,7 @@ export class AlibabaChatProvider extends OpenAiCompatibleChatProvider {
 			endpoint:
 				"https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
 			apiKey: requireEnv("DASHSCOPE_API_KEY", "alibaba"),
-			model: model ?? process.env.DASHSCOPE_MODEL ?? "qwen3.5-plus",
+			model: model ?? resolveChatModel("alibaba"),
 			extraBody: {
 				enable_thinking: true,
 			},

@@ -4,8 +4,8 @@ import {
 	GoogleGenAI,
 	type Part,
 } from "@google/genai";
-import { DEFAULT_GEMINI_CHAT_MODEL } from "../ai/platform.ts";
 import { log } from "../logger.ts";
+import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
@@ -53,7 +53,7 @@ export class GeminiChatProvider implements ChatProvider {
 			);
 		}
 		this.ai = new GoogleGenAI({ apiKey });
-		this.model = model ?? process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_CHAT_MODEL;
+		this.model = model ?? resolveChatModel("gemini");
 	}
 
 	async generateResponse(

@@ -157,14 +157,11 @@ export async function handleDocument(
 			: `${marker}\n\n${attachmentContent}`;
 
 		receiving.stop();
-		await processConversationAndTrackGroupContinuation(
-			ctx,
-			content,
-			userName,
+		await processConversationAndTrackGroupContinuation(ctx, content, userName, {
 			mentionType,
-			isBotOff(),
-			isSleepingHour(),
-		);
+			botOff: isBotOff(),
+			isSleepingHour: isSleepingHour(),
+		});
 	} catch (error) {
 		log.error(`[${kind === "pdf" ? "PDF" : "text"} handler] Error:`, error);
 		const language = loadConfig().language ?? "es";

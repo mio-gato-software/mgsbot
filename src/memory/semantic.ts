@@ -1,15 +1,15 @@
-import { statSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { getDateString } from "../bot-time.ts";
 import { cosineSimilarity, getEmbeddingModel } from "../embeddings.ts";
 import { getAllAliasesForCanonical } from "../identities.ts";
 import { log } from "../logger.ts";
+import { memoryPath } from "../runtime-paths.ts";
 import type { SemanticFact } from "../types.ts";
-import { atomicWriteFile, isFileNotFound } from "../utils.ts";
 import { withSemanticLock } from "./locks.ts";
 import { computeTextScore, normalizeName } from "./queries.ts";
-import { unwrapVersioned, wrapVersioned } from "./versioning.ts";
+import { factsSchema } from "./schemas.ts";
+import { readStore, writeStore } from "./storage.ts";
 
-export const SEMANTIC_PATH = "./memory/semantic.json";
+export const SEMANTIC_PATH = memoryPath("semantic.json");
 
 const SEMANTIC_DEDUP_THRESHOLD = 0.85;
 const CONFIDENCE_DECAY_RATE = 0.02; // Per day
@@ -31,9 +31,6 @@ const REINFORCEMENT_CONFIDENCE_BUMP = 0.05;
 //     instead of becoming immortal.
 export const REINFORCEMENT_CONFIDENCE_CEILING = 0.75;
 export const REINFORCEMENT_CEILING_EROSION_PER_DAY = 0.01;
-
-let semanticCache: SemanticFact[] | null = null;
-let semanticLastMtimeMs = 0;
 
 function getEmbeddingDim(fact: SemanticFact): number {
 	return fact.embeddingDim ?? fact.embedding.length;
@@ -72,7 +69,12 @@ function applySupersession(
 	if (!newFact.supersedes?.length) return;
 	const supersededIds = new Set(newFact.supersedes);
 	for (const existing of store) {
-		if (!supersededIds.has(existing.id) || existing.permanent) continue;
+		if (
+			!supersededIds.has(existing.id) ||
+			existing.permanent ||
+			existing.id === replacementId
+		)
+			continue;
 		existing.supersededBy = replacementId;
 		existing.validUntil = now;
 		existing.confidence = Math.min(existing.confidence, 0.2);
@@ -121,38 +123,13 @@ function findDedupCandidates(
 }
 
 export async function loadSemanticStore(): Promise<SemanticFact[]> {
-	try {
-		const stat = statSync(SEMANTIC_PATH);
-		if (semanticCache && stat.mtimeMs === semanticLastMtimeMs) {
-			return semanticCache;
-		}
-		const data = await readFile(SEMANTIC_PATH, "utf-8");
-		semanticCache = unwrapVersioned<SemanticFact[]>(JSON.parse(data)).map(
-			normalizeFactShape,
-		);
-		semanticLastMtimeMs = stat.mtimeMs;
-		return semanticCache;
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error("[memory] Error loading semantic store:", err);
-		}
-		semanticCache = [];
-		return [];
-	}
+	return (await readStore(SEMANTIC_PATH, factsSchema, () => [])).map(
+		normalizeFactShape,
+	);
 }
 
 export async function saveSemanticStore(facts: SemanticFact[]): Promise<void> {
-	semanticCache = facts;
-	await atomicWriteFile(
-		SEMANTIC_PATH,
-		JSON.stringify(wrapVersioned(facts), null, 2),
-	);
-	// Update mtime to match what we just wrote
-	try {
-		semanticLastMtimeMs = statSync(SEMANTIC_PATH).mtimeMs;
-	} catch {
-		// ignore — stat after write is non-critical
-	}
+	await writeStore(SEMANTIC_PATH, facts, factsSchema, true);
 }
 
 export async function addSemanticFacts(
@@ -164,13 +141,43 @@ export async function addSemanticFacts(
 
 		for (const rawNewFact of newFacts) {
 			const newFact = normalizeFactShape(rawNewFact);
+			if (
+				store.some(
+					(fact) =>
+						fact.id === newFact.id || fact.appliedFactIds?.includes(newFact.id),
+				)
+			)
+				continue;
+			const requestedReplacements = new Set(newFact.supersedes ?? []);
+			newFact.supersedes = store
+				.filter(
+					(existing) =>
+						requestedReplacements.has(existing.id) &&
+						existing.id !== newFact.id &&
+						!existing.permanent &&
+						isFactActive(existing) &&
+						existing.category === newFact.category &&
+						normalizeName(existing.subject ?? "") ===
+							normalizeName(newFact.subject ?? "") &&
+						(existing.scope !== "chat" ||
+							existing.sourceChatId === newFact.sourceChatId),
+				)
+				.map((fact) => fact.id);
 			newFact.embeddingModel ??= getEmbeddingModel();
 			newFact.embeddingDim = newFact.embedding.length;
 			newFact.scope = inferDefaultScope(newFact);
 
 			// Find similar existing facts by embedding
 			let merged = false;
-			for (const existing of findDedupCandidates(store, newFact)) {
+			for (const existing of newFact.supersedes.length
+				? []
+				: findDedupCandidates(store, newFact)) {
+				if (requestedReplacements.has(existing.id)) continue;
+				if (
+					normalizeName(existing.subject ?? "") !==
+					normalizeName(newFact.subject ?? "")
+				)
+					continue;
 				if (!canCompareEmbedding(newFact.embedding, existing)) continue;
 				const similarity = cosineSimilarity(
 					newFact.embedding,
@@ -185,6 +192,10 @@ export async function addSemanticFacts(
 					normalizeName(newFact.subject) === normalizeName(existing.subject);
 				const threshold = isSamePersonSubject ? 0.8 : SEMANTIC_DEDUP_THRESHOLD;
 				if (similarity >= threshold) {
+					existing.appliedFactIds = [
+						...(existing.appliedFactIds ?? []),
+						newFact.id,
+					];
 					// Update existing: refresh confidence and timestamp
 					existing.lastConfirmed = now;
 					existing.lastDecayedAt = now;
@@ -468,20 +479,15 @@ export async function getPermanentFacts(): Promise<SemanticFact[]> {
 
 let lastDecayDate = "";
 
-export async function decayConfidence(): Promise<{
+export async function decayConfidence(now = Date.now()): Promise<{
 	total: number;
 	removed: number;
 }> {
-	const today = new Date().toISOString().slice(0, 10);
-	if (lastDecayDate === today) {
-		const store = await loadSemanticStore();
-		return { total: store.length, removed: 0 };
-	}
-
 	return withSemanticLock(async () => {
+		const today = getDateString(now);
 		const store = await loadSemanticStore();
+		if (lastDecayDate === today) return { total: store.length, removed: 0 };
 		const totalBefore = store.length;
-		const now = Date.now();
 
 		for (const fact of store) {
 			normalizeFactShape(fact);

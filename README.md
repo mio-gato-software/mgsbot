@@ -15,7 +15,7 @@ MGS Bot isn't a typical chatbot — it remembers conversations across several la
 ## Features
 
 - **Layered memory system** — manual profile/rules, relationship summaries, monthly chapters, semantic facts, episode summaries, and recent sensory context
-- **Self-maintaining memory** — failed promotions are spooled and retried (no data loss on API errors), often-recalled facts decay more slowly (capped so repetition never reads as certainty), and a daily janitor retires contradicted or duplicate facts
+- **Self-maintaining memory** — promotions use a durable journal with retries and retained failed chunks, often-recalled facts decay more slowly (capped so repetition never reads as certainty), and a daily janitor retires contradicted or duplicate facts
 - **Emergent personality** — traits evolve naturally through conversations, with momentum, decay, and periodic self-description
 - **Multi-modal input** — text, `.txt` attachments (UTF-8 or BOM-marked UTF-16, up to 1 MB; the first 32,000 characters are included in the conversation), voice notes, audio files, photos/images, PDFs (including scans, embedded images, charts, and tables), public web pages, and YouTube link analysis
 - **Image generation** — generates character images using OpenAI, Gemini, or fal.ai with an optional reference image
@@ -259,7 +259,7 @@ In groups, the bot only responds when mentioned (by reply, @tag, or name). In DM
 index.ts                     Entry point: env loading, CLI helpers, setup wizard, bot startup
 src/
   conversation.ts            Main turn pipeline: sensory append, retrieval, prompt, generation,
-                              response sending, and background memory evaluation
+                              response sending, and background promotion scheduling
   handlers.ts                grammY update handlers and access control
   commands.ts                Telegram commands: /provider, /allowphotorequest, /help, /on,
                               /off, /optimize
@@ -295,7 +295,7 @@ src/
   memory/
     index.ts                 Memory facade and directory initialization
     sensory.ts               Recent-message buffer and boundary-aware overflow promotion
-    promotion-spool.ts       Spool of unpromoted chunks (failed promotions, inactivity wipes)
+    promotion-spool.ts       Durable promotion journal (overflow, inactivity wipes, recovery checkpoints)
     promotion-policy.ts      Promotion importance bars + the gate every chunk is judged by
     promotion-metrics.ts     Per-decision telemetry: what each bar dropped, extraction quality
     episodes.ts              Per-chat episodic summaries and relevance search
@@ -422,7 +422,7 @@ bun run promote:stats
 
 The same report is how the background model is watched: parse failures, facts per chunk, validator-rejected facts, and empty extractions, broken down by model. An unparseable extraction is no longer silently treated as a boring conversation — it fails, the chunk goes to the retry spool, and the owner gets an alert.
 
-All memory files are auto-created on first run. The `memory/` directory is gitignored — it contains your bot's learned knowledge and should be treated as user data.
+Missing memory files are created on first run. Damaged files and unsupported schema versions stop writes and preserve the original for recovery. `MEMORY_DIR` can override the default `./memory` root. The `memory/` directory is gitignored — it contains your bot's learned knowledge and should be treated as user data.
 
 ### Personality System
 
@@ -447,7 +447,7 @@ The bot develops emergent personality traits that evolve over time:
    - `[IMAGE: prompt]` — generate and send a character image, or a subject-only image in full-access mode
    - `[IMAGE_SELF: prompt]` — generate the bot character in a scene in full-access mode
    - `[TTS]text[/TTS]` — send a voice note via the configured TTS provider
-8. Background: memory evaluation extracts semantic facts, personality signals, and follow-up opportunities on the pinned `BACKGROUND_MODEL`; failed promotions are spooled and retried automatically
+8. Background: memory evaluation extracts semantic facts, personality signals, and follow-up opportunities on the pinned `BACKGROUND_MODEL`; promotion chunks are journaled before leaving sensory memory and retried from durable checkpoints
 
 ### Image Generation
 
@@ -488,7 +488,7 @@ bun run build        # Compile to standalone binary
 bun run build:linux  # Cross-compile for Linux x64
 ```
 
-Tests live in `tests/` and cover provider validation, prompt sections, response markers, handlers, memory, file-lock behavior, configuration parsing, and utility logic.
+Tests live in `tests/`. A preload always redirects memory to a disposable directory, including when a real `MEMORY_DIR` is inherited. Coverage includes complete conversation/delivery paths, promotion failure recovery, damaged stores, backup restoration, scheduling, and the existing provider/routing utilities. See [maintenance and recovery](docs/maintenance.md).
 
 ### Telegram Commands
 

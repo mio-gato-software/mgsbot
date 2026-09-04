@@ -1,11 +1,11 @@
-import { readFile } from "node:fs/promises";
-import { log } from "../logger.ts";
+import { memoryPath } from "../runtime-paths.ts";
 import type { MemoryChapter } from "../types.ts";
-import { atomicWriteFile, isFileNotFound } from "../utils.ts";
 import { withChapterLock } from "./locks.ts";
+import { chaptersSchema } from "./schemas.ts";
+import { readStore, writeStore } from "./storage.ts";
 import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
 
-export const CHAPTERS_DIR = "./memory/chapters";
+export const CHAPTERS_DIR = memoryPath("chapters");
 
 interface ChapterStore {
 	schemaVersion?: number; // absent in legacy files; stamped on save
@@ -20,23 +20,15 @@ function chaptersPath(chatId: number): string {
 }
 
 export async function loadChapterStore(chatId: number): Promise<ChapterStore> {
-	try {
-		const data = await readFile(chaptersPath(chatId), "utf-8");
-		return JSON.parse(data) as ChapterStore;
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error(`[memory] Error loading chapters ${chatId}:`, err);
-		}
-		return { chatId, chapters: [] };
-	}
+	return readStore(chaptersPath(chatId), chaptersSchema, () => ({
+		chatId,
+		chapters: [],
+	}));
 }
 
 export async function saveChapterStore(store: ChapterStore): Promise<void> {
 	store.schemaVersion = CURRENT_SCHEMA_VERSION;
-	await atomicWriteFile(
-		chaptersPath(store.chatId),
-		JSON.stringify(store, null, 2),
-	);
+	await writeStore(chaptersPath(store.chatId), store, chaptersSchema);
 }
 
 export async function getRecentChapters(

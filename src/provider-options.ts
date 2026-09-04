@@ -321,6 +321,7 @@ const ProviderEnvSchema = z.object({
 // Vars read directly via process.env elsewhere in the codebase (not part of
 // the provider schema) — included so case typos on them get flagged too.
 const CORE_ENV_VARS = [
+	"MEMORY_DIR",
 	"BOT_TOKEN",
 	"OWNER_USER_ID",
 	"ALLOWED_GROUP_ID",
@@ -883,4 +884,13 @@ export function formatProviderCommandStatus(
 		"",
 		"/provider solo cambia el chat. Voz, transcripción e imágenes se combinan aparte por env vars.",
 	].join("\n");
+}
+
+export function resolveChatModel(
+	name: ChatProviderName,
+	env: EnvMap = process.env,
+): string {
+	const option = CHAT_PROVIDERS.find((provider) => provider.name === name);
+	if (!option) throw new Error(`Unknown chat provider: ${name}`);
+	return env[option.modelEnv]?.trim() || option.defaultModel;
 }

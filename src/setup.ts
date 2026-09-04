@@ -1,5 +1,6 @@
 import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
+import { trackBackground } from "./background-tasks.ts";
 import { type BotLanguage, loadConfig, saveConfig } from "./config.ts";
 import { log } from "./logger.ts";
 import {
@@ -8,6 +9,7 @@ import {
 	saveSensory,
 	withChatLock,
 } from "./memory/index.ts";
+import { drainPromotionSpool } from "./memory/promotion.ts";
 import { buildMessages } from "./prompt/history.ts";
 import type { ConversationMessage } from "./types.ts";
 
@@ -112,7 +114,9 @@ export async function processSetupConversation(
 	};
 	await withChatLock(chatId, async () => {
 		const fresh = await loadSensory(chatId);
-		await addMessageToSensory(fresh, botMessage);
+		const overflow = await addMessageToSensory(fresh, botMessage);
+		if (overflow)
+			trackBackground("proactive-promotion", drainPromotionSpool(fresh.chatId));
 	});
 
 	// Check if JSON was generated

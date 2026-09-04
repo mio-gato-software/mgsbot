@@ -1,3 +1,4 @@
+import { memoryPath } from "../runtime-paths.ts";
 /**
  * Promotion decision telemetry.
  *
@@ -24,7 +25,7 @@ import { log } from "../logger.ts";
 import { isFileNotFound } from "../utils.ts";
 import { meetsPromotionBar } from "./promotion-policy.ts";
 
-export const METRICS_DIR = "./memory/metrics";
+export const METRICS_DIR = memoryPath("metrics");
 
 const DEFAULT_RETENTION_MONTHS = 6;
 const SUMMARY_MAX_CHARS = 300;

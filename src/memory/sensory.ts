@@ -1,11 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { log } from "../logger.ts";
+import { memoryPath } from "../runtime-paths.ts";
 import type { ConversationMessage, SensoryBuffer } from "../types.ts";
-import { atomicWriteFile, isFileNotFound } from "../utils.ts";
-import { spoolChunk } from "./promotion-spool.ts";
-import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
+import { isFileNotFound } from "../utils.ts";
+import type { PromotionSource } from "./promotion-metrics.ts";
+import { defaultPromotionBar } from "./promotion-policy.ts";
+import { messageIdentity, spoolChunk } from "./promotion-spool.ts";
+import { sensorySchema } from "./schemas.ts";
+import { readStore, writeStore } from "./storage.ts";
+import { CURRENT_SCHEMA_VERSION, unwrapVersioned } from "./versioning.ts";
 
-export const SENSORY_DIR = "./memory/sensory";
+export const SENSORY_DIR = memoryPath("sensory");
 
 const SENSORY_MAX_MESSAGES = 10;
 const SENSORY_OVERFLOW_COUNT = 5; // Default messages returned on overflow
@@ -84,7 +89,7 @@ function sensoryPath(chatId: number): string {
 export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 	try {
 		const data = await readFile(sensoryPath(chatId), "utf-8");
-		const buffer = JSON.parse(data) as SensoryBuffer;
+		const buffer = sensorySchema.parse(unwrapVersioned(JSON.parse(data)));
 
 		// Clear messages if inactive for > 3 days. The remainder is spooled for
 		// episode promotion instead of being discarded — the last messages before
@@ -105,7 +110,7 @@ export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 		return buffer;
 	} catch (err) {
 		if (!isFileNotFound(err)) {
-			log.error(`[memory] Error loading sensory buffer ${chatId}:`, err);
+			throw err;
 		}
 		return {
 			chatId,
@@ -128,7 +133,7 @@ export async function loadSensory(chatId: number): Promise<SensoryBuffer> {
 export async function persistInactivityWipe(chatId: number): Promise<void> {
 	try {
 		const data = await readFile(sensoryPath(chatId), "utf-8");
-		const buffer = JSON.parse(data) as SensoryBuffer;
+		const buffer = sensorySchema.parse(unwrapVersioned(JSON.parse(data)));
 		if (
 			buffer.messages.length === 0 ||
 			Date.now() - buffer.lastActivity <= INACTIVITY_THRESHOLD_MS
@@ -137,7 +142,7 @@ export async function persistInactivityWipe(chatId: number): Promise<void> {
 		}
 		buffer.messages = [];
 		buffer.schemaVersion = CURRENT_SCHEMA_VERSION;
-		await atomicWriteFile(sensoryPath(chatId), JSON.stringify(buffer, null, 2));
+		await writeStore(sensoryPath(chatId), buffer, sensorySchema);
 	} catch (err) {
 		if (!isFileNotFound(err)) throw err;
 	}
@@ -146,10 +151,7 @@ export async function persistInactivityWipe(chatId: number): Promise<void> {
 export async function saveSensory(buffer: SensoryBuffer): Promise<void> {
 	buffer.lastActivity = Date.now();
 	buffer.schemaVersion = CURRENT_SCHEMA_VERSION;
-	await atomicWriteFile(
-		sensoryPath(buffer.chatId),
-		JSON.stringify(buffer, null, 2),
-	);
+	await writeStore(sensoryPath(buffer.chatId), buffer, sensorySchema);
 }
 
 /**
@@ -181,8 +183,9 @@ function findOverflowSplitCount(messages: ConversationMessage[]): number {
 export async function addMessageToSensory(
 	buffer: SensoryBuffer,
 	message: ConversationMessage,
+	options: { minImportance?: number; source?: PromotionSource } = {},
 ): Promise<ConversationMessage[] | null> {
-	buffer.messages.push(message);
+	buffer.messages.push({ ...message, id: message.id ?? randomUUID() });
 	buffer.messageCountSincePromotion++;
 
 	let overflow: ConversationMessage[] | null = null;
@@ -190,10 +193,38 @@ export async function addMessageToSensory(
 	if (buffer.messages.length > SENSORY_MAX_MESSAGES) {
 		const splitCount = findOverflowSplitCount(buffer.messages);
 		overflow = buffer.messages.slice(0, splitCount);
+		// Journal first. A crash before the sensory save is recovered by commitSpooledRemoval.
+		await spoolChunk({
+			chatId: buffer.chatId,
+			messages: overflow,
+			reason: "overflow",
+			minImportance: options.minImportance ?? defaultPromotionBar(),
+			source: options.source ?? "active",
+		});
 		buffer.messages = buffer.messages.slice(splitCount);
 	}
 
 	compactOlderMediaMessages(buffer.messages);
 	await saveSensory(buffer);
 	return overflow;
+}
+
+/** Complete an interrupted sensory-to-spool transfer without changing activity time. Call under the chat lock. */
+export async function commitSpooledRemoval(
+	chatId: number,
+	messages: ConversationMessage[],
+): Promise<void> {
+	const buffer = await readStore(
+		sensoryPath(chatId),
+		sensorySchema.nullable(),
+		() => null,
+	);
+	if (!buffer) return;
+	const ids = new Set(messages.map(messageIdentity));
+	const remaining = buffer.messages.filter(
+		(message) => !ids.has(messageIdentity(message)),
+	);
+	if (remaining.length === buffer.messages.length) return;
+	buffer.messages = remaining;
+	await writeStore(sensoryPath(chatId), buffer, sensorySchema);
 }

@@ -46,7 +46,7 @@ import {
 	downloadAndTranscribeByFileId,
 	extractYouTubeUrl,
 } from "./media-handlers.ts";
-import { decayConfidence, loadSensory } from "./memory/index.ts";
+import { loadSensory } from "./memory/index.ts";
 import { isSimpleAssistantMode } from "./prompt/modes.ts";
 import { createChatProvider } from "./providers/index.ts";
 import { supportsInlineImages } from "./providers/types.ts";
@@ -134,9 +134,6 @@ export const securityMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
 export function registerHandlers(bot: Bot): void {
 	const botToken = bot.token;
 
-	// Run confidence decay on startup
-	decayConfidence().catch(log.error);
-
 	bot.use(securityMiddleware);
 
 	// Slash commands
@@ -185,9 +182,11 @@ export function registerHandlers(bot: Bot): void {
 				ctx,
 				content,
 				userName,
-				mentionType,
-				isBotOff(),
-				isSleepingHour(),
+				{
+					mentionType,
+					botOff: isBotOff(),
+					isSleepingHour: isSleepingHour(),
+				},
 			);
 			return;
 		}
@@ -236,9 +235,11 @@ export function registerHandlers(bot: Bot): void {
 				ctx,
 				content,
 				userName,
-				mentionType,
-				isBotOff(),
-				isSleepingHour(),
+				{
+					mentionType,
+					botOff: isBotOff(),
+					isSleepingHour: isSleepingHour(),
+				},
 			);
 			return;
 		}
@@ -319,9 +320,11 @@ export function registerHandlers(bot: Bot): void {
 						ctx,
 						content,
 						userName,
-						mentionType,
-						isBotOff(),
-						isSleepingHour(),
+						{
+							mentionType,
+							botOff: isBotOff(),
+							isSleepingHour: isSleepingHour(),
+						},
 					);
 				} catch (error) {
 					log.error("[reply-to-audio handler] Error:", error);
@@ -403,12 +406,13 @@ export function registerHandlers(bot: Bot): void {
 								ctx,
 								content,
 								userName,
-								mentionType,
-								isBotOff(),
-								isSleepingHour(),
-								{ data, mimeType },
-								undefined,
-								filePath,
+								{
+									mentionType,
+									botOff: isBotOff(),
+									isSleepingHour: isSleepingHour(),
+									mediaAttachment: { data, mimeType },
+									userImagePath: filePath,
+								},
 							);
 						} else {
 							// Non-vision provider. Skip describeImage only when the
@@ -435,12 +439,12 @@ export function registerHandlers(bot: Bot): void {
 								ctx,
 								content,
 								userName,
-								mentionType,
-								isBotOff(),
-								isSleepingHour(),
-								undefined,
-								undefined,
-								filePath,
+								{
+									mentionType,
+									botOff: isBotOff(),
+									isSleepingHour: isSleepingHour(),
+									userImagePath: filePath,
+								},
 							);
 						}
 					} finally {
@@ -515,16 +519,15 @@ export function registerHandlers(bot: Bot): void {
 					ctx,
 					replyAwareText,
 					userName,
-					mentionType,
-					botOff,
-					sleeping,
-					undefined,
-					undefined,
-					undefined,
-					buildGroupResponseOptions({
-						groupAutoReply: canStartSpontaneously,
-						groupContinuation: canContinue,
-					}),
+					{
+						mentionType,
+						botOff,
+						isSleepingHour: sleeping,
+						...buildGroupResponseOptions({
+							groupAutoReply: canStartSpontaneously,
+							groupContinuation: canContinue,
+						}),
+					},
 				);
 			}
 			return;
@@ -536,9 +539,11 @@ export function registerHandlers(bot: Bot): void {
 				ctx,
 				replyAwareText,
 				userName,
-				mentionType,
-				isBotOff(),
-				isSleepingHour(),
+				{
+					mentionType,
+					botOff: isBotOff(),
+					isSleepingHour: isSleepingHour(),
+				},
 			);
 			return;
 		}
@@ -547,9 +552,11 @@ export function registerHandlers(bot: Bot): void {
 			ctx,
 			replyAwareText,
 			userName,
-			mentionType,
-			isBotOff(),
-			isSleepingHour(),
+			{
+				mentionType,
+				botOff: isBotOff(),
+				isSleepingHour: isSleepingHour(),
+			},
 		);
 	});
 }

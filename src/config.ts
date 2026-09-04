@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { log } from "./logger.ts";
+import { memoryPath } from "./runtime-paths.ts";
 import { atomicWriteFileSync } from "./utils.ts";
 
 export type BotLanguage = "es" | "en";
@@ -13,9 +14,9 @@ export interface BotConfig {
 	language?: BotLanguage;
 }
 
-const CONFIG_PATH = "./memory/bot_config.json";
-const PERMANENT_PATH = "./memory/permanent.md";
-export const BOT_PROFILE_PATH = "./memory/bot_profile.json";
+const CONFIG_PATH = memoryPath("bot_config.json");
+const PERMANENT_PATH = memoryPath("permanent.md");
+export const BOT_PROFILE_PATH = memoryPath("bot_profile.json");
 
 const DEFAULT_CONFIG: BotConfig = {
 	isConfigured: false,

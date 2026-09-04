@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { rename, writeFile } from "node:fs/promises";
 import { GoogleGenAI } from "@google/genai";
 import { getOpenAIClient } from "./ai/openai-client.ts";
 import {
@@ -9,7 +8,8 @@ import {
 	resolveEmbeddingProvider,
 } from "./ai/platform.ts";
 import { log } from "./logger.ts";
-import { isFileNotFound } from "./utils.ts";
+import { memoryPath } from "./runtime-paths.ts";
+import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
@@ -25,13 +25,18 @@ export function getEmbeddingDim(): number {
 	return resolveEmbeddingDim();
 }
 
-const CACHE_PATH = "./memory/embedding-cache.json";
+const CACHE_PATH = memoryPath("embedding-cache.json");
 const MAX_CACHE_ENTRIES = 5000;
 
 let diskCache: Map<string, number[]> = new Map();
 let diskCacheDirty = false;
+let cacheRevision = 0;
+let cacheLoaded = false;
+let persistTail = Promise.resolve();
 
-function loadDiskCache(): void {
+export function initEmbeddingCache(): void {
+	if (cacheLoaded) return;
+	cacheLoaded = true;
 	try {
 		if (existsSync(CACHE_PATH)) {
 			const raw = readFileSync(CACHE_PATH, "utf-8");
@@ -56,22 +61,13 @@ async function persistDiskCache(): Promise<void> {
 			const entries = [...diskCache.entries()];
 			diskCache = new Map(entries.slice(entries.length - MAX_CACHE_ENTRIES));
 		}
-		const tmpPath = `${CACHE_PATH}.tmp`;
-		await writeFile(tmpPath, JSON.stringify([...diskCache.entries()]));
-		await rename(tmpPath, CACHE_PATH);
-		diskCacheDirty = false;
+		const revision = cacheRevision;
+		await atomicWriteFile(CACHE_PATH, JSON.stringify([...diskCache.entries()]));
+		if (cacheRevision === revision) diskCacheDirty = false;
 	} catch (error) {
 		log.error("[embeddings] Failed to persist cache:", error);
 	}
 }
-
-loadDiskCache();
-
-setInterval(() => {
-	persistDiskCache().catch((err) =>
-		log.error("[embeddings] Persist interval error:", err),
-	);
-}, 60_000);
 
 function hashText(text: string): string {
 	// Include model+dim so a provider/model switch cannot reuse stale vectors.
@@ -106,9 +102,14 @@ async function embedWithOpenAI(text: string): Promise<number[]> {
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
+	initEmbeddingCache();
 	const hash = hashText(text);
 	const cached = diskCache.get(hash);
-	if (cached) return cached;
+	if (cached) {
+		diskCache.delete(hash);
+		diskCache.set(hash, cached);
+		return cached;
+	}
 
 	const MAX_RETRIES = 3;
 	let lastError: unknown;
@@ -123,6 +124,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
 			diskCache.set(hash, embedding);
 			diskCacheDirty = true;
+			cacheRevision++;
 			log.debug(
 				`[embeddings:${provider}] Generated embedding for: "${text.slice(0, 60)}..."`,
 			);
@@ -149,13 +151,17 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 export async function flushEmbeddingCache(): Promise<void> {
-	await persistDiskCache();
+	persistTail = persistTail.then(persistDiskCache);
+	await persistTail;
 }
 
 export async function clearEmbeddingCache(): Promise<void> {
+	cacheLoaded = true;
 	diskCache = new Map();
 	diskCacheDirty = true;
-	await persistDiskCache();
+	cacheRevision++;
+	persistTail = persistTail.then(persistDiskCache);
+	await persistTail;
 }
 
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {

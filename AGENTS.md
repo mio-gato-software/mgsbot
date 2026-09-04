@@ -58,9 +58,12 @@ src/
                                group routing (mention/continuation/spontaneous), security middleware
                                (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
   group-state.ts             ← In-memory group rate limits: spontaneous-reply cooldowns, continuation windows
-  conversation.ts            ← Main turn pipeline: sensory append, memory retrieval, prompt assembly,
+  conversation.ts            ← Main turn pipeline (named options and injectable generation/retrieval/delivery): sensory append, memory retrieval, prompt assembly,
                                provider call, response send, episode promotion, background evaluation
-  response-processor.ts      ← Response marker handling ([SILENCE], [REACT], [IMAGE], [TTS], [QUOTE_REPLY]),
+  response-plan.ts           ← Pure marker parsing into a structured delivery plan
+  background-tasks.ts        ← Recurring jobs, overlap protection, and shutdown draining
+  runtime-paths.ts           ← MEMORY_DIR resolution; tests override it with a disposable root
+  response-processor.ts      ← Validated response delivery and marker handling ([SILENCE], [REACT], [IMAGE], [TTS], [QUOTE_REPLY]),
                                image/TTS sending, Markdown fallback
   media-handlers.ts          ← Telegram media download and preprocessing (voice, audio, photo, PDF, `.txt`)
   commands.ts                ← Telegram commands: /provider, /allowphotorequest, /help, /on, /off, /optimize
@@ -97,15 +100,19 @@ src/
     pipeline.ts              ← Section pipeline: ordered, mode-aware prompt assembly
     assemble.ts              ← buildSystemPrompt() entry point
     context.ts               ← PromptContext construction from memory/state
+    retrieval.ts             ← Shared context retrieval for conversation and proactive messages
     history.ts               ← buildMessages(): sensory buffer → ChatMessage[] with time-gap markers
     modes.ts                 ← SIMPLE_ASSISTANT_MODE / full-access mode checks
     types.ts                 ← Prompt section interfaces
     sections/                ← One file per prompt section: header, identity, personality, memory,
                                activity, mention, image, voice, rules
   memory/
+    promotion.ts             ← Durable promotion worker: prepared checkpoints and idempotent effects
+    storage.ts               ← Validated JSON reads/writes; corruption and future schemas fail closed
+    schemas.ts               ← Runtime schemas for persisted memory
     index.ts                 ← Re-exports + store initialization
     sensory.ts               ← Per-chat recent messages buffer (max 10, FIFO, boundary-aware overflow promotion)
-    promotion-spool.ts       ← Per-chat spool of unpromoted message chunks (failed promotions +
+    promotion-spool.ts       ← Per-chat journal of unpromoted message chunks (sensory overflow +
                                inactivity-wipe remainders), retried at startup/hourly
     promotion-policy.ts      ← Promotion importance bars (env-tunable) + meetsPromotionBar() gate
     promotion-metrics.ts     ← Per-decision telemetry (memory/metrics/): what each bar dropped and
@@ -182,7 +189,7 @@ The memory system uses multiple tiers with vector embeddings for semantic search
 - **Semantic Store** (`memory/semantic.json`): Global knowledge base of `SemanticFact` objects with 768-dim embeddings. Categories: "person", "group", "rule", "event". Facts have `importance`, `confidence` (decays 0.02/day, min 0.1), and `subject`. Deduplication via cosine similarity at 0.85 threshold. Facts injected into a prompt are reinforced (small confidence bump, throttled to once/hour per fact via `lastRecalledAt`), so often-recalled facts fade more slowly — but retrieval is usefulness, not evidence: the bump is capped by `reinforcementCeiling()` (0.75, eroding 0.01/day as `lastConfirmed` ages) and never touches the decay clock, so a fact the bot only ever quotes back to itself still decays out. Only genuine reconfirmation through extraction (the dedup merge path) moves `lastConfirmed` and lifts a fact above the ceiling. Facts can be marked `permanent: true` for immutable biographical data (birthplace, family, marriage) — these never decay and are always included in prompts (max 25). A daily janitor (`src/janitor.ts`, disable with `ENABLE_MEMORY_JANITOR=false`) reviews subjects with ≥6 active facts via the background model and soft-retires contradicted/duplicate facts (`supersededBy` + `validUntil`, never hard deletion).
 - **Episodes** (`memory/episodes/<chat_id>.json`): Per-chat summarized conversations (max 20). Each episode has `summary`, `participants`, `timestamp`, `importance`, and an `embedding` for similarity search. Top 3 most relevant episodes selected for prompts.
 - **Sensory Buffer** (`memory/sensory/<chat_id>.json`): Per-chat recent messages (max 10, FIFO). Tracks `lastActivity`, `messageCountSincePromotion`. On overflow, the oldest 3–7 messages (split at the largest ≥30-min time gap, default 5) are promoted to an episode via AI summarization. Inactive chats (>3 days) spool remaining messages for promotion, then clear the buffer. Passively witnessed group messages (bot not addressed) are promoted only at a higher importance bar (default ≥3, `PASSIVE_PROMOTION_MIN_IMPORTANCE`). Bars live in `src/memory/promotion-policy.ts`; every decision is recorded by `src/memory/promotion-metrics.ts` so `bun run promote:stats` can replay the gate at each candidate bar instead of guessing (it also lists the chunks the current bar dropped).
-- **Promotion Spool** (`memory/promotion-spool/<chat_id>.json`): Chunks whose promotion failed (transient API error, rate limit) plus inactivity-wipe remainders. Retried on the next promotion for that chat, at startup, and hourly; a chunk is dropped after 10 failed attempts.
+- **Promotion Spool** (`memory/promotion-spool/<chat_id>.json`): Durable journal of sensory overflow and inactivity-wipe remainders, with checkpoints for partial promotion recovery. Retried on the next promotion for that chat, at startup, and hourly; after 10 failed attempts a chunk is retained with `failed: true` and an owner alert, for operator recovery.
 - **Relationships** (`memory/relationships/<chat_id>.json`): Per-chat relationship memory — an evolving summary of the relationship dynamic (tone, notable dynamics, open threads, interaction count).
 - **Chapters** (`memory/chapters/<chat_id>.json`): Per-chat monthly narrative chapters built from episodes (id `chapter_<chatId>_<YYYY-MM>`, title, compact summary, importance 1–5).
 
@@ -190,7 +197,9 @@ The bot's own identity/personality prompt comes from `bot_config.json` (chat set
 
 Per-chat writes are serialized with `withChatLock()` (`src/memory/locks.ts`); state files are saved via `atomicWriteFile()` to avoid corruption on crash.
 
-**Embeddings** (`src/embeddings.ts`): Uses `EMBEDDING_PROVIDER` (`gemini-embedding-2` or `text-embedding-3-small`, both default 768-d). Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, auto-persisted every 60 seconds. Cache keys include model+dim so switching providers does not mix vectors. Startup compares `memory/embedding-config.json` to the current provider/model/dim and rewrites stale fact/episode vectors (`src/memory/reembed.ts`; disable with `AUTO_REEMBED=false`). Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
+**Storage maintenance:** `MEMORY_DIR` defaults to `./memory`; `bun test` forces a disposable root through `tests/preload.ts`. Loaders validate legacy and v1 data and preserve damaged files by refusing writes. Backups are staged, hashed, verified, then published; startup awaits a verified daily snapshot before migrations. Daily confidence decay is checked hourly during continuous uptime. See `docs/maintenance.md` for recovery.
+
+**Embeddings** (`src/embeddings.ts`): Uses `EMBEDDING_PROVIDER` (`gemini-embedding-2` or `text-embedding-3-small`, both default 768-d). Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, persisted every 60 seconds by the application lifecycle; importing the module starts no timer. Cache keys include model+dim so switching providers does not mix vectors. Startup compares `memory/embedding-config.json` to the current provider/model/dim and rewrites stale fact/episode vectors (`src/memory/reembed.ts`; disable with `AUTO_REEMBED=false`). Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
 
 **Identities** (`src/identities.ts`): Maps Telegram user IDs to canonical names with alias tracking. Handles name changes by adding old names as aliases. Prefix matching (e.g., "Eliaquín" matches "Eliaquín Encarnación"). Used to link facts across name variations.
 

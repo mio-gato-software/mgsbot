@@ -1,13 +1,13 @@
-import { readFile } from "node:fs/promises";
 import { cosineSimilarity } from "../embeddings.ts";
-import { log } from "../logger.ts";
+import { memoryPath } from "../runtime-paths.ts";
 import type { Episode, WorkingMemory } from "../types.ts";
-import { atomicWriteFile, isFileNotFound } from "../utils.ts";
 import { withEpisodeLock } from "./locks.ts";
 import { computeTextScore } from "./queries.ts";
+import { episodesSchema } from "./schemas.ts";
+import { readStore, writeStore } from "./storage.ts";
 import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
 
-export const EPISODES_DIR = "./memory/episodes";
+export const EPISODES_DIR = memoryPath("episodes");
 
 const MAX_EPISODES_PER_CHAT = 20;
 
@@ -22,20 +22,15 @@ function episodesPath(chatId: number): string {
 export async function loadWorkingMemory(
 	chatId: number,
 ): Promise<WorkingMemory> {
-	try {
-		const data = await readFile(episodesPath(chatId), "utf-8");
-		return JSON.parse(data) as WorkingMemory;
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error(`[memory] Error loading episodes ${chatId}:`, err);
-		}
-		return { chatId, episodes: [] };
-	}
+	return readStore(episodesPath(chatId), episodesSchema, () => ({
+		chatId,
+		episodes: [],
+	}));
 }
 
 export async function saveWorkingMemory(wm: WorkingMemory): Promise<void> {
 	wm.schemaVersion = CURRENT_SCHEMA_VERSION;
-	await atomicWriteFile(episodesPath(wm.chatId), JSON.stringify(wm, null, 2));
+	await writeStore(episodesPath(wm.chatId), wm, episodesSchema);
 }
 
 export async function addEpisode(
@@ -44,6 +39,7 @@ export async function addEpisode(
 ): Promise<void> {
 	await withEpisodeLock(chatId, async () => {
 		const wm = await loadWorkingMemory(chatId);
+		if (wm.episodes.some((existing) => existing.id === episode.id)) return;
 		wm.episodes.push(episode);
 
 		// Prune to max episodes by composite score (importance x recency)

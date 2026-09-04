@@ -1,5 +1,6 @@
 import { BOT_TZ, getBotHour, getDateString } from "./bot-time.ts";
 import { log } from "./logger.ts";
+import { memoryPath } from "./runtime-paths.ts";
 import { atomicWriteFile, withRetry } from "./utils.ts";
 
 interface DailyWeather {
@@ -12,7 +13,7 @@ interface DailyWeather {
 	fetchedAt: number;
 }
 
-const WEATHER_FILE = "./memory/daily-weather.json";
+const WEATHER_FILE = memoryPath("daily-weather.json");
 
 function readEnvNumber(name: string, fallback: number): number {
 	const raw = process.env[name];

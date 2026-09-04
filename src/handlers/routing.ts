@@ -339,16 +339,16 @@ export async function routeGroupNameMention(
 		ctx,
 		conversationContent,
 		userName,
-		"name",
-		isBotOff(),
-		isSleepingHour(),
-		undefined,
-		options?.isVoiceMessage,
-		undefined,
-		buildGroupResponseOptions({
-			groupAutoReply: decision.addressing !== "continuation",
-			groupContinuation: decision.addressing === "continuation",
-		}),
+		{
+			mentionType: "name",
+			botOff: isBotOff(),
+			isSleepingHour: isSleepingHour(),
+			isVoiceMessage: options?.isVoiceMessage,
+			...buildGroupResponseOptions({
+				groupAutoReply: decision.addressing !== "continuation",
+				groupContinuation: decision.addressing === "continuation",
+			}),
+		},
 	);
 
 	return "handled";

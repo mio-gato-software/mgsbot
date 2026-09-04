@@ -1,4 +1,5 @@
 import { log } from "../logger.ts";
+import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
@@ -26,7 +27,7 @@ export class FalChatProvider implements ChatProvider {
 			throw new Error(`FAL_API_KEY is required when ${requiredFor}`);
 		}
 		this.apiKey = apiKey;
-		this.model = model ?? process.env.FAL_MODEL ?? "google/gemini-2.5-pro";
+		this.model = model ?? resolveChatModel("fal");
 	}
 
 	async generateResponse(

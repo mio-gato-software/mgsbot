@@ -1,3 +1,4 @@
+import { resolveChatModel } from "../provider-options.ts";
 import {
 	OpenAiCompatibleChatProvider,
 	requireEnv,
@@ -10,7 +11,7 @@ export class AzureChatProvider extends OpenAiCompatibleChatProvider {
 			errorLabel: "Azure",
 			endpoint: requireEnv("AZURE_ENDPOINT", "azure"),
 			apiKey: requireEnv("AZURE_API_KEY", "azure"),
-			model: model ?? process.env.AZURE_MODEL ?? "Kimi-K2.5",
+			model: model ?? resolveChatModel("azure"),
 			extraBody: {
 				max_tokens: 4096,
 				temperature: 0.8,

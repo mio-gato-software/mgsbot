@@ -4,6 +4,7 @@ import {
 	isSleepingHour,
 	type TelegramReplyContext,
 } from "../src/handlers.ts";
+import { memoryPath } from "../src/runtime-paths.ts";
 
 describe("isSleepingHour", () => {
 	test("returns a boolean", () => {
@@ -88,7 +89,7 @@ describe("atomicWriteFile", () => {
 		const { atomicWriteFile } = await import("../src/utils.ts");
 		const { readFile, unlink } = await import("node:fs/promises");
 
-		const testPath = "./audios/test_atomic_write.json";
+		const testPath = memoryPath("test_atomic_write.json");
 		const testData = JSON.stringify({ test: true, value: 42 });
 
 		await atomicWriteFile(testPath, testData);

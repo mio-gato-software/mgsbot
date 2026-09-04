@@ -23,6 +23,13 @@ Living document. Rules:
 - **Size:** Small.
 - Added 2026-07-24.
 
+### Verify production backups outside the runtime volume
+
+- **Why:** repository backups now verify every snapshot and publish it before startup migrations, but copies inside `memory/backups/` share the runtime disk's failure domain. Repository changes cannot establish whether an external backup already exists on the running server.
+- **What to do:** inspect the deployment's existing backup configuration and retention, then restore an external snapshot into a disposable directory and validate its stores. The recovery procedure is in `docs/maintenance.md`. Do not replace live memory during the drill.
+- **Size:** Small if an external backup already exists; otherwise assess the deployment first.
+- Added 2026-09-04.
+
 ## Time-sensitive
 
 ### Re-verify 2027 holidays against the official Ministerio de Trabajo calendar
@@ -31,4 +38,3 @@ Living document. Rules:
 - **Why:** The `2027:` entry in `src/holidays.ts` (added 2026-07-10) applies Ley 139-97 weekday rules deterministically; the official announcement occasionally deviates (and a bill excluding Jan 6/26 from the movable list was in the legislature as of 2026).
 - **Size:** Small.
 - Added 2026-07-10.
-

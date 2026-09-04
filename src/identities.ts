@@ -1,11 +1,11 @@
-import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
 import { log } from "./logger.ts";
+import { withIdentityLock } from "./memory/locks.ts";
 import { normalizeName } from "./memory/queries.ts";
-import { unwrapVersioned, wrapVersioned } from "./memory/versioning.ts";
-import { atomicWriteFile, isFileNotFound } from "./utils.ts";
+import { identitiesSchema } from "./memory/schemas.ts";
+import { readStore, writeStore } from "./memory/storage.ts";
+import { memoryPath } from "./runtime-paths.ts";
 
-const IDENTITIES_PATH = "./memory/identities.json";
+const IDENTITIES_PATH = memoryPath("identities.json");
 
 export interface PersonIdentity {
 	userId: number;
@@ -17,38 +17,16 @@ export interface PersonIdentity {
 
 export type IdentityStore = Record<string, PersonIdentity>;
 
-let identityCache: IdentityStore | null = null;
-
 async function loadIdentities(): Promise<IdentityStore> {
-	if (identityCache) return identityCache;
-	try {
-		const data = await readFile(IDENTITIES_PATH, "utf-8");
-		identityCache = unwrapVersioned<IdentityStore>(JSON.parse(data));
-		return identityCache;
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error("[identities] Error loading identities.json:", err);
-		}
-		identityCache = {};
-		return {};
-	}
+	return readStore(IDENTITIES_PATH, identitiesSchema, () => ({}));
 }
 
 async function saveIdentities(store: IdentityStore): Promise<void> {
-	identityCache = store;
-	await atomicWriteFile(
-		IDENTITIES_PATH,
-		JSON.stringify(wrapVersioned(store), null, 2),
-	);
+	await writeStore(IDENTITIES_PATH, store, identitiesSchema, true);
 }
 
 export async function initIdentities(): Promise<void> {
-	if (!existsSync(IDENTITIES_PATH)) {
-		await writeFile(
-			IDENTITIES_PATH,
-			JSON.stringify(wrapVersioned({}), null, 2),
-		);
-	}
+	await saveIdentities(await loadIdentities());
 }
 
 /**
@@ -104,10 +82,12 @@ export async function registerIdentity(
 	displayName: string,
 	username?: string,
 ): Promise<string> {
-	const store = await loadIdentities();
-	const canonical = applyIdentityUpdate(store, userId, displayName, username);
-	await saveIdentities(store);
-	return canonical;
+	return withIdentityLock(async () => {
+		const store = await loadIdentities();
+		const canonical = applyIdentityUpdate(store, userId, displayName, username);
+		await saveIdentities(store);
+		return canonical;
+	});
 }
 
 /**

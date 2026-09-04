@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { log } from "./logger.ts";
+import { memoryPath } from "./runtime-paths.ts";
 import { atomicWriteFileSync } from "./utils.ts";
 
 export interface BotRules {
@@ -10,7 +11,7 @@ export interface BotRules {
 	newPersonRules?: string[];
 }
 
-export const BOT_RULES_PATH = "./memory/bot_rules.json";
+export const BOT_RULES_PATH = memoryPath("bot_rules.json");
 
 const DEFAULT_RULES: Required<BotRules> = {
 	customInstructions: [

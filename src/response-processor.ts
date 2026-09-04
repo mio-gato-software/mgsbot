@@ -10,50 +10,19 @@ import { getWeekStart } from "./image-scheduler.ts";
 import { log } from "./logger.ts";
 import { loadSensory, saveSensory, withChatLock } from "./memory/index.ts";
 import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
+import { buildReplyOptions, parseResponse } from "./response-plan.ts";
 import { textToSpeech } from "./tts/index.ts";
 import type { SensoryBuffer } from "./types.ts";
 
-const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
-
-export const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
-export const IMAGE_SELF_MARKER_REGEX = /\[IMAGE_SELF:\s*([^\]]+)\]/;
-export const REACTION_MARKER_REGEX = /\[REACT:\s*([^\]]+)\]/;
-export const QUOTE_REPLY_MARKER = "[QUOTE_REPLY]";
-export const SILENCE_MARKER = "[SILENCE]";
-
-const QUOTE_REPLY_MARKER_REGEX = /\[QUOTE_REPLY\]/g;
-
-export function extractQuoteReplyMarker(responseText: string): {
-	responseText: string;
-	quoteReplyRequested: boolean;
-} {
-	const quoteReplyRequested = responseText.includes(QUOTE_REPLY_MARKER);
-	return {
-		responseText: responseText.replace(QUOTE_REPLY_MARKER_REGEX, "").trim(),
-		quoteReplyRequested,
-	};
-}
-
-export function buildReplyOptions(input: {
-	isGroup: boolean;
-	messageId?: number;
-	quoteReplyRequested: boolean;
-}): {
-	reply_parameters?: {
-		message_id: number;
-		allow_sending_without_reply: true;
-	};
-} {
-	if (!input.isGroup || !input.quoteReplyRequested || !input.messageId) {
-		return {};
-	}
-	return {
-		reply_parameters: {
-			message_id: input.messageId,
-			allow_sending_without_reply: true,
-		},
-	};
-}
+export {
+	buildReplyOptions,
+	extractQuoteReplyMarker,
+	IMAGE_MARKER_REGEX,
+	IMAGE_SELF_MARKER_REGEX,
+	QUOTE_REPLY_MARKER,
+	REACTION_MARKER_REGEX,
+	SILENCE_MARKER,
+} from "./response-plan.ts";
 
 export interface SendResponseOptions {
 	ctx: Context;
@@ -68,247 +37,171 @@ export interface SendResponseOptions {
 }
 
 export interface SendResponseResult {
-	/** The cleaned response text (markers stripped), for saving to sensory buffer */
 	cleanedText: string;
-	/** Whether buffer was modified (image tracking state changed) */
 	bufferDirty: boolean;
+	sent: boolean;
 }
 
-/**
- * Process response markers and send the reply to the user.
- * Handles SILENCE, REACT, IMAGE, TTS markers and plain text replies.
- * Returns null if the response was silenced (nothing to save).
- */
+export interface ResponseDependencies {
+	generateImage: typeof generateImage;
+	editImage: typeof editImage;
+	textToSpeech: typeof textToSpeech;
+	baseImage: typeof getBaseImagePath;
+	fullAccess: typeof isFullAccessActive;
+}
+export const defaultResponseDependencies: ResponseDependencies = {
+	generateImage,
+	editImage,
+	textToSpeech,
+	baseImage: getBaseImagePath,
+	fullAccess: isFullAccessActive,
+};
+
+function isFormattingError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false;
+	return (
+		/can't parse entities|cannot parse entities|unsupported start tag|can't find end of/i.test(
+			error.message,
+		) &&
+		(!("error_code" in error) || error.error_code === 400)
+	);
+}
+
+/** Only formatting errors warrant a plain-text fallback; transport failures propagate. */
+export async function sendTextReply(
+	ctx: Context,
+	text: string,
+	replyOptions: ReturnType<typeof buildReplyOptions> = {},
+): Promise<void> {
+	for (let offset = 0; offset < text.length; ) {
+		let end = Math.min(offset + 4000, text.length);
+		// Avoid cutting a UTF-16 surrogate pair across messages.
+		if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1] ?? "")) end--;
+		const chunk = text.slice(offset, end);
+		try {
+			await ctx.reply(chunk, { ...replyOptions, parse_mode: "Markdown" });
+		} catch (error) {
+			if (!isFormattingError(error)) throw error;
+			await ctx.reply(chunk, replyOptions);
+		}
+		offset = end;
+	}
+}
+
 export async function sendResponse(
 	options: SendResponseOptions,
+	dependencies = defaultResponseDependencies,
 ): Promise<SendResponseResult | null> {
 	const {
 		ctx,
+		buffer,
+		chatAction,
+		userImagePath,
 		shouldGenImage,
 		allowPhotoRequest,
-		buffer,
-		isGroup,
-		userImagePath,
-		chatAction,
 	} = options;
-	let responseText = options.responseText;
-	const quoteMarker = extractQuoteReplyMarker(responseText);
-	responseText = quoteMarker.responseText;
-
-	// Guard against empty responses
-	if (!responseText.trim()) {
-		log.debug("[response] Empty response from model, skipping");
-		return null;
-	}
-
-	// Check for [SILENCE] marker - bot chose not to respond
-	if (responseText.trim() === SILENCE_MARKER) {
-		log.debug("[response] Bot chose to stay silent");
-		return null;
-	}
-
-	// Handle [SILENCE] mixed with text - send the text part, strip the marker
-	if (responseText.includes(SILENCE_MARKER)) {
-		responseText = responseText.replace(SILENCE_MARKER, "").trim();
-		log.debug(
-			"[response] Stripped [SILENCE] marker, remaining text:",
-			responseText,
-		);
-		if (!responseText) return null;
-	}
-
-	// Check for [REACT:emoji] marker
-	const reactionMatch = responseText.match(REACTION_MARKER_REGEX);
-	if (reactionMatch) {
-		const emoji = reactionMatch[1]?.trim();
-		if (emoji) {
-			log.debug("[response] Bot reacting with emoji:", emoji);
-			try {
-				// Telegram only accepts a fixed emoji set; invalid ones are
-				// rejected by the API and handled by the catch below.
-				await ctx.react(emoji as ReactionTypeEmoji["emoji"]);
-			} catch (error) {
-				log.error("[reaction] Error reacting:", error);
-			}
-		}
-		responseText = responseText
-			.replace(REACTION_MARKER_REGEX, "")
-			.replace(/`/g, "")
-			.trim();
-		if (!responseText) return { cleanedText: "", bufferDirty: false };
-	}
-
-	// Reply options
-	const replyOptions = buildReplyOptions({
-		isGroup,
-		messageId: ctx.message?.message_id,
-		quoteReplyRequested: quoteMarker.quoteReplyRequested,
+	const plan = parseResponse(options.responseText, {
+		allowImages: shouldGenImage || allowPhotoRequest || !!userImagePath,
+		allowSpeech: !isSimpleAssistantMode,
 	});
-
-	// Extract TTS markers up-front so they never leak into an image caption
-	// when [IMAGE:...] and [TTS]...[/TTS] co-occur. Tolerate a missing slash
-	// in the closing tag since the model occasionally emits that variant.
-	const TTS_REGEX = /\[TTS\]([\s\S]+?)\[\/?TTS\]/;
-	const ttsMatch = isSimpleAssistantMode ? null : responseText.match(TTS_REGEX);
-	const ttsText = ttsMatch?.[1]?.trim() ?? null;
-	if (ttsText) {
-		responseText = responseText.replace(TTS_REGEX, ttsText).trim();
-	}
-
-	// Check for image marker
-	// If the user attached an image this turn, always allow the marker (edit intent).
-	const canGenerateImage =
-		shouldGenImage || allowPhotoRequest || !!userImagePath;
-
-	// `[IMAGE_SELF: ...]` is a full-access marker for self-in-scene pictures
-	// (always references the character base for consistency). Plain
-	// `[IMAGE: ...]` in full-access mode is a subject-only picture (no base image),
-	// so "send me a picture of a cat" yields just a cat.
-	const selfMatch = canGenerateImage
-		? responseText.match(IMAGE_SELF_MARKER_REGEX)
-		: null;
-	const imageMatch = canGenerateImage
-		? (selfMatch ?? responseText.match(IMAGE_MARKER_REGEX))
-		: null;
-	const isSelfImage = !!selfMatch;
-	if (!canGenerateImage) {
-		responseText = responseText
-			.replace(IMAGE_SELF_MARKER_REGEX, "")
-			.replace(IMAGE_MARKER_REGEX, "")
-			.trim();
-	}
-	let imageSent = false;
+	const replyOptions = buildReplyOptions({
+		isGroup: options.isGroup,
+		messageId: ctx.message?.message_id,
+		quoteReplyRequested: plan.quoteReplyRequested,
+	});
+	let sent = false;
 	let bufferDirty = false;
-
-	if (imageMatch) {
-		const extractedPrompt = imageMatch[1]?.trim() ?? "";
-		responseText = responseText
-			.replace(IMAGE_SELF_MARKER_REGEX, "")
-			.replace(IMAGE_MARKER_REGEX, "")
-			.trim();
-		const basePath = getBaseImagePath();
-		const isEdit = !!userImagePath;
-		// In full-access mode, plain [IMAGE: ...] is subject-only — do not seed with
-		// the character base image. Only [IMAGE_SELF: ...] references the base.
-		const includeBase = isFullAccessActive() ? isSelfImage : true;
-		const referencePath = includeBase ? (basePath ?? undefined) : undefined;
-
-		// In full-access mode, base image is optional. When editing a user's image,
-		// we don't need the character base either.
-		if (isEdit || basePath || isFullAccessActive()) {
+	if (plan.reaction) {
+		try {
+			await ctx.react(plan.reaction as ReactionTypeEmoji["emoji"]);
+			sent = true;
+		} catch (error) {
+			log.error("[reaction] Failed:", error);
+		}
+	}
+	if (plan.image) {
+		const base = dependencies.baseImage();
+		const fullAccess = dependencies.fullAccess();
+		if (userImagePath || base || fullAccess) {
+			let image: Uint8Array | undefined;
+			chatAction?.update("upload_photo");
 			try {
-				// Generation takes many seconds — keep "sending photo…" alive via
-				// the caller's handle instead of a single ~5s action.
-				if (chatAction) {
-					chatAction.update("upload_photo");
-				} else {
-					await ctx.replyWithChatAction("upload_photo").catch(() => {});
-				}
-				log.debug(
-					`[image] ${isEdit ? "Edit" : "Generate"} prompt:`,
-					extractedPrompt.slice(0, 300),
+				image = userImagePath
+					? await dependencies.editImage(plan.image.prompt, userImagePath)
+					: await dependencies.generateImage(
+							plan.image.prompt,
+							!fullAccess || plan.image.self ? (base ?? undefined) : undefined,
+						);
+			} catch (error) {
+				log.error("[image] Generation failed:", error);
+			}
+			if (image) {
+				// Long text is delivered separately so it cannot invalidate the photo caption.
+				await ctx.replyWithPhoto(
+					new InputFile(image, `${getBotName().toLowerCase()}.png`),
+					{
+						caption:
+							plan.text.length <= 1000 ? plan.text || undefined : undefined,
+						...replyOptions,
+					},
 				);
-				const imageBuffer = userImagePath
-					? await editImage(extractedPrompt, userImagePath)
-					: await generateImage(extractedPrompt, referencePath);
-
-				const filename = `${getBotName().toLowerCase()}.png`;
-				await ctx.replyWithPhoto(new InputFile(imageBuffer, filename), {
-					caption: responseText || undefined,
-					...replyOptions,
-				});
-				imageSent = true;
-
-				// User-initiated edits don't consume the weekly/photo quotas.
-				const consumeWeeklyQuota = !isEdit && shouldGenImage;
-				const consumePhotoRequest = !isEdit && allowPhotoRequest;
-				if (consumeWeeklyQuota) {
-					buffer.lastImageDate = getWeekStart();
-					bufferDirty = true;
-				}
-				if (consumePhotoRequest) {
-					buffer.allowPhotoRequest = false;
-					bufferDirty = true;
-				}
-				if (bufferDirty) {
-					// The passed-in buffer is a stale pre-generation snapshot; apply
-					// only the image flags to a fresh copy under the chat lock so we
-					// don't clobber messages appended by concurrent handlers.
+				if (plan.text.length > 1000)
+					await sendTextReply(ctx, plan.text, replyOptions);
+				const consumeWeekly = !userImagePath && shouldGenImage;
+				const consumeRequest = !userImagePath && allowPhotoRequest;
+				if (consumeWeekly || consumeRequest) {
 					await withChatLock(buffer.chatId, async () => {
 						const fresh = await loadSensory(buffer.chatId);
-						if (consumeWeeklyQuota) fresh.lastImageDate = buffer.lastImageDate;
-						if (consumePhotoRequest) fresh.allowPhotoRequest = false;
+						if (consumeWeekly) fresh.lastImageDate = getWeekStart();
+						if (consumeRequest) fresh.allowPhotoRequest = false;
 						fresh.imageTargetDate = buffer.imageTargetDate;
 						fresh.imageTargetTime = buffer.imageTargetTime;
 						await saveSensory(fresh);
 					});
+					bufferDirty = true;
 				}
-			} catch (error) {
-				log.error("[image] Error generating image:", error);
-				// Fall through to normal text reply
-			}
-		} else {
-			log.warn("[image] No base image found, skipping image generation");
-		}
-	}
-
-	// Send text reply if image wasn't sent (or had no caption)
-	if (!imageSent) {
-		log.debug(
-			"[TTS] Checking for marker:",
-			ttsText ? `found "${ttsText}"` : "not found",
-		);
-
-		if (ttsText) {
-			try {
-				// A voice reply should look like one: "recording voice…" while the
-				// audio is synthesized, not "typing…".
-				if (chatAction) {
-					chatAction.update("record_voice");
-				} else {
-					await ctx.replyWithChatAction("record_voice").catch(() => {});
-				}
-				log.debug("[TTS] Generating speech for:", ttsText);
-				const audioPath = await textToSpeech(ttsText);
-				log.debug("[TTS] Audio saved to:", audioPath);
-				await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
-				if (showTranscription) {
-					await ctx
-						.reply(`📝 ${ttsText}`, replyOptions)
-						.catch((err) =>
-							log.error("[TTS] Failed to show transcription:", err),
-						);
-				}
-				// Cleanup TTS file after sending
-				unlink(audioPath).catch((err) => {
-					log.debug("[TTS] Failed to clean up audio file:", err);
-				});
-			} catch (error) {
-				log.error("[TTS] Error generating speech:", error);
-				try {
-					await ctx.reply(ttsText, replyOptions);
-				} catch (fallbackError) {
-					// The user got no response at all — make sure that is visible
-					log.error("[TTS] Fallback text reply also failed:", fallbackError);
-				}
-			}
-		} else {
-			try {
-				// Switch back to typing in case an image attempt changed the action.
-				if (chatAction) {
-					chatAction.update("typing");
-				} else {
-					await ctx.replyWithChatAction("typing").catch(() => {});
-				}
-				await ctx.reply(responseText, {
-					...replyOptions,
-					parse_mode: "Markdown",
-				});
-			} catch {
-				await ctx.reply(responseText, replyOptions);
+				return {
+					sent: true,
+					cleanedText: plan.text || `[Image sent: ${plan.image.prompt}]`,
+					bufferDirty,
+				};
 			}
 		}
 	}
-
-	return { cleanedText: responseText, bufferDirty };
+	if (plan.speech) {
+		let audioPath: string | undefined;
+		let voiceSent = false;
+		chatAction?.update("record_voice");
+		try {
+			audioPath = await dependencies.textToSpeech(plan.speech);
+			await ctx.replyWithVoice(new InputFile(audioPath), replyOptions);
+			voiceSent = true;
+		} catch (error) {
+			log.error("[TTS] Voice delivery failed:", error);
+		} finally {
+			if (audioPath)
+				await unlink(audioPath).catch((error) =>
+					log.warn("[TTS] Cleanup failed:", error),
+				);
+		}
+		if (voiceSent) {
+			if (plan.textOutsideSpeech)
+				await sendTextReply(ctx, plan.textOutsideSpeech, replyOptions);
+			if (process.env.SHOW_TRANSCRIPTION === "true")
+				await ctx
+					.reply(`📝 ${plan.speech}`, replyOptions)
+					.catch((error) =>
+						log.warn("[TTS] Transcription display failed:", error),
+					);
+		} else {
+			await sendTextReply(ctx, plan.text, replyOptions);
+		}
+		return { sent: true, cleanedText: plan.text, bufferDirty };
+	}
+	if (plan.text) {
+		chatAction?.update("typing");
+		await sendTextReply(ctx, plan.text, replyOptions);
+		sent = true;
+	}
+	return sent ? { sent, cleanedText: plan.text, bufferDirty } : null;
 }

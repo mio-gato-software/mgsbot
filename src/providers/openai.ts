@@ -1,8 +1,8 @@
 import type OpenAI from "openai";
 import { getOpenAIClient, openaiReasoningConfig } from "../ai/openai-client.ts";
-import { resolveOpenAIChatModel } from "../ai/platform.ts";
 import { describeImagePrompt } from "../ai/vision.ts";
 import { log } from "../logger.ts";
+import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
@@ -20,7 +20,7 @@ export class OpenAIChatProvider implements ChatProvider {
 			throw new Error("OPENAI_API_KEY is required when CHAT_PROVIDER=openai");
 		}
 		this.client = getOpenAIClient();
-		this.model = model ?? resolveOpenAIChatModel();
+		this.model = model ?? resolveChatModel("openai");
 	}
 
 	async generateResponse(

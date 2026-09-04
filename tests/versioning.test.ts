@@ -21,13 +21,14 @@ import {
 	unwrapVersioned,
 	wrapVersioned,
 } from "../src/memory/versioning.ts";
+import { MEMORY_DIR } from "../src/runtime-paths.ts";
 import type { FollowUp, SemanticFact, SensoryBuffer } from "../src/types.ts";
 
-// Use a reserved high chatId unlikely to collide with real data.
+// Distinct fixture ID within the disposable test memory root.
 const TEST_CHAT_ID = 999_999_902;
 
-// semantic.json and follow-ups.json are singleton files that may hold real
-// data; snapshot them before the tests and restore afterwards.
+// These singleton fixtures live under the disposable root installed by preload.
+// Restore them between suites to avoid leaking test state.
 const originals = new Map<string, string | null>();
 
 async function snapshot(path: string): Promise<void> {
@@ -72,7 +73,7 @@ function makeFact(overrides: Partial<SemanticFact> = {}): SemanticFact {
 }
 
 beforeAll(async () => {
-	await mkdir("./memory", { recursive: true });
+	await mkdir(MEMORY_DIR, { recursive: true });
 	await mkdir(SENSORY_DIR, { recursive: true });
 	await snapshot(FOLLOW_UPS_PATH);
 	await snapshot(SEMANTIC_PATH);

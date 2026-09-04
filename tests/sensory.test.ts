@@ -13,7 +13,7 @@ import {
 } from "../src/memory/sensory.ts";
 import type { ConversationMessage, SensoryBuffer } from "../src/types.ts";
 
-// Use a reserved high chatId unlikely to collide with real data.
+// Distinct fixture ID within the disposable test memory root.
 const TEST_CHAT_ID = 999_999_901;
 
 async function cleanup(): Promise<void> {

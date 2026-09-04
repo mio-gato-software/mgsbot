@@ -1,7 +1,7 @@
-import { readFile, writeFile } from "node:fs/promises";
 import type { Api } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { extractFollowUps } from "./ai/evaluation.ts";
+import { trackBackground } from "./background-tasks.ts";
 import { botNow, clampToReasonableHours, formatDateTime } from "./bot-time.ts";
 import { pulseTypingBeforeSend } from "./chat-actions.ts";
 import { log } from "./logger.ts";
@@ -12,12 +12,14 @@ import {
 	withChatLock,
 	withFollowUpsLock,
 } from "./memory/index.ts";
-import { unwrapVersioned, wrapVersioned } from "./memory/versioning.ts";
+import { drainPromotionSpool } from "./memory/promotion.ts";
+import { followUpsSchema } from "./memory/schemas.ts";
+import { readStore, writeStore } from "./memory/storage.ts";
 import type { ChatMessage } from "./providers/types.ts";
+import { memoryPath } from "./runtime-paths.ts";
 import type { ConversationMessage, FollowUp } from "./types.ts";
-import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
-export const FOLLOW_UPS_PATH = "./memory/follow-ups.json";
+export const FOLLOW_UPS_PATH = memoryPath("follow-ups.json");
 
 const MAX_PENDING = 5;
 const MAX_SENDS_PER_DAY = 2;
@@ -34,22 +36,11 @@ export const EVENT_DEDUP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 // --- Storage ---
 
 export async function loadFollowUps(): Promise<FollowUp[]> {
-	try {
-		const data = await readFile(FOLLOW_UPS_PATH, "utf-8");
-		return unwrapVersioned<FollowUp[]>(JSON.parse(data));
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error("[follow-ups] Error loading follow-ups.json:", err);
-		}
-		return [];
-	}
+	return readStore(FOLLOW_UPS_PATH, followUpsSchema, () => []);
 }
 
 export async function saveFollowUps(followUps: FollowUp[]): Promise<void> {
-	await atomicWriteFile(
-		FOLLOW_UPS_PATH,
-		JSON.stringify(wrapVersioned(followUps), null, 2),
-	);
+	await writeStore(FOLLOW_UPS_PATH, followUps, followUpsSchema, true);
 }
 
 /**
@@ -313,7 +304,12 @@ export async function checkAndSendFollowUps(
 			};
 			await withChatLock(followUp.chatId, async () => {
 				const fresh = await loadSensory(followUp.chatId);
-				await addMessageToSensory(fresh, botMessage);
+				const overflow = await addMessageToSensory(fresh, botMessage);
+				if (overflow)
+					trackBackground(
+						"proactive-promotion",
+						drainPromotionSpool(fresh.chatId),
+					);
 			});
 		} catch (error) {
 			log.error("[follow-ups] Error sending follow-up:", error);
@@ -369,16 +365,5 @@ export async function detectAndStoreFollowUps(
 // --- Initialization ---
 
 export async function initFollowUps(): Promise<void> {
-	try {
-		await readFile(FOLLOW_UPS_PATH, "utf-8");
-	} catch (err) {
-		if (!isFileNotFound(err)) {
-			log.error("[follow-ups] Error reading follow-ups.json:", err);
-		}
-		await writeFile(
-			FOLLOW_UPS_PATH,
-			JSON.stringify(wrapVersioned([]), null, 2),
-		);
-		log.debug("[follow-ups] Created follow-ups.json");
-	}
+	await saveFollowUps(await loadFollowUps());
 }

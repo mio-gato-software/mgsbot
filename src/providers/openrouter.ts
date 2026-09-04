@@ -1,3 +1,4 @@
+import { resolveChatModel } from "../provider-options.ts";
 import {
 	OpenAiCompatibleChatProvider,
 	requireEnv,
@@ -10,8 +11,7 @@ export class OpenRouterChatProvider extends OpenAiCompatibleChatProvider {
 			errorLabel: "OpenRouter",
 			endpoint: "https://openrouter.ai/api/v1/chat/completions",
 			apiKey: requireEnv("OPENROUTER_API_KEY", "openrouter"),
-			model:
-				model ?? process.env.OPENROUTER_MODEL ?? "anthropic/claude-3.5-sonnet",
+			model: model ?? resolveChatModel("openrouter"),
 			extraHeaders: {
 				"HTTP-Referer":
 					process.env.OPENROUTER_HTTP_REFERER ??

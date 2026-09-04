@@ -1,6 +1,7 @@
 [test]
+preload = ["./tests/preload.ts"]
 # Coverage floor enforced by `bun test --coverage` (used in CI).
-# Raise as coverage grows — 27% funcs / 39% lines as of 2026-07-10.
+# Raise as coverage grows — approximately 47% funcs / 54% lines after maintenance.
 # Explicit per-metric keys: a bare number also enforces statement coverage,
 # which Bun >= 1.3.14 evaluates and fails despite lines/functions passing.
-coverageThreshold = { line = 0.2, function = 0.2 }
+coverageThreshold = { line = 0.5, function = 0.4 }

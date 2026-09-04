@@ -1,4 +1,5 @@
 import { log } from "../logger.ts";
+import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
@@ -32,8 +33,7 @@ export class AnthropicChatProvider implements ChatProvider {
 			);
 		}
 		this.apiKey = apiKey;
-		this.model =
-			model ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5-20250929";
+		this.model = model ?? resolveChatModel("anthropic");
 	}
 
 	async generateResponse(

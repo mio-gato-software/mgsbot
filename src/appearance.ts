@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
+import { memoryPath } from "./runtime-paths.ts";
 
 const POSSIBLE_PATHS = [
-	"./memory/base.png",
-	"./memory/base.jpg",
-	"./memory/base.jpeg",
+	memoryPath("base.png"),
+	memoryPath("base.jpg"),
+	memoryPath("base.jpeg"),
 ];
 
 export function getBaseImagePath(): string | null {
