@@ -322,12 +322,12 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 
 ## Tech Stack
 
-- **Runtime:** Bun v1.3.14 (pinned in CI)
-- **Bot framework:** grammY (`grammy` ^1.42.0)
-- **AI:** OpenAI (`openai` ^7, default chat `gpt-5.6-luna`) and/or Google GenAI (`@google/genai` ^2)
+- **Runtime:** Bun v1.4.1 (pinned in CI)
+- **Bot framework:** grammY (`grammy` ^1.46.0)
+- **AI:** OpenAI (`openai` ^7.10.0, default chat `gpt-5.6-luna`) and/or Google GenAI (`@google/genai` 2.21.0)
 - **Language:** TypeScript (strict mode incl. `noUncheckedIndexedAccess`, ESNext target, bundler module resolution; checked via `bun run typecheck`)
 - **Source code language:** English (variables, functions, comments, file names)
-- **Linter/Formatter:** Biome (`@biomejs/biome` 2.4.16, config in `biome.json`)
+- **Linter/Formatter:** Biome (`@biomejs/biome` 2.5.12, config in `biome.json`)
 - **Tests:** `bun test` (tests/ folder)
 - **CI:** GitHub Actions (`ci.yml`: lint + typecheck + test on every push/PR; `release.yml`: cross-platform binaries on `v*` tags)
 - **Bot conversational language:** Adapts to user (default Spanish, configured during setup)

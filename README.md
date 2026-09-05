@@ -10,7 +10,7 @@ Supports text, `.txt` files, voice notes, audio, images, PDFs, public web pages,
 
 ## Quick start
 
-For running from source, use **Bun 1.3.14** (the version pinned in CI and Docker). You also need a Telegram bot token from [@BotFather](https://t.me/BotFather), your numeric Telegram user ID, and an **OpenAI or Google AI API key**.
+For running from source, use **Bun 1.4.1** (the version pinned in CI and Docker). You also need a Telegram bot token from [@BotFather](https://t.me/BotFather), your numeric Telegram user ID, and an **OpenAI or Google AI API key**.
 
 ```bash
 git clone https://github.com/eliaquin/mgsbot.git
