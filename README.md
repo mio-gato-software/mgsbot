@@ -1,7 +1,7 @@
 # MGS Bot
 
 <p align="center">
-  <img src="assets/bot-avatar.jpg" alt="MGS Bot" width="300" />
+  <img src="assets/bot-avatar.png" alt="MGS Bot" width="300" />
 </p>
 
 A Telegram bot with persistent conversation memory, an evolving personality, voice replies, and image generation. Built with Bun, TypeScript, and grammY.
