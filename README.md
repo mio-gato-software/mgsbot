@@ -1,5 +1,9 @@
 # MGS Bot
 
+<p align="center">
+  <img src="assets/bot-avatar.jpg" alt="MGS Bot" width="300" />
+</p>
+
 A Telegram bot with persistent conversation memory, an evolving personality, voice replies, and image generation. Built with Bun, TypeScript, and grammY.
 
 Supports text, `.txt` files, voice notes, audio, images, PDFs, public web pages, and YouTube links. It runs for one owner in DMs and, optionally, one allowed group. Follow-ups and periodic check-ins are opt-in.
