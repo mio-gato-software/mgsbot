@@ -180,8 +180,8 @@ ${existingFactSummary}
 
 	const userMessage = `Analyze this conversation and extract:
 
-1. **Episode summary**: A brief sentence describing what the conversation was about.
-2. **Importance**: 1-5 (5 = very important).
+1. **Episode summary**: A brief sentence describing what the conversation was about. For news/web discussions, preserve only the personal interaction or a durable interest the user expressed, not article details, headlines, statistics, or a news digest. Temporary web context has its own expiring cache.
+2. **Importance**: 1-5 (5 = very important to the people or relationship). A major world event is not automatically an important personal episode. News-only exchanges with no lasting personal significance should be 1.
 3. **Facts about the PEOPLE**: Extract ONLY data about the people who participate in the conversation. Do NOT save general knowledge, encyclopedic data, or information about topics that were discussed (e.g., if they talk about South Korea, do NOT save facts about Korea; if they talk about a movie, do NOT save the plot).
    What TO save:
    - Personal data: name, age, job, profession, location, family

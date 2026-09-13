@@ -95,7 +95,19 @@ Set `BROWSERBASE_API_KEY` in `.env` and restart to automatically use [Browserbas
 
 The bot retrieves raw HTML/text through Browserbase and extracts readable content locally. API errors, timeouts, and upstream HTTP failures fall back to the existing direct reader. Without a key, it uses the direct reader immediately. Both paths validate public destinations at each redirect and enforce response-size, timeout, and extracted-content limits. Page content is passed to the model as untrusted reference material.
 
-This integration reads supplied URLs; it does not search the web, execute JavaScript, sign in, or interact with pages. It uses Fetch calls from your Browserbase allowance, without browser sessions, proxies, or Model Gateway calls. YouTube and PDF attachments retain their existing processing.
+This integration reads supplied URLs; it does not itself search the web, execute JavaScript, sign in, or interact with pages. It uses Fetch calls from your Browserbase allowance, without browser sessions, proxies, or Model Gateway calls. YouTube and PDF attachments retain their existing processing.
+
+### Optional web search and recent context
+
+Set `BRAVE_API_KEY` and restart to enable public internet search with any chat provider. Missing or blank keys omit the entire feature, including news refreshes; normal conversation continues unchanged. `ENABLE_WEB_SEARCH=false` also disables it.
+
+The conversation model can decide to check an unfamiliar public event, recent news, or a question needing current information. It sends a short acknowledgement before searching, then replies using up to three Brave source excerpts with links. Vague references should prompt clarification; personal news and ordinary chat do not need a lookup. No extra classifier runs on each message. Each turn allows one lookup and at most one additional model response; unavailable search or empty results are reported honestly.
+
+During active use, the bot also refreshes five ambient headlines in the background at most once per 24 hours (shared across chats). `NEWS_CONTEXT_QUERY` defaults to `noticias actualidad República Dominicana mundo`; set `ENABLE_NEWS_CONTEXT=false` for on-demand search only. Headlines are context for relevant conversations, never automatic bulletins. Simple assistant mode supports on-demand search but does not refresh ambient headlines.
+
+`memory/world-context/` holds the shared headlines, five recent lookups **per chat**, and a persistent request counter. Excerpts keep their source URLs and retrieval/publication labels. Context expires after 48 hours, is excluded immediately after expiry and pruned on access; recalling it never extends its lifetime. Identical queries with the same freshness filter reuse results for one hour. The prompt receives at most 6,000 characters of cached context. Raw search results are not appended to sensory memory or promoted into personal facts; extraction preserves personal interests/reactions rather than world news.
+
+`WEB_SEARCH_DAILY_LIMIT` defaults to 30 attempts across the entire bot per UTC day, including headline refreshes and failures, and survives restarts. `0` stops new requests while allowing unexpired cached context. There are no automatic search retries. Search excerpts are treated as untrusted references, not full articles or proof that a reported event occurred. Browserbase is independent and is not required for Brave search.
 
 ## Profile, rules, and character image
 
