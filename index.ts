@@ -8,6 +8,7 @@ import {
 	validateProviderConfiguration,
 } from "./src/provider-options.ts";
 import { loadEnvIntoProcess, parseEnvFile } from "./src/utils.ts";
+import { isBrowserbaseEnabled } from "./src/web-content.ts";
 
 // --- Load .env manually (compiled binaries may not auto-load it) ---
 
@@ -171,6 +172,9 @@ for (const warning of findEnvCaseMismatches(Object.keys(parseEnvFile()))) {
 for (const line of formatProviderStartupSummary()) {
 	log.info(line);
 }
+log.info(
+	`[startup] Web pages: ${isBrowserbaseEnabled() ? "Browserbase Fetch (direct reader fallback)" : "direct reader"}`,
+);
 
 const bot = new Bot(token);
 

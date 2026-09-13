@@ -1,12 +1,26 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import type { Context } from "grammy";
+import { z } from "zod";
+import { log } from "./logger.ts";
 
 const MAX_REDIRECTS = 5;
 const MAX_RESPONSE_BYTES = 2_000_000;
 const MAX_CONTENT_CHARS = 16_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const WEB_URL_REGEX = /https?:\/\/[^\s<>"']+/giu;
+const BROWSERBASE_FETCH_URL = "https://api.browserbase.com/v1/fetch";
+const browserbasePageSchema = z.object({
+	statusCode: z.number().int().min(200).max(599),
+	headers: z.record(z.string(), z.string()),
+	content: z.string(),
+	contentType: z.string(),
+	encoding: z.literal("utf-8"),
+});
+
+export function isBrowserbaseEnabled(): boolean {
+	return Boolean(process.env.BROWSERBASE_API_KEY?.trim());
+}
 
 export interface PublicWebLink {
 	url: string;
@@ -125,6 +139,12 @@ function isPrivateIpAddress(address: string): boolean {
 }
 
 async function assertPublicUrl(url: URL): Promise<void> {
+	if (url.protocol !== "http:" && url.protocol !== "https:") {
+		throw new Error("Unsupported redirect protocol");
+	}
+	if (url.username || url.password) {
+		throw new Error("URL credentials are not allowed");
+	}
 	const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
 	if (
 		!hostname ||
@@ -153,6 +173,7 @@ async function assertPublicUrl(url: URL): Promise<void> {
 async function readLimitedBody(response: Response): Promise<string> {
 	const contentLength = Number(response.headers.get("content-length"));
 	if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
+		await response.body?.cancel();
 		throw new Error("Web page is too large");
 	}
 
@@ -256,25 +277,98 @@ export function extractReadableWebContent(html: string): {
 	return { title, content: content.slice(0, MAX_CONTENT_CHARS) };
 }
 
+function fetchDirectPage(url: URL, fetchImpl: typeof fetch): Promise<Response> {
+	return fetchImpl(url, {
+		headers: {
+			Accept: "text/html,application/xhtml+xml,text/plain;q=0.9",
+			"User-Agent":
+				"Mozilla/5.0 (compatible; MGSBot/1.0; +https://github.com/eliaquin/mgsbot)",
+		},
+		redirect: "manual",
+		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+	});
+}
+
+async function fetchBrowserbasePage(
+	url: URL,
+	apiKey: string,
+	fetchImpl: typeof fetch,
+): Promise<Response> {
+	const response = await fetchImpl(BROWSERBASE_FETCH_URL, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"X-BB-API-Key": apiKey,
+		},
+		// Follow redirects ourselves so every destination is checked before fetching.
+		body: JSON.stringify({
+			url: url.href,
+			format: "raw",
+			allowRedirects: false,
+		}),
+		redirect: "error",
+		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+	});
+	if (!response.ok) {
+		await response.body?.cancel();
+		throw new Error(`Browserbase returned HTTP ${response.status}`);
+	}
+	const page = browserbasePageSchema.parse(
+		JSON.parse(await readLimitedBody(response)),
+	);
+	// Redirects can legitimately have an empty body.
+	if (
+		page.statusCode >= 400 ||
+		(page.statusCode < 300 && !page.content.trim())
+	) {
+		throw new Error("Browserbase could not retrieve readable page content");
+	}
+	// Keep only the metadata the reader uses, not upstream transport headers
+	// (content-length/encoding describe the original page, not this JSON envelope).
+	const headers = new Headers({ "content-type": page.contentType });
+	for (const [name, value] of Object.entries(page.headers)) {
+		if (name.toLowerCase() === "location") headers.set("location", value);
+	}
+	return new Response(
+		[204, 205, 304].includes(page.statusCode) ? null : page.content,
+		{
+			status: page.statusCode,
+			headers,
+		},
+	);
+}
+
 export async function fetchPublicWebPage(
 	rawUrl: string,
+	options: { fetch?: typeof fetch; browserbaseApiKey?: string } = {},
 ): Promise<PublicWebPage> {
 	let url = parseHttpUrl(rawUrl);
 	if (!url) throw new Error("Invalid public web URL");
+	const fetchImpl = options.fetch ?? fetch;
+	let apiKey = (
+		options.browserbaseApiKey ?? process.env.BROWSERBASE_API_KEY
+	)?.trim();
 
 	for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
 		await assertPublicUrl(url);
-		const response = await fetch(url, {
-			headers: {
-				Accept: "text/html,application/xhtml+xml,text/plain;q=0.9",
-				"User-Agent":
-					"Mozilla/5.0 (compatible; MGSBot/1.0; +https://github.com/eliaquin/mgsbot)",
-			},
-			redirect: "manual",
-			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-		});
+		let response: Response;
+		if (apiKey) {
+			try {
+				response = await fetchBrowserbasePage(url, apiKey, fetchImpl);
+			} catch {
+				// Never log provider error bodies: they may echo credentials or page data.
+				log.warn(
+					"[web] Browserbase retrieval failed; using the direct reader.",
+				);
+				apiKey = undefined;
+				response = await fetchDirectPage(url, fetchImpl);
+			}
+		} else {
+			response = await fetchDirectPage(url, fetchImpl);
+		}
 
 		if (response.status >= 300 && response.status < 400) {
+			await response.body?.cancel();
 			const location = response.headers.get("location");
 			if (!location) throw new Error("Redirect has no destination");
 			url = new URL(location, url);
@@ -285,6 +379,7 @@ export async function fetchPublicWebPage(
 		}
 
 		if (!response.ok) {
+			await response.body?.cancel();
 			throw new Error(`Web page returned HTTP ${response.status}`);
 		}
 
@@ -295,6 +390,7 @@ export async function fetchPublicWebPage(
 			!contentType.includes("application/xhtml+xml") &&
 			!contentType.includes("text/plain")
 		) {
+			await response.body?.cancel();
 			throw new Error("URL is not an HTML or text page");
 		}
 
