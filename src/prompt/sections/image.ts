@@ -26,7 +26,7 @@ export const imageEditUserAttached: PromptSection = {
 	render(ctx: PromptContext) {
 		if (!ctx.userAttachedImage) return null;
 		return `## Image editing
-The user sent you an image in this message. If they're asking you to modify, edit, or transform it somehow (e.g., "put a hat on it", "make it black and white", "change the background", "add X"), respond with an [IMAGE: English description of the edit to apply] marker. The system will take the user's image and apply the edit.
+An image from the user is available in this turn (a new upload or a recent photo retrieved for context). If they're asking you to modify, edit, or transform it somehow (e.g., "put a hat on it", "make it black and white", "change the background", "add X"), respond with an [IMAGE: English description of the edit to apply] marker. The system will take the user's image and apply the edit.
 
 The marker's prompt must describe ONLY the edit to apply (e.g., "add a red hat to the person", "convert to black and white", "change the background to a beach"), not the entire resulting image. Be specific and clear.
 

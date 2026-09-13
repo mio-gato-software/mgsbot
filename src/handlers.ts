@@ -4,9 +4,9 @@
 // (re-exported here to keep existing import paths working).
 import type { Bot, Context, MiddlewareFn } from "grammy";
 import { classifyGroupMessageIntent } from "./ai/classifiers.ts";
-import { analyzeYouTube, describeImage } from "./ai/vision.ts";
+import { analyzeYouTube } from "./ai/vision.ts";
 import { isBotOff, isSleepingHour } from "./bot-state.ts";
-import { startChatAction, withChatAction } from "./chat-actions.ts";
+import { withChatAction } from "./chat-actions.ts";
 import { registerCommands } from "./commands.ts";
 import { getBotName, isBotConfigured, loadConfig } from "./config.ts";
 import {
@@ -25,14 +25,13 @@ import {
 	handleDocument,
 	registerDocumentHandler,
 } from "./handlers/document.ts";
-import { registerPhotoHandler } from "./handlers/photo.ts";
+import { handlePhoto, registerPhotoHandler } from "./handlers/photo.ts";
 import {
 	buildGroupResponseOptions,
 	buildReplyAwareTextContent,
 	detectMentionType,
 	getLastBotMessageBeforeLatest,
 	getTelegramReplyContext,
-	hasEditIntent,
 	isIgnorableGroupMessage,
 	processConversationAndTrackGroupContinuation,
 	routeGroupNameMention,
@@ -42,14 +41,11 @@ import {
 import { registerVoiceHandlers } from "./handlers/voice.ts";
 import { log } from "./logger.ts";
 import {
-	cleanupFile,
 	downloadAndTranscribeByFileId,
 	extractYouTubeUrl,
 } from "./media-handlers.ts";
 import { loadSensory } from "./memory/index.ts";
 import { isSimpleAssistantMode } from "./prompt/modes.ts";
-import { createChatProvider } from "./providers/index.ts";
-import { supportsInlineImages } from "./providers/types.ts";
 import { processSetupConversation } from "./setup.ts";
 import { isDev, safeMediaExtension } from "./utils.ts";
 import { extractPublicWebUrl, fetchPublicWebPage } from "./web-content.ts";
@@ -336,130 +332,9 @@ export function registerHandlers(bot: Bot): void {
 				return;
 			}
 
-			// Reply-to-photo: describe image from replied message
+			// Explicit replies can retrieve a photo even after recent context expires.
 			if (replyPhoto && replyPhoto.length > 0) {
-				if (isGroupChat(ctx) && mentionType === "none") {
-					await observeConversationTurn(
-						ctx,
-						`[Reply to image by ${userName}]: "${text}"`,
-						userName,
-					);
-					return;
-				}
-
-				// Receipt feedback while the replied photo downloads and gets
-				// pre-analyzed; stopped before processConversation takes over.
-				const receiving = startChatAction(ctx, "typing");
-				try {
-					const photo = replyPhoto[replyPhoto.length - 1];
-					if (!photo) throw new Error("No photo found in replied message");
-					const replyMessageId = replyMsg?.message_id;
-					if (replyMessageId === undefined) return;
-					const file = await ctx.api.getFile(photo.file_id);
-					const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
-					log.debug("[reply-to-photo] Downloading file:", file.file_path);
-
-					const response = await fetch(url, {
-						signal: AbortSignal.timeout(30_000),
-					});
-					if (!response.ok) {
-						throw new Error(
-							`Download failed: ${response.status} ${response.statusText}`,
-						);
-					}
-
-					const ext = safeMediaExtension(
-						file.file_path?.split(".").pop(),
-						"jpg",
-					);
-					const mimeType = ext === "png" ? "image/png" : "image/jpeg";
-					const filePath = `./audios/photo_reply_${replyMessageId}.${ext}`;
-					const imageBuffer = Buffer.from(await response.arrayBuffer());
-					await Bun.write(filePath, imageBuffer);
-					log.debug(
-						"[reply-to-photo] Saved to:",
-						filePath,
-						`(${imageBuffer.length} bytes)`,
-					);
-
-					const photoSenderUser = replyMsg?.from;
-					const photoSender = sanitizeBracketText(
-						photoSenderUser
-							? (photoSenderUser.first_name ??
-									photoSenderUser.username ??
-									"Unknown")
-							: "Unknown",
-					);
-					const safeName = sanitizeBracketText(userName);
-
-					const provider = createChatProvider();
-
-					try {
-						if (supportsInlineImages(provider)) {
-							// Pass raw image inline (Gemini can see it)
-							const data = imageBuffer.toString("base64");
-							const content = text
-								? `[Image from ${photoSender}]\n\n${safeName}'s message: "${text}"`
-								: `[Image from ${photoSender}]`;
-							receiving.stop();
-							await processConversationAndTrackGroupContinuation(
-								ctx,
-								content,
-								userName,
-								{
-									mentionType,
-									botOff: isBotOff(),
-									isSleepingHour: isSleepingHour(),
-									mediaAttachment: { data, mimeType },
-									userImagePath: filePath,
-								},
-							);
-						} else {
-							// Non-vision provider. Skip describeImage only when the
-							// current message expresses edit intent.
-							const skipDescribe = await hasEditIntent(text);
-							let content: string;
-							if (skipDescribe) {
-								content = text
-									? `[Image from ${photoSender}]\n\n${safeName}'s message: "${text}"`
-									: `[Image from ${photoSender}]`;
-							} else {
-								const replyCaption = replyMsg?.caption;
-								const description = await describeImage(
-									filePath,
-									mimeType,
-									replyCaption ?? undefined,
-								);
-								content = text
-									? `[Image from ${photoSender}]: ${description}\n\n${safeName}'s message: "${text}"`
-									: `[Image from ${photoSender}]: ${description}`;
-							}
-							receiving.stop();
-							await processConversationAndTrackGroupContinuation(
-								ctx,
-								content,
-								userName,
-								{
-									mentionType,
-									botOff: isBotOff(),
-									isSleepingHour: isSleepingHour(),
-									userImagePath: filePath,
-								},
-							);
-						}
-					} finally {
-						await cleanupFile(filePath);
-					}
-				} catch (error) {
-					log.error("[reply-to-photo handler] Error:", error);
-					if (isDev)
-						await ctx
-							.reply(`[Dev] Reply-to-photo error: ${error}`)
-							.catch(() => {});
-				} finally {
-					// Idempotent: guards against the indicator leaking on early errors.
-					receiving.stop();
-				}
+				await handlePhoto(ctx, botToken, text);
 				return;
 			}
 		}

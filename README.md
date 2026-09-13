@@ -8,6 +8,10 @@ A Telegram bot with persistent conversation memory, an evolving personality, voi
 
 Supports text, `.txt` files, voice notes, audio, images, PDFs, public web pages, and YouTube links. It runs for one owner in DMs and, optionally, one allowed group. Follow-ups and periodic check-ins are opt-in.
 
+Photo questions can continue without resending the image. The bot keeps a Telegram file reference and reopens at most the speaker's latest image while it remains in the short-term buffer (10 messages) and is no more than 30 minutes old. This reference survives restarts; image bytes and download URLs are not stored in memory. After that window, reply to the original photo to inspect it again. JPEG, PNG, and WebP files sent without compression follow the same path. Passive group photos cost no vision calls until their sender addresses the bot; reply to a specific photo when discussing someone else's image.
+
+Gemini and OpenAI receive the image with the conversation in a single chat request. Other chat providers use a question-focused visual description. Recent-image follow-ups include at most one image per turn, including intervening text turns within the window; they still incur image-input costs. No additional classifier or separate summary call is added for Gemini/OpenAI. Earlier images are available through explicit replies, not an unlimited visual archive.
+
 ## Quick start
 
 For running from source, use **Bun 1.4.1** (the version pinned in CI and Docker). You also need a Telegram bot token from [@BotFather](https://t.me/BotFather), your numeric Telegram user ID, and an **OpenAI or Google AI API key**.

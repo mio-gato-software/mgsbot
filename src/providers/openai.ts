@@ -31,7 +31,17 @@ export class OpenAIChatProvider implements ChatProvider {
 			{ role: "system" as const, content: systemPrompt },
 			...messages.map((msg) => ({
 				role: msg.role as "user" | "assistant",
-				content: msg.content,
+				content:
+					msg.mediaAttachment && msg.role === "user"
+						? [
+								{ type: "input_text" as const, text: msg.content },
+								{
+									type: "input_image" as const,
+									image_url: `data:${msg.mediaAttachment.mimeType};base64,${msg.mediaAttachment.data}`,
+									detail: "auto" as const,
+								},
+							]
+						: msg.content,
 			})),
 		];
 
