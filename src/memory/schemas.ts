@@ -12,6 +12,13 @@ export const messageSchema = z
 		name: z.string().optional(),
 		userId: z.number().optional(),
 		id: z.string().optional(),
+		image: z
+			.object({
+				fileId: z.string().min(1),
+				messageId: z.number().int(),
+				mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]).optional(),
+			})
+			.optional(),
 	})
 	.passthrough();
 export const sensorySchema = z

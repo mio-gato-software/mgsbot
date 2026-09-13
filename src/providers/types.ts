@@ -30,5 +30,5 @@ export function supportsVision(
 }
 
 export function supportsInlineImages(provider: ChatProvider): boolean {
-	return provider.name === "gemini";
+	return provider.name === "gemini" || provider.name === "openai";
 }

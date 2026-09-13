@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { unlink } from "node:fs/promises";
 import type { Context } from "grammy";
 import { log } from "./logger.ts";
@@ -112,7 +113,18 @@ export async function downloadImage(
 	// Telegram sends multiple sizes; pick the largest
 	const photo = photos?.[photos.length - 1];
 	if (!photo) throw new Error("No photo in message");
-	const file = await ctx.api.getFile(photo.file_id);
+	return downloadImageByFileId(ctx.api, botToken, photo.file_id);
+}
+
+export async function downloadImageByFileId(
+	api: Context["api"],
+	botToken: string,
+	fileId: string,
+	declaredMimeType?: string,
+): Promise<{ filePath: string; mimeType: string }> {
+	const file = await api.getFile(fileId);
+	if (!file.file_path)
+		throw new Error("Telegram did not return an image file path");
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
 	log.debug("[downloadImage] Downloading file:", file.file_path);
 
@@ -125,8 +137,14 @@ export async function downloadImage(
 
 	const rawExt = file.file_path?.split(".").pop();
 	const ext = safeMediaExtension(rawExt, "jpg");
-	const mimeType = ext === "png" ? "image/png" : "image/jpeg";
-	const filePath = `./audios/photo_${ctx.message?.message_id}.${ext}`;
+	const mimeType =
+		declaredMimeType ??
+		(ext === "png"
+			? "image/png"
+			: ext === "webp"
+				? "image/webp"
+				: "image/jpeg");
+	const filePath = `./audios/photo_${randomUUID()}.${ext}`;
 	const buffer = Buffer.from(await response.arrayBuffer());
 	await Bun.write(filePath, buffer);
 	log.debug("[downloadImage] Saved to:", filePath, `(${buffer.length} bytes)`);

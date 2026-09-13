@@ -14,6 +14,14 @@ export interface ConversationMessage {
 	userId?: number;
 	content: string;
 	timestamp: number;
+	image?: ImageReference;
+}
+
+/** Telegram reference only: never persist image bytes or token-bearing URLs. */
+export interface ImageReference {
+	fileId: string;
+	messageId: number;
+	mimeType?: string;
 }
 
 // --- New Memory Architecture ---

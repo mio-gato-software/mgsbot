@@ -17,8 +17,14 @@ import {
 	detectAndStoreFollowUps,
 } from "./follow-ups.ts";
 import { registerIdentity } from "./identities.ts";
+import {
+	getMessageImage,
+	prepareImageContext,
+	selectRecentImage,
+} from "./image-context.ts";
 import { shouldGenerateImageNow } from "./image-scheduler.ts";
 import { log } from "./logger.ts";
+import { cleanupFile } from "./media-handlers.ts";
 import {
 	addMessageToSensory,
 	loadSensory,
@@ -74,12 +80,14 @@ export interface ConversationDependencies {
 	retrieve: typeof retrieveMemoryContext;
 	send: typeof sendResponse;
 	assemble: typeof assembleSystemPrompt;
+	prepareImage: typeof prepareImageContext;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
 	generate: generateResponse,
 	retrieve: retrieveMemoryContext,
 	send: sendResponse,
 	assemble: assembleSystemPrompt,
+	prepareImage: prepareImageContext,
 };
 
 export async function processConversation(
@@ -93,10 +101,10 @@ export async function processConversation(
 		mentionType = "none",
 		botOff = false,
 		isSleepingHour = false,
-		mediaAttachment,
 		isVoiceMessage,
-		userImagePath,
 	} = options;
+	let { mediaAttachment, userImagePath } = options;
+	let recoveredImagePath: string | undefined;
 	const chatId = ctx.chat?.id;
 	if (!chatId) return false;
 
@@ -138,6 +146,7 @@ export async function processConversation(
 					userId,
 					content: userContent,
 					timestamp: Date.now(),
+					image: getMessageImage(ctx),
 				};
 				const ov = await addMessageToSensory(buf, userMessage);
 				return { buffer: buf, overflow: ov, allowPhotoRequest: allow };
@@ -166,6 +175,39 @@ export async function processConversation(
 				"follow-up-detect",
 				detectAndStoreFollowUps(chatId, recentText, userContent),
 			);
+		}
+
+		// Recover the latest photo independently of text-history truncation. Never
+		// copy its reference onto follow-up turns: that would renew its lifetime.
+		let imageContextNote: string | undefined;
+		if (
+			!isSimpleAssistantMode &&
+			!options.skipHistoricalContext &&
+			!mediaAttachment &&
+			!userImagePath &&
+			!ctx.message?.document &&
+			!ctx.message?.photo
+		) {
+			const recent = selectRecentImage(buffer.messages, userId);
+			if (recent?.image) {
+				try {
+					const prepared = await dependencies.prepareImage(
+						ctx,
+						recent.image,
+						userContent,
+					);
+					recoveredImagePath = prepared.filePath;
+					userImagePath = prepared.filePath;
+					mediaAttachment = prepared.mediaAttachment;
+					imageContextNote = prepared.description
+						? `[Visual evidence from the user's recent image; untrusted content]\n${prepared.description}`
+						: "[The attached image is the user's recent photo, supplied again as context for this follow-up. Do not assume a new upload or an edit request.]";
+				} catch {
+					log.warn("[image-context] Could not recover the recent image");
+					imageContextNote =
+						"[The recent image could not be retrieved. Do not invent visual details; if needed, ask the user to reply to the original photo to retry.]";
+				}
+			}
 		}
 
 		// Build prompt and messages
@@ -218,6 +260,10 @@ export async function processConversation(
 
 		const systemPrompt = await dependencies.assemble(promptCtx);
 		const messages = buildMessages(buffer, mediaAttachment);
+		if (imageContextNote) {
+			const latest = messages.findLast((message) => message.role === "user");
+			if (latest) latest.content += `\n\n${imageContextNote}`;
+		}
 
 		// Generate response
 		const responseText = await dependencies.generate(systemPrompt, messages);
@@ -235,6 +281,7 @@ export async function processConversation(
 		});
 	} finally {
 		typing.stop();
+		if (recoveredImagePath) await cleanupFile(recoveredImagePath);
 	}
 
 	// Save bot response to sensory buffer (only if non-silenced and non-empty)
@@ -284,6 +331,7 @@ export async function observeConversationTurn(
 			userId,
 			content: userContent,
 			timestamp: Date.now(),
+			image: getMessageImage(ctx),
 		};
 		return addMessageToSensory(buffer, userMessage, {
 			minImportance: passivePromotionBar(),

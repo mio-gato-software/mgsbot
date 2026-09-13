@@ -8,6 +8,7 @@ import {
 	isGroupChat,
 	observeConversationTurn,
 } from "../conversation.ts";
+import { imageDocumentMimeType } from "../image-context.ts";
 import { log } from "../logger.ts";
 import {
 	cleanupFile,
@@ -17,6 +18,7 @@ import {
 } from "../media-handlers.ts";
 import { isSimpleAssistantMode } from "../prompt/modes.ts";
 import { isDev } from "../utils.ts";
+import { handlePhoto } from "./photo.ts";
 import {
 	detectMentionType,
 	processConversationAndTrackGroupContinuation,
@@ -99,6 +101,14 @@ export async function handleDocument(
 		messageId?: number;
 	},
 ): Promise<boolean> {
+	if (imageDocumentMimeType(document)) {
+		await handlePhoto(
+			ctx,
+			botToken,
+			options?.requestText ?? ctx.message?.caption,
+		);
+		return true;
+	}
 	const kind = documentKind(document);
 	if (!kind) return false;
 	if (isSimpleAssistantMode) return true;
