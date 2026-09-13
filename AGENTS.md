@@ -59,6 +59,8 @@ src/
                                group routing (mention/continuation/spontaneous), security middleware
                                (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
   group-state.ts             ← In-memory group rate limits: spontaneous-reply cooldowns, continuation windows
+  web-content.ts             ← Public URL reading: optional Browserbase Fetch when BROWSERBASE_API_KEY is set,
+                               direct-reader fallback, public-address/redirect validation, bounded extraction
   conversation.ts            ← Main turn pipeline (named options and injectable generation/retrieval/delivery): sensory append, memory retrieval, prompt assembly,
                                provider call, response send, episode promotion, background evaluation
   response-plan.ts           ← Pure marker parsing into a structured delivery plan

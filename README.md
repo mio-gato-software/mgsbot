@@ -89,6 +89,14 @@ OpenRouter can also use fal.ai: set `CHAT_PROVIDER=openrouter`, `OPENROUTER_TRAN
 
 Weather context defaults to Santo Domingo. Set `WEATHER_LATITUDE`, `WEATHER_LONGITUDE`, and `WEATHER_CITY` for another location.
 
+### Public web links and Browserbase
+
+Set `BROWSERBASE_API_KEY` in `.env` and restart to automatically use [Browserbase Fetch](https://docs.browserbase.com/platform/fetch/overview) for public links shared in Telegram. Only the key is needed. The startup log reports the selected reader. This works with every chat provider, including in simple assistant mode; passive group links are not fetched.
+
+The bot retrieves raw HTML/text through Browserbase and extracts readable content locally. API errors, timeouts, and upstream HTTP failures fall back to the existing direct reader. Without a key, it uses the direct reader immediately. Both paths validate public destinations at each redirect and enforce response-size, timeout, and extracted-content limits. Page content is passed to the model as untrusted reference material.
+
+This integration reads supplied URLs; it does not search the web, execute JavaScript, sign in, or interact with pages. It uses Fetch calls from your Browserbase allowance, without browser sessions, proxies, or Model Gateway calls. YouTube and PDF attachments retain their existing processing.
+
 ## Profile, rules, and character image
 
 To configure the bot without the Telegram setup conversation:
