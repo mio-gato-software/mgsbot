@@ -8,6 +8,7 @@ import {
 	resolveEmbeddingProvider,
 } from "./ai/platform.ts";
 import { log } from "./logger.ts";
+import { recordMemoryUsage } from "./memory/usage-metrics.ts";
 import { memoryPath } from "./runtime-paths.ts";
 import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
@@ -78,7 +79,9 @@ function hashText(text: string): string {
 		.digest("hex");
 }
 
-async function embedWithGemini(text: string): Promise<number[]> {
+async function embedWithGemini(
+	text: string,
+): Promise<{ embedding: number[]; inputTokens?: number }> {
 	const response = await getAI().models.embedContent({
 		model: getEmbeddingModel(),
 		contents: text,
@@ -86,10 +89,12 @@ async function embedWithGemini(text: string): Promise<number[]> {
 	});
 	const embedding = response.embeddings?.[0]?.values;
 	if (!embedding) throw new Error("No embedding returned from Gemini");
-	return embedding;
+	return { embedding };
 }
 
-async function embedWithOpenAI(text: string): Promise<number[]> {
+async function embedWithOpenAI(
+	text: string,
+): Promise<{ embedding: number[]; inputTokens?: number }> {
 	const response = await getOpenAIClient().embeddings.create({
 		model: getEmbeddingModel(),
 		input: text,
@@ -98,7 +103,7 @@ async function embedWithOpenAI(text: string): Promise<number[]> {
 	});
 	const embedding = response.data[0]?.embedding;
 	if (!embedding) throw new Error("No embedding returned from OpenAI");
-	return embedding;
+	return { embedding, inputTokens: response.usage?.prompt_tokens };
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
@@ -108,6 +113,13 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 	if (cached) {
 		diskCache.delete(hash);
 		diskCache.set(hash, cached);
+		await recordMemoryUsage({
+			operation: "embedding",
+			model: `${resolveEmbeddingProvider()}:${getEmbeddingModel()}`,
+			status: "ok",
+			cacheHit: true,
+			inputChars: text.length,
+		});
 		return cached;
 	}
 
@@ -116,12 +128,23 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 	const provider = resolveEmbeddingProvider();
 
 	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+		const start = Date.now();
 		try {
-			const embedding =
+			const { embedding, inputTokens } =
 				provider === "openai"
 					? await embedWithOpenAI(text)
 					: await embedWithGemini(text);
 
+			await recordMemoryUsage({
+				operation: "embedding",
+				model: `${provider}:${getEmbeddingModel()}`,
+				status: "ok",
+				attempt: attempt + 1,
+				cacheHit: false,
+				inputChars: text.length,
+				inputTokens,
+				durationMs: Date.now() - start,
+			});
 			diskCache.set(hash, embedding);
 			diskCacheDirty = true;
 			cacheRevision++;
@@ -130,6 +153,15 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 			);
 			return embedding;
 		} catch (err: unknown) {
+			await recordMemoryUsage({
+				operation: "embedding",
+				model: `${provider}:${getEmbeddingModel()}`,
+				status: "error",
+				attempt: attempt + 1,
+				cacheHit: false,
+				inputChars: text.length,
+				durationMs: Date.now() - start,
+			});
 			lastError = err;
 			const status =
 				err instanceof Error && "status" in err

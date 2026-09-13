@@ -86,11 +86,11 @@ describe("applyRetrievalReinforcement", () => {
 		);
 	});
 
-	test("a fact that is only ever recalled eventually decays out", () => {
+	test("a fact that is only ever recalled still reaches archival confidence", () => {
 		const now = Date.now();
 		// Never reconfirmed in conversation for 80 days: the ceiling has eroded
 		// below the store's minimum confidence, so repetition can no longer keep
-		// the fact alive.
+		// the fact in routine context.
 		const ancient = makeFact({
 			id: "f1",
 			lastConfirmed: now - 80 * DAY_MS,

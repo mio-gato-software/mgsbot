@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { alertOwner, errorSummary } from "../alerts.ts";
 import { log } from "../logger.ts";
+import { recordMemoryUsage, type TokenUsage } from "../memory/usage-metrics.ts";
 import { type ChatMessage, createChatProvider } from "../providers/index.ts";
 import { withRetry } from "../utils.ts";
 import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
@@ -10,6 +11,11 @@ import {
 	resolveOpenAIBackgroundReasoningEffort,
 	supportProviderHasKey,
 } from "./platform.ts";
+
+interface BackgroundResult {
+	text: string;
+	usage: TokenUsage;
+}
 
 let backgroundAI: GoogleGenAI | null = null;
 let warnedBackgroundFallback = false;
@@ -38,7 +44,7 @@ async function generateGeminiBackgroundResponse(
 	systemPrompt: string,
 	messages: ChatMessage[],
 	model: string,
-): Promise<string> {
+): Promise<BackgroundResult> {
 	if (!backgroundAI) backgroundAI = new GoogleGenAI({});
 	const response = await backgroundAI.models.generateContent({
 		model,
@@ -48,14 +54,22 @@ async function generateGeminiBackgroundResponse(
 			parts: [{ text: msg.content }],
 		})),
 	});
-	return response.text ?? "";
+	return {
+		text: response.text ?? "",
+		usage: {
+			inputTokens: response.usageMetadata?.promptTokenCount,
+			outputTokens: response.usageMetadata?.candidatesTokenCount,
+			cachedInputTokens: response.usageMetadata?.cachedContentTokenCount,
+			reasoningTokens: response.usageMetadata?.thoughtsTokenCount,
+		},
+	};
 }
 
 async function generateOpenAIBackgroundResponse(
 	systemPrompt: string,
 	messages: ChatMessage[],
 	model: string,
-): Promise<string> {
+): Promise<BackgroundResult> {
 	const input = [
 		...(systemPrompt
 			? [{ role: "system" as const, content: systemPrompt }]
@@ -70,35 +84,80 @@ async function generateOpenAIBackgroundResponse(
 		input,
 		...openaiReasoningConfig(model, resolveOpenAIBackgroundReasoningEffort()),
 	});
-	return response.output_text ?? "";
+	return {
+		text: response.output_text ?? "",
+		usage: {
+			inputTokens: response.usage?.input_tokens,
+			outputTokens: response.usage?.output_tokens,
+			cachedInputTokens: response.usage?.input_tokens_details?.cached_tokens,
+			reasoningTokens: response.usage?.output_tokens_details?.reasoning_tokens,
+		},
+	};
 }
 
 export async function generateBackgroundResponse(
 	systemPrompt: string,
 	messages: ChatMessage[],
+	operation = "background",
 ): Promise<string> {
-	return (await generateBackgroundResponseWithModel(systemPrompt, messages))
-		.text;
+	return (
+		await generateBackgroundResponseWithModel(systemPrompt, messages, operation)
+	).text;
 }
 
 export async function generateBackgroundResponseWithModel(
 	systemPrompt: string,
 	messages: ChatMessage[],
+	operation = "background",
 ): Promise<{ text: string; model: string }> {
 	const provider = resolveBackgroundProvider();
 	const model = backgroundModelId();
+	const inputChars =
+		systemPrompt.length +
+		messages.reduce((sum, message) => sum + message.content.length, 0);
 
 	if (supportProviderHasKey(provider)) {
 		try {
-			const text = await withRetry(
-				async () =>
-					provider === "openai"
-						? generateOpenAIBackgroundResponse(systemPrompt, messages, model)
-						: generateGeminiBackgroundResponse(systemPrompt, messages, model),
+			let attempt = 0;
+			const result = await withRetry(
+				async () => {
+					attempt++;
+					const start = Date.now();
+					try {
+						const result = await (provider === "openai"
+							? generateOpenAIBackgroundResponse(systemPrompt, messages, model)
+							: generateGeminiBackgroundResponse(
+									systemPrompt,
+									messages,
+									model,
+								));
+						await recordMemoryUsage({
+							operation,
+							model: `${provider}:${model}`,
+							status: "ok",
+							attempt,
+							inputChars,
+							outputChars: result.text.length,
+							durationMs: Date.now() - start,
+							...result.usage,
+						});
+						return result;
+					} catch (error) {
+						await recordMemoryUsage({
+							operation,
+							model: `${provider}:${model}`,
+							status: "error",
+							attempt,
+							inputChars,
+							durationMs: Date.now() - start,
+						});
+						throw error;
+					}
+				},
 				2,
 				500,
 			);
-			return { text, model: `${provider}:${model}` };
+			return { text: result.text, model: `${provider}:${model}` };
 		} catch (error) {
 			log.warn(
 				"[background-model] Background model failed, falling back to chat provider:",
@@ -114,8 +173,29 @@ export async function generateBackgroundResponseWithModel(
 	}
 
 	const chat = createChatProvider();
-	return {
-		text: await generateResponse(systemPrompt, messages),
-		model: `${chat.name}:${chat.model}`,
-	};
+	const start = Date.now();
+	try {
+		const text = await generateResponse(systemPrompt, messages);
+		// The chat-provider interface exposes text only. Leave unavailable token counts unset.
+		await recordMemoryUsage({
+			operation,
+			model: `${chat.name}:${chat.model}`,
+			fallback: true,
+			status: "ok",
+			inputChars,
+			outputChars: text.length,
+			durationMs: Date.now() - start,
+		});
+		return { text, model: `${chat.name}:${chat.model}` };
+	} catch (error) {
+		await recordMemoryUsage({
+			operation,
+			model: `${chat.name}:${chat.model}`,
+			fallback: true,
+			status: "error",
+			inputChars,
+			durationMs: Date.now() - start,
+		});
+		throw error;
+	}
 }

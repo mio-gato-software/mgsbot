@@ -41,6 +41,7 @@ import {
 	type SpooledChunk,
 	savePreparedPromotion,
 } from "./promotion-spool.ts";
+import { confirmSemanticFacts } from "./semantic.ts";
 import { commitSpooledRemoval } from "./sensory.ts";
 
 export interface PromotionDependencies {
@@ -86,22 +87,33 @@ function inferSemanticScope(
 	return "chat";
 }
 
+const NARRATIVE_BATCH_SIZE = 4;
+const NARRATIVE_MAX_WAIT_MS = 60 * 60 * 1000;
+
 async function updateNarrativeMemory(
 	chatId: number,
-	id: string,
-	prepared: PreparedPromotion,
+	chunks: SpooledChunk[],
 	dependencies: PromotionDependencies,
 ): Promise<void> {
-	const { episode, recentText } = prepared;
-	const month = botNow(episode.timestamp).format("YYYY-MM");
+	const first = chunks[0];
+	if (!first?.prepared) return;
+	const prepared = first.prepared;
+	const promotions = chunks.flatMap((chunk) =>
+		chunk.prepared ? [chunk.prepared] : [],
+	);
+	const episodes = promotions.map((item) => item.episode);
+	const episodeIds = episodes.map((episode) => episode.id);
+	const month = botNow(prepared.episode.timestamp).format("YYYY-MM");
 	const [existingRelationship, existingChapter] = await Promise.all([
 		loadRelationshipMemory(chatId),
 		getChapterForMonth(chatId, month),
 	]);
-	const relationshipApplied = existingRelationship?.appliedEpisodeIds?.includes(
-		episode.id,
+	const relationshipApplied = episodeIds.every((id) =>
+		existingRelationship?.appliedEpisodeIds?.includes(id),
 	);
-	const chapterApplied = existingChapter?.episodeIds.includes(episode.id);
+	const chapterApplied = episodeIds.every((id) =>
+		existingChapter?.episodeIds.includes(id),
+	);
 	if (relationshipApplied && chapterApplied) return;
 	const fingerprint = (value: unknown) =>
 		createHash("sha256")
@@ -111,10 +123,10 @@ async function updateNarrativeMemory(
 		relationship: fingerprint(existingRelationship),
 		chapter: fingerprint(existingChapter),
 	};
-	// Another chunk may have succeeded while this one was awaiting recovery.
-	// Rebuild only unapplied narrative effects whose source state has changed.
+	const previousIds = prepared.narrativeEpisodeIds ?? [prepared.episode.id];
 	if (
 		!prepared.narrative ||
+		fingerprint(previousIds) !== fingerprint(episodeIds) ||
 		(!relationshipApplied &&
 			prepared.narrativeBase?.relationship !== currentBase.relationship) ||
 		(!chapterApplied && prepared.narrativeBase?.chapter !== currentBase.chapter)
@@ -122,56 +134,101 @@ async function updateNarrativeMemory(
 		prepared.narrative = await dependencies.narrate({
 			existingRelationship,
 			existingChapter,
-			episode,
-			recentMessages: recentText,
 			month,
+			episode: {
+				...prepared.episode,
+				summary: episodes
+					.map(
+						(episode) =>
+							`[${botNow(episode.timestamp).format("YYYY-MM-DD")}] ${episode.summary}`,
+					)
+					.join("\n"),
+				participants: uniqueNames(
+					episodes.flatMap((episode) => episode.participants),
+				),
+				importance: Math.max(...episodes.map((episode) => episode.importance)),
+			},
+			// Extraction has already captured the durable details. Do not pay to send
+			// full transcripts again for every narrative rewrite.
+			recentMessages: promotions
+				.map((item) =>
+					[
+						item.episode.summary,
+						...item.facts.map((fact) => fact.content),
+						...(item.personalitySignals?.traitChanges.map(
+							(change) => change.reason,
+						) ?? []),
+					].join("\n"),
+				)
+				.join("\n\n"),
 		});
 		prepared.narrativeBase = currentBase;
-		await savePreparedPromotion(chatId, id, prepared);
+		prepared.narrativeEpisodeIds = episodeIds;
+		await savePreparedPromotion(chatId, first.id, prepared);
 	}
 	const update = prepared.narrative;
-	const now = Date.now();
 	const writes = await Promise.allSettled([
-		dependencies.saveRelationship(chatId, (existing) =>
-			existing?.appliedEpisodeIds?.includes(episode.id)
-				? existing
-				: {
-						chatId,
-						...update.relationship,
-						updatedAt: now,
-						interactionCount: (existing?.interactionCount ?? 0) + 1,
-						appliedEpisodeIds: [
-							...(existing?.appliedEpisodeIds ?? []),
-							episode.id,
-						],
-					},
-		),
-		dependencies.saveChapter(chatId, month, (existing) =>
-			existing?.episodeIds.includes(episode.id)
-				? existing
-				: {
-						id: existing?.id ?? `chapter_${chatId}_${month}`,
-						chatId,
-						month,
-						...update.chapter,
-						participants: uniqueNames([
-							...(existing?.participants ?? []),
-							...episode.participants,
-						]),
-						importance: Math.max(
-							existing?.importance ?? 1,
-							update.chapter.importance,
-						),
-						episodeIds: [...(existing?.episodeIds ?? []), episode.id],
-						updatedAt: now,
-					},
-		),
+		dependencies.saveRelationship(chatId, (existing) => {
+			const unapplied = episodeIds.filter(
+				(id) => !existing?.appliedEpisodeIds?.includes(id),
+			);
+			if (!unapplied.length && existing) return existing;
+			return {
+				chatId,
+				...update.relationship,
+				updatedAt: Date.now(),
+				interactionCount: (existing?.interactionCount ?? 0) + unapplied.length,
+				appliedEpisodeIds: [
+					...(existing?.appliedEpisodeIds ?? []),
+					...unapplied,
+				],
+			};
+		}),
+		dependencies.saveChapter(chatId, month, (existing) => {
+			const unapplied = episodeIds.filter(
+				(id) => !existing?.episodeIds.includes(id),
+			);
+			if (!unapplied.length && existing) return existing;
+			return {
+				id: existing?.id ?? `chapter_${chatId}_${month}`,
+				chatId,
+				month,
+				...update.chapter,
+				participants: uniqueNames([
+					...(existing?.participants ?? []),
+					...episodes.flatMap((episode) => episode.participants),
+				]),
+				importance: Math.max(
+					existing?.importance ?? 1,
+					update.chapter.importance,
+				),
+				episodeIds: [...(existing?.episodeIds ?? []), ...unapplied],
+				updatedAt: Date.now(),
+			};
+		}),
 	]);
 	const failures = writes.filter((write) => write.status === "rejected");
 	if (failures.length)
 		throw new AggregateError(
 			failures.map((failure) => failure.reason),
 			"Narrative persistence failed",
+		);
+}
+
+async function recordFailure(
+	chatId: number,
+	chunk: SpooledChunk,
+	error: unknown,
+): Promise<void> {
+	const attempts = await recordSpoolAttempt(chatId, chunk.id);
+	log.warn(
+		`[spool] Failed chunk ${chunk.id} (attempt ${attempts}/${MAX_PROMOTION_ATTEMPTS}):`,
+		error,
+	);
+	if (attempts >= MAX_PROMOTION_ATTEMPTS)
+		await alertOwner(
+			"promotion-failed",
+			`Promotion ${chunk.id} paused after ${attempts} attempts; its messages remain in the spool for recovery.`,
 		);
 }
 
@@ -204,6 +261,7 @@ const spoolDrainsInProgress = new Set<number>();
 export async function drainPromotionSpool(
 	chatId: number,
 	dependencies = defaultPromotionDependencies,
+	options: { flushNarrative?: boolean } = {},
 ): Promise<void> {
 	if (spoolDrainsInProgress.has(chatId)) return;
 	spoolDrainsInProgress.add(chatId);
@@ -222,23 +280,45 @@ export async function drainPromotionSpool(
 					chunk,
 					dependencies,
 				});
-				await dependencies.complete(chatId, chunk.id);
+				const pending = (await loadPromotionSpool(chatId)).find(
+					(item) => item.id === chunk.id,
+				);
+				if (!pending?.prepared) await dependencies.complete(chatId, chunk.id);
 			} catch (err) {
-				const attempts = await recordSpoolAttempt(chatId, chunk.id);
-				if (attempts >= MAX_PROMOTION_ATTEMPTS) {
-					log.error(
-						`[spool] Retaining failed chunk ${chunk.id} for chat ${chatId} after ${attempts} attempts:`,
-						err,
+				await recordFailure(chatId, chunk, err);
+			}
+		}
+		const pending = (await loadPromotionSpool(chatId)).filter(
+			(chunk) => !chunk.failed && chunk.prepared?.effectsApplied,
+		);
+		const months = new Map<string, SpooledChunk[]>();
+		for (const chunk of pending) {
+			if (!chunk.prepared) continue;
+			const month = botNow(chunk.prepared.episode.timestamp).format("YYYY-MM");
+			const group = months.get(month) ?? [];
+			group.push(chunk);
+			months.set(month, group);
+		}
+		for (const group of months.values()) {
+			for (let i = 0; i < group.length; i += NARRATIVE_BATCH_SIZE) {
+				const batch = group.slice(i, i + NARRATIVE_BATCH_SIZE);
+				const due =
+					options.flushNarrative ||
+					batch.length >= NARRATIVE_BATCH_SIZE ||
+					batch.some(
+						(chunk) =>
+							chunk.reason === "inactivity-wipe" ||
+							Date.now() - chunk.spooledAt >= NARRATIVE_MAX_WAIT_MS ||
+							(chunk.prepared?.episode.importance ?? 0) >= 4 ||
+							!!chunk.prepared?.narrative,
 					);
-					await alertOwner(
-						"promotion-failed",
-						`Promotion ${chunk.id} paused after ${attempts} attempts; its messages remain in the spool for recovery.`,
-					);
-				} else {
-					log.warn(
-						`[spool] Retry failed for chunk ${chunk.id} in chat ${chatId} (attempt ${attempts}/${MAX_PROMOTION_ATTEMPTS}):`,
-						err,
-					);
+				if (!due) continue;
+				try {
+					await updateNarrativeMemory(chatId, batch, dependencies);
+					for (const chunk of batch)
+						await dependencies.complete(chatId, chunk.id);
+				} catch (error) {
+					for (const chunk of batch) await recordFailure(chatId, chunk, error);
 				}
 			}
 		}
@@ -250,7 +330,9 @@ export async function drainPromotionSpool(
 /** Retry every chat's spooled chunks (startup + periodic job). */
 export async function retrySpooledPromotions(): Promise<void> {
 	for (const chatId of await listSpooledChatIds()) {
-		await drainPromotionSpool(chatId);
+		await drainPromotionSpool(chatId, defaultPromotionDependencies, {
+			flushNarrative: true,
+		});
 	}
 }
 
@@ -300,7 +382,7 @@ export async function promoteToMemory(
 	// linearly with the whole semantic store.
 	const existingFacts = await getRelevantExistingFactsForDedup([
 		...participants.map((participant) => ({
-			content: participant,
+			content: `${participant} ${recentText}`,
 			category: "person" as const,
 			subject: participant,
 			sourceChatId: chatId,
@@ -364,12 +446,32 @@ export async function promoteToMemory(
 	// pollute episodes with "casual conversation" placeholders. Bars live in
 	// promotion-policy.ts and every decision is recorded, so the passive bar can
 	// be calibrated against what it actually dropped (`bun run promote:stats`).
+	const confirmedFactIds = [
+		...new Set(
+			(result.confirmedFacts ?? [])
+				.filter(
+					(confirmation) =>
+						existingFacts.some((fact) => fact.id === confirmation.id) &&
+						confirmation.evidence.trim().length >= 8 &&
+						overflow.some(
+							(message) =>
+								message.role === "user" &&
+								message.content.includes(confirmation.evidence),
+						),
+				)
+				.map((confirmation) => confirmation.id),
+		),
+	];
 	const factImportances = result.facts.map((f) => f.importance);
+	const confirmationImportances = existingFacts
+		.filter((fact) => confirmedFactIds.includes(fact.id))
+		.map((fact) => fact.importance);
 	const hasSignals = !!result.personalitySignals?.traitChanges?.length;
 	const kept = meetsPromotionBar(
 		{
 			importance: result.importance,
 			factImportances,
+			confirmationImportances,
 			hasPersonalitySignals: hasSignals,
 		},
 		minImportance,
@@ -383,6 +485,7 @@ export async function promoteToMemory(
 		parseOk: true,
 		importance: result.importance,
 		factImportances,
+		confirmationImportances,
 		droppedFacts: result.extraction?.droppedFacts ?? 0,
 		hasPersonalitySignals: hasSignals,
 		kept,
@@ -445,6 +548,7 @@ export async function promoteToMemory(
 	}
 
 	const prepared: PreparedPromotion = {
+		confirmedFactIds,
 		episode,
 		facts: semanticFacts,
 		personalitySignals: result.personalitySignals,
@@ -460,8 +564,14 @@ async function applyPreparedPromotion(
 	prepared: PreparedPromotion,
 	dependencies: PromotionDependencies,
 ): Promise<void> {
+	if (prepared.effectsApplied) return;
 	await dependencies.saveEpisode(chatId, prepared.episode);
 	await dependencies.saveFacts(prepared.facts);
+	await confirmSemanticFacts(
+		prepared.confirmedFactIds ?? [],
+		id,
+		prepared.episode.timestamp,
+	);
 	if (prepared.personalitySignals?.traitChanges.length) {
 		await applyPersonalitySignals(
 			prepared.personalitySignals,
@@ -469,5 +579,6 @@ async function applyPreparedPromotion(
 			id,
 		);
 	}
-	await updateNarrativeMemory(chatId, id, prepared, dependencies);
+	prepared.effectsApplied = true;
+	await savePreparedPromotion(chatId, id, prepared);
 }

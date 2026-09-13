@@ -44,6 +44,7 @@ export const factSchema = z
 		lastConfirmed: timestamp,
 		lastRecalledAt: timestamp.optional(),
 		lastDecayedAt: timestamp.optional(),
+		archivedAt: timestamp.optional(),
 		scope: z.enum(["global", "chat", "person"]).optional(),
 		sourceChatId: z.number().optional(),
 		validUntil: timestamp.optional(),

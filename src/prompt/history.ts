@@ -1,5 +1,6 @@
 import type { ChatMessage, MediaAttachment } from "../providers/types.ts";
 import type { ConversationMessage, SensoryBuffer } from "../types.ts";
+import { compactMediaMessageContent } from "./media-preview.ts";
 
 function formatTimeGap(diffMs: number): string {
 	const diffHours = diffMs / (1000 * 60 * 60);
@@ -22,10 +23,11 @@ function formatConversationMessage(
 	preserveFull = false,
 ): ChatMessage {
 	const role = msg.role === "user" ? "user" : "assistant";
+	const preview = preserveFull
+		? msg.content
+		: compactMediaMessageContent(msg.content);
 	const rawContent =
-		msg.role === "user" && msg.name
-			? `[${msg.name}]: ${msg.content}`
-			: msg.content;
+		msg.role === "user" && msg.name ? `[${msg.name}]: ${preview}` : preview;
 	const content =
 		preserveFull || rawContent.length <= PROMPT_HISTORY_TRUNCATE_CHARS
 			? rawContent

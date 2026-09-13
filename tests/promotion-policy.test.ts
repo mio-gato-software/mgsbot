@@ -140,3 +140,31 @@ describe("summarizePromotionMetrics", () => {
 		).toBe(1);
 	});
 });
+
+test("confirmations preserve gate decisions without inflating newly extracted facts", () => {
+	const record = {
+		ts: Date.now(),
+		chatId: 1,
+		source: "active" as const,
+		retried: false,
+		bar: 2,
+		defaultBar: 2,
+		messageCount: 5,
+		model: "test",
+		parseOk: true,
+		importance: 1,
+		factImportances: [],
+		confirmationImportances: [3],
+		droppedFacts: 0,
+		hasPersonalitySignals: false,
+		kept: true,
+		summary: "Preference reconfirmed",
+	};
+	expect(meetsPromotionBar(record, 2, 2)).toBe(true);
+	const summary = summarizePromotionMetrics([record]);
+	expect(summary.extraction.factsPerChunk).toBe(0);
+	expect(summary.extraction.emptyExtractions).toBe(0);
+	expect(
+		summary.bySource.active.counterfactual.find((row) => row.bar === 2)?.kept,
+	).toBe(1);
+});

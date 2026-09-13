@@ -14,7 +14,7 @@ export const SEMANTIC_PATH = memoryPath("semantic.json");
 const SEMANTIC_DEDUP_THRESHOLD = 0.85;
 const CONFIDENCE_DECAY_RATE = 0.02; // Per day
 const MIN_CONFIDENCE = 0.1;
-const MAX_PERMANENT_FACTS = 25;
+const MAX_PROMPT_PERMANENT_FACTS = 25;
 const MAX_DEDUP_FACTS = 30;
 // Retrieval reinforcement: throttle so an active conversation doesn't rewrite
 // the store on every message, and bump gently (dedup reconfirm uses +0.2).
@@ -25,10 +25,10 @@ const REINFORCEMENT_CONFIDENCE_BUMP = 0.05;
 // impersonating evidence:
 //  1. A ceiling — retrieval alone can only hold a fact at this confidence.
 //     Going above it requires genuine reconfirmation in conversation (the
-//     dedup merge path, which is the only thing that moves lastConfirmed).
+//     dedup merges or explicit user-evidenced confirmations).
 //  2. The ceiling itself erodes as that last real confirmation ages, so a fact
-//     the bot keeps quoting back to itself still decays out of the store
-//     instead of becoming immortal.
+//     the bot keeps quoting back to itself still ages into historical
+//     archival instead of perpetual routine recall.
 export const REINFORCEMENT_CONFIDENCE_CEILING = 0.75;
 export const REINFORCEMENT_CEILING_EROSION_PER_DAY = 0.01;
 
@@ -84,6 +84,7 @@ function applySupersession(
 function findDedupCandidates(
 	store: SemanticFact[],
 	newFact: SemanticFact,
+	queryText?: string,
 ): SemanticFact[] {
 	const sameSubject = store.filter(
 		(existing) =>
@@ -95,7 +96,13 @@ function findDedupCandidates(
 	);
 	if (sameSubject.length >= MAX_DEDUP_FACTS) {
 		return sameSubject
-			.sort((a, b) => b.importance - a.importance)
+			.sort(
+				(a, b) =>
+					(queryText
+						? computeTextScore(queryText, b.content) -
+							computeTextScore(queryText, a.content)
+						: 0) || b.importance - a.importance,
+			)
 			.slice(0, MAX_DEDUP_FACTS);
 	}
 
@@ -111,7 +118,14 @@ function findDedupCandidates(
 		.sort((a, b) => {
 			const aTime = a.lastConfirmed ?? a.createdAt;
 			const bTime = b.lastConfirmed ?? b.createdAt;
-			return b.importance - a.importance || bTime - aTime;
+			return (
+				(queryText
+					? computeTextScore(queryText, b.content) -
+						computeTextScore(queryText, a.content)
+					: 0) ||
+				b.importance - a.importance ||
+				bTime - aTime
+			);
 		})
 		.slice(0, MAX_DEDUP_FACTS - sameSubject.length);
 
@@ -212,16 +226,8 @@ export async function addSemanticFacts(
 						existing.sourceChatId ??= newFact.sourceChatId;
 					}
 					applySupersession(store, newFact, existing.id, now);
-					// Promote to permanent if new fact is permanent and cap allows
-					if (newFact.permanent && !existing.permanent) {
-						const permanentCount = store.filter((f) => f.permanent).length;
-						if (permanentCount < MAX_PERMANENT_FACTS) {
-							existing.permanent = true;
-							log.debug(
-								`[semantic] Promoted to permanent: "${existing.content.slice(0, 60)}"`,
-							);
-						}
-					}
+					if (newFact.permanent) existing.permanent = true;
+					delete existing.archivedAt;
 					merged = true;
 					log.debug(
 						`[semantic] Merged duplicate (similarity=${similarity.toFixed(2)}): "${newFact.content.slice(0, 60)}"`,
@@ -231,16 +237,6 @@ export async function addSemanticFacts(
 			}
 
 			if (!merged) {
-				// Enforce permanent fact cap
-				if (newFact.permanent) {
-					const permanentCount = store.filter((f) => f.permanent).length;
-					if (permanentCount >= MAX_PERMANENT_FACTS) {
-						log.debug(
-							`[semantic] Permanent fact cap reached (${MAX_PERMANENT_FACTS}), skipping: "${newFact.content.slice(0, 60)}"`,
-						);
-						continue;
-					}
-				}
 				store.push(newFact);
 				applySupersession(store, newFact, newFact.id, now);
 				log.debug(
@@ -279,7 +275,15 @@ export async function getRelevantExistingFactsForDedup(
 			sourceChatId: draft.sourceChatId,
 		};
 
-		for (const fact of findDedupCandidates(store, draftFact)) {
+		for (const fact of findDedupCandidates(
+			store,
+			draftFact,
+			draft.content,
+		).sort(
+			(a, b) =>
+				computeTextScore(draft.content, b.content) -
+				computeTextScore(draft.content, a.content),
+		)) {
 			selected.set(fact.id, fact);
 			if (selected.size >= maxCount) break;
 		}
@@ -354,11 +358,18 @@ export async function getRelevantFacts(
 			0.15 * fact.confidence +
 			0.1 * recencyScore;
 
-		return { fact, score };
+		return {
+			fact,
+			score,
+			relevant: similarity >= 0.45 || keywordScore >= 0.15,
+		};
 	});
 
 	scored.sort((a, b) => b.score - a.score);
-	return scored.slice(0, maxCount).map((s) => s.fact);
+	return scored
+		.filter(({ fact, relevant }) => !fact.archivedAt || relevant)
+		.slice(0, maxCount)
+		.map((s) => s.fact);
 }
 
 /**
@@ -384,6 +395,7 @@ export async function getFactsForSubjects(
 		(f) =>
 			isFactActive(f) &&
 			!f.permanent &&
+			!f.archivedAt &&
 			f.category === "person" &&
 			f.subject &&
 			allAliases.has(normalizeName(f.subject)),
@@ -472,9 +484,75 @@ export async function reinforceRecalledFacts(factIds: string[]): Promise<void> {
 	});
 }
 
-export async function getPermanentFacts(): Promise<SemanticFact[]> {
-	const store = await loadSemanticStore();
-	return store.filter((f) => f.permanent === true);
+export async function getPermanentFacts(
+	options: {
+		maxCount?: number;
+		queryText?: string;
+		queryEmbedding?: number[];
+		subjects?: string[];
+		chatId?: number;
+	} = {},
+): Promise<SemanticFact[]> {
+	const subjects = new Set((options.subjects ?? []).map(normalizeName));
+	const score = (fact: SemanticFact) =>
+		(subjects.has(normalizeName(fact.subject ?? "")) ? 1 : 0) +
+		computeTextScore(options.queryText ?? "", fact.content) +
+		(options.queryEmbedding && canCompareEmbedding(options.queryEmbedding, fact)
+			? cosineSimilarity(options.queryEmbedding, fact.embedding)
+			: 0) +
+		fact.importance / 20;
+	return (await loadSemanticStore())
+		.filter(
+			(f) =>
+				f.permanent &&
+				isFactActive(f) &&
+				(f.scope !== "chat" || f.sourceChatId === options.chatId),
+		)
+		.map((fact) => ({ fact, score: score(fact) }))
+		.sort((a, b) => b.score - a.score)
+		.slice(0, options.maxCount ?? MAX_PROMPT_PERMANENT_FACTS)
+		.map(({ fact }) => fact);
+}
+
+/** User-evidenced confirmations are checkpointed with the promotion and applied once. */
+export async function confirmSemanticFacts(
+	ids: string[],
+	promotionId: string,
+	confirmedAt: number,
+): Promise<void> {
+	if (!ids.length) return;
+	await withSemanticLock(async () => {
+		const store = await loadSemanticStore();
+		const receipt = `confirmation_${promotionId}`;
+		for (const fact of store) {
+			if (
+				!ids.includes(fact.id) ||
+				!isFactActive(fact) ||
+				fact.appliedFactIds?.includes(receipt)
+			)
+				continue;
+			fact.appliedFactIds = [...(fact.appliedFactIds ?? []), receipt];
+			// A delayed retry must not roll back a newer confirmation or freshness clock.
+			if (confirmedAt < fact.lastConfirmed) continue;
+			fact.lastConfirmed = confirmedAt;
+			fact.lastDecayedAt = Math.max(
+				Date.now(),
+				confirmedAt,
+				fact.lastDecayedAt ?? 0,
+			);
+			fact.confidence = Math.max(
+				fact.confidence,
+				Math.max(
+					0,
+					1 -
+						(Math.max(0, Date.now() - confirmedAt) / 86400000) *
+							CONFIDENCE_DECAY_RATE,
+				),
+			);
+			if (fact.confidence >= MIN_CONFIDENCE) delete fact.archivedAt;
+		}
+		await saveSemanticStore(store);
+	});
 }
 
 let lastDecayDate = "";
@@ -482,12 +560,14 @@ let lastDecayDate = "";
 export async function decayConfidence(now = Date.now()): Promise<{
 	total: number;
 	removed: number;
+	archived: number;
 }> {
 	return withSemanticLock(async () => {
 		const today = getDateString(now);
 		const store = await loadSemanticStore();
-		if (lastDecayDate === today) return { total: store.length, removed: 0 };
-		const totalBefore = store.length;
+		if (lastDecayDate === today)
+			return { total: store.length, removed: 0, archived: 0 };
+		let archived = 0;
 
 		for (const fact of store) {
 			normalizeFactShape(fact);
@@ -501,19 +581,19 @@ export async function decayConfidence(now = Date.now()): Promise<{
 			fact.lastDecayedAt = now;
 		}
 
-		// Remove facts below minimum confidence (preserve permanent)
-		const filtered = store.filter(
-			(f) => f.permanent || f.confidence >= MIN_CONFIDENCE,
-		);
-		const removed = totalBefore - filtered.length;
-
-		if (removed > 0) {
-			log.debug(`[semantic] Decayed confidence: removed ${removed} facts`);
+		// Confidence is freshness, not a deletion policy. Preserve historical evidence.
+		for (const fact of store) {
+			if (
+				!fact.permanent &&
+				fact.confidence < MIN_CONFIDENCE &&
+				!fact.archivedAt
+			) {
+				fact.archivedAt = now;
+				archived++;
+			}
 		}
-
-		await saveSemanticStore(filtered);
+		await saveSemanticStore(store);
 		lastDecayDate = today;
-
-		return { total: filtered.length, removed };
+		return { total: store.length, removed: 0, archived };
 	});
 }

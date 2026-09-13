@@ -146,7 +146,7 @@ export function registerCommands(bot: Bot): void {
 		try {
 			const result = await decayConfidence();
 			await ctx.reply(
-				`Optimizado:\n\nSemantic facts: ${result.total}\nEliminados por baja confianza: ${result.removed}`,
+				`Optimizado:\n\nSemantic facts: ${result.total}\nArchivados por baja confianza: ${result.archived}`,
 			);
 		} catch (error) {
 			await ctx.reply(`Error optimizando: ${error}`);

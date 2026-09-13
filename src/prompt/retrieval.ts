@@ -7,7 +7,7 @@ import {
 	getFactsForSubjects,
 	getPermanentFacts,
 	getQueryEmbedding,
-	getRecentChapters,
+	getRelevantChapters,
 	getRelevantEpisodes,
 	getRelevantFacts,
 	loadRelationshipMemory,
@@ -60,9 +60,17 @@ export async function retrieveMemoryContext(input: RetrievalInput) {
 			chatId,
 		}),
 		getFactsForSubjects(subjects, input.participantFactLimit ?? 3),
-		getPermanentFacts(),
+		getPermanentFacts({
+			queryText: text,
+			queryEmbedding: embedding,
+			subjects,
+			chatId,
+		}),
 		loadRelationshipMemory(chatId),
-		getRecentChapters(chatId),
+		getRelevantChapters(
+			chatId,
+			messages.findLast((message) => message.role === "user")?.content ?? text,
+		),
 	]);
 	const byId = new Map(facts.map((fact) => [fact.id, fact]));
 	for (const fact of participantFacts)

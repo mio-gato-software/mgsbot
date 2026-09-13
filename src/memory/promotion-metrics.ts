@@ -55,6 +55,7 @@ export interface PromotionMetricRecord {
 	/** LLM-judged episode importance, 1-5 (0 when extraction failed). */
 	importance: number;
 	factImportances: number[];
+	confirmationImportances?: number[];
 	/** Facts the validator rejected (bad category, missing subject, ...). */
 	droppedFacts: number;
 	hasPersonalitySignals: boolean;
@@ -207,7 +208,11 @@ function extractionStats(records: PromotionMetricRecord[]): ExtractionStats {
 		if (!record.parseOk) stats.parseFailures++;
 		facts += record.factImportances.length;
 		dropped += record.droppedFacts;
-		if (record.parseOk && record.factImportances.length === 0) {
+		if (
+			record.parseOk &&
+			record.factImportances.length === 0 &&
+			!record.confirmationImportances?.length
+		) {
 			stats.emptyExtractions++;
 		}
 	}

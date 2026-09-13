@@ -108,3 +108,35 @@ describe("applyFactRetirements", () => {
 		expect(fact.confidence).toBe(0.1);
 	});
 });
+
+test("unchanged janitor clusters are not re-reviewed on later days", async () => {
+	const { runSemanticJanitor } = await import("../src/janitor.ts");
+	const { saveSemanticStore } = await import("../src/memory/semantic.ts");
+	const now = Date.UTC(2044, 0, 1);
+	const facts = Array.from({ length: 6 }, (_, i) => ({
+		id: `review-${i}`,
+		category: "person" as const,
+		subject: "Janitor Fixture",
+		content: `Distinct detail ${i}`,
+		embedding: [],
+		importance: 3,
+		confidence: 1,
+		createdAt: now,
+		lastConfirmed: now,
+	}));
+	await saveSemanticStore(facts);
+	let calls = 0;
+	const review = async () => {
+		calls++;
+		return [];
+	};
+	await runSemanticJanitor({ now, review });
+	await runSemanticJanitor({ now: now + 86400000, review });
+	expect(calls).toBe(1);
+	const first = facts[0];
+	if (!first) throw new Error("Missing fixture");
+	first.content = "Changed detail";
+	await saveSemanticStore(facts);
+	await runSemanticJanitor({ now: now + 2 * 86400000, review });
+	expect(calls).toBe(2);
+});

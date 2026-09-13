@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { log } from "../logger.ts";
 import { getTraitDefinitionsForPrompt } from "../personality.ts";
 import type {
@@ -48,79 +49,51 @@ export interface LongTermMemoryUpdate {
 	chapter: Pick<MemoryChapter, "title" | "summary" | "importance">;
 }
 
-function compactList(raw: unknown, maxItems: number): string[] {
-	if (!Array.isArray(raw)) return [];
-	return raw
-		.filter((item): item is string => typeof item === "string")
-		.map((item) => item.trim())
-		.filter(Boolean)
-		.slice(0, maxItems);
+const shortText = z.string().trim().min(1).max(1600);
+const narrativeSchema = z.object({
+	relationship: z.object({
+		summary: shortText,
+		tone: z.string().trim().min(1).max(120),
+		notableDynamics: z
+			.array(z.string().trim().min(1).max(300))
+			.max(MAX_RELATIONSHIP_DYNAMICS),
+		openThreads: z
+			.array(z.string().trim().min(1).max(300))
+			.max(MAX_RELATIONSHIP_THREADS),
+	}),
+	chapter: z.object({
+		title: z.string().trim().min(1).max(200),
+		summary: shortText,
+		importance: z.number().int().min(1).max(5),
+	}),
+});
+
+export function validateLongTermMemoryUpdate(
+	raw: unknown,
+): LongTermMemoryUpdate {
+	return narrativeSchema.parse(raw);
 }
 
-function validateLongTermMemoryUpdate(raw: unknown): LongTermMemoryUpdate {
-	const candidate = (raw ?? {}) as {
-		relationship?: Partial<RelationshipMemory>;
-		chapter?: Partial<MemoryChapter>;
-	};
-	const relationship = candidate.relationship ?? {};
-	const chapter = candidate.chapter ?? {};
+const extractionSchema = z.object({
+	summary: shortText,
+	importance: z.number().int().min(1).max(5),
+	facts: z.array(z.unknown()),
+	confirmedFacts: z
+		.array(
+			z.object({
+				id: z.string().min(1),
+				evidence: z.string().trim().min(8).max(2000),
+			}),
+		)
+		.optional(),
+});
 
-	const relationshipSummary =
-		typeof relationship.summary === "string" && relationship.summary.trim()
-			? relationship.summary.trim()
-			: "The relationship is still forming through casual conversations.";
-	const tone =
-		typeof relationship.tone === "string" && relationship.tone.trim()
-			? relationship.tone.trim()
-			: "casual";
-
-	const chapterSummary =
-		typeof chapter.summary === "string" && chapter.summary.trim()
-			? chapter.summary.trim()
-			: "A small conversation added a bit of shared context.";
-	const title =
-		typeof chapter.title === "string" && chapter.title.trim()
-			? chapter.title.trim()
-			: "Shared moments";
-	const importance =
-		typeof chapter.importance === "number"
-			? Math.max(1, Math.min(5, Math.round(chapter.importance)))
-			: 2;
-
-	return {
-		relationship: {
-			summary: relationshipSummary,
-			tone,
-			notableDynamics: compactList(
-				relationship.notableDynamics,
-				MAX_RELATIONSHIP_DYNAMICS,
-			),
-			openThreads: compactList(
-				relationship.openThreads,
-				MAX_RELATIONSHIP_THREADS,
-			),
-		},
-		chapter: {
-			title,
-			summary: chapterSummary,
-			importance,
-		},
-	};
-}
-
-function validatePromotionResult(
+export function validatePromotionResult(
 	raw: PromotionResult,
 	model = "",
 ): PromotionResult {
-	const summary =
-		typeof raw.summary === "string" && raw.summary.trim()
-			? raw.summary.trim()
-			: "casual conversation";
-
-	const importance =
-		typeof raw.importance === "number"
-			? Math.max(1, Math.min(5, Math.round(raw.importance)))
-			: 1;
+	const checked = extractionSchema.parse(raw);
+	const { summary, importance } = checked;
 
 	const rawFacts = raw.facts ?? [];
 	const facts = rawFacts
@@ -178,6 +151,7 @@ function validatePromotionResult(
 		summary,
 		importance,
 		facts,
+		confirmedFacts: checked.confirmedFacts,
 		personalitySignals,
 		extraction: { model, droppedFacts: rawFacts.length - facts.length },
 	};
@@ -193,7 +167,8 @@ export async function evaluateConversationChunk(
 FACTS ALREADY SAVED (do NOT duplicate):
 ${existingFactSummary}
 
-	IMPORTANT: Only add NEW information not already covered above.
+	IMPORTANT: Only add NEW information to "facts".
+	When a USER explicitly restates or confirms a saved fact, return its id in "confirmedFacts" with an exact verbatim quote from that user message as "evidence". Never use bot messages, quoted bot assertions, or the saved-fact list itself as confirmation. Do not create a duplicate fact for a confirmation.
 	If a new fact clearly replaces or contradicts one of these saved mutable facts, include that old fact's id in the new fact's "supersedes" array.
 	Only supersede mutable facts such as current job, current location, current plans, preferences, or opinions. NEVER supersede permanent facts.
 
@@ -240,7 +215,8 @@ ${existingFactSummary}
    - Mood, opinions
    Be VERY selective: only data that will NEVER change in the person's life.
 5. **Supersession**: If a new fact replaces or contradicts an older mutable saved fact, set "supersedes" to the old fact id(s). If unsure, leave it empty.
-6. **Personality signals**: Does the conversation reveal something about how the bot is evolving emotionally? Only if the signals are clear.
+6. **Confirmations**: Return "confirmedFacts": [{"id": "saved fact id", "evidence": "verbatim user quote"}] for explicit user reconfirmations; otherwise []. A quote must affirm the fact, not ask about it or contradict it. Extract facts only from user-provided evidence, never from the bot repeating its memories.
+7. **Personality signals**: Does the conversation reveal something about how the bot is evolving emotionally? Only if the signals are clear.
 You can ONLY use these EXACT trait names (do not invent others):
 ${getTraitDefinitionsForPrompt()}
 
@@ -248,7 +224,7 @@ If the conversation shows no clear signals, leave traitChanges empty.
 Each delta must be between -0.15 and +0.15.
 ${contextSection}
 Respond ONLY with JSON:
-{"summary": "brief summary", "importance": 1-5, "facts": [{"content": "fact about the PERSON", "category": "person|group|rule|event", "subject": "name (only if person)", "context": "why it matters", "importance": 1-5, "permanent": false, "supersedes": []}], "personalitySignals": {"traitChanges": [{"trait": "warmth", "delta": 0.1, "reason": "reason for the change"}]}}
+{"summary": "brief summary", "importance": 1-5, "confirmedFacts": [], "facts": [{"content": "fact about the PERSON", "category": "person|group|rule|event", "subject": "name (only if person)", "context": "why it matters", "importance": 1-5, "permanent": false, "supersedes": []}], "personalitySignals": {"traitChanges": [{"trait": "warmth", "delta": 0.1, "reason": "reason for the change"}]}}
 
 If there's nothing personally relevant: {"summary": "casual conversation", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
 
@@ -258,6 +234,7 @@ ${recentMessages}`;
 	const { text, model } = await generateBackgroundResponseWithModel(
 		systemPrompt,
 		[{ role: "user", content: userMessage }],
+		"extraction",
 	);
 
 	// An unparseable reply used to degrade to "casual conversation, importance 1",
@@ -330,6 +307,7 @@ Goal:
 Rules:
 - Be concise and concrete.
 - Do not invent events.
+- Some supplied episodes may already appear in one existing memory after a partial write. Merge them without repeating events or losing other existing details.
 - Do not store general world knowledge.
 - Do not turn temporary activities into timeless facts.
 - Open threads should be relationally useful, not task-manager reminders.
@@ -367,11 +345,11 @@ Respond ONLY with JSON:
 	// comes back, so a model hiccup would replace accumulated narrative memory
 	// with "The relationship is still forming...". Throw and keep what we have —
 	// the episode and its facts are already saved by this point, and the next
-	// promotion updates the narrative. (The defaults still fill in individual
-	// missing fields of an otherwise valid reply.)
+	// promotion retries the narrative. Missing essential fields also fail closed.
 	const { text, model } = await generateBackgroundResponseWithModel(
 		systemPrompt,
 		[{ role: "user", content: userMessage }],
+		"narrative",
 	);
 	const jsonMatch = text.match(/\{[\s\S]*\}/);
 	if (!jsonMatch) {
@@ -393,7 +371,7 @@ export interface FactRetirement {
 /**
  * Janitor pass over a cluster of same-subject facts: ask the background model
  * which facts are contradicted by newer ones or are redundant duplicates.
- * Conservative by instruction; returns an empty list on any parse failure.
+ * Conservative by instruction; invalid responses are retried on a later pass.
  */
 export async function reviewFactCluster(input: {
 	subject: string;
@@ -434,13 +412,15 @@ Respond ONLY with JSON:
 
 If nothing should be retired: {"retire": []}`;
 
-	const text = await generateBackgroundResponse(systemPrompt, [
-		{ role: "user", content: userMessage },
-	]);
+	const text = await generateBackgroundResponse(
+		systemPrompt,
+		[{ role: "user", content: userMessage }],
+		"janitor",
+	);
 
 	try {
 		const jsonMatch = text.match(/\{[\s\S]*\}/);
-		if (!jsonMatch) return [];
+		if (!jsonMatch) throw new Error("Missing janitor JSON");
 		const parsed = JSON.parse(jsonMatch[0]) as {
 			retire?: Array<{
 				id?: unknown;
@@ -448,7 +428,8 @@ If nothing should be retired: {"retire": []}`;
 				reason?: unknown;
 			}>;
 		};
-		if (!Array.isArray(parsed.retire)) return [];
+		if (!Array.isArray(parsed.retire))
+			throw new Error("Missing janitor retirements");
 		return parsed.retire
 			.filter(
 				(
@@ -465,8 +446,7 @@ If nothing should be retired: {"retire": []}`;
 				reason: typeof entry.reason === "string" ? entry.reason.trim() : "",
 			}));
 	} catch (error) {
-		log.debug("[reviewFactCluster] Parse error:", error);
-		return [];
+		throw new ExtractionParseError("janitor", text, error);
 	}
 }
 
@@ -507,9 +487,11 @@ Messages:
 ${recentMessages}`;
 
 	try {
-		const text = await generateBackgroundResponse(systemPrompt, [
-			{ role: "user", content: userMessage },
-		]);
+		const text = await generateBackgroundResponse(
+			systemPrompt,
+			[{ role: "user", content: userMessage }],
+			"follow-up-extraction",
+		);
 
 		const jsonMatch = text.match(/\{[\s\S]*\}/);
 		if (!jsonMatch) return [];

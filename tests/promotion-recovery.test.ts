@@ -101,11 +101,11 @@ test("failure before all embeddings finish leaves a durable chunk and no partial
 		if (text.startsWith("Ana")) throw new Error("temporary embedding failure");
 		return embed(text);
 	};
-	await drainPromotionSpool(chatId, dependencies);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	expect((await loadWorkingMemory(chatId)).episodes).toHaveLength(0);
 	expect(await loadPromotionSpool(chatId)).toHaveLength(1);
 	dependencies.embed = embed;
-	await drainPromotionSpool(chatId, dependencies);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	expect((await loadWorkingMemory(chatId)).episodes).toHaveLength(1);
 	expect(await loadPromotionSpool(chatId)).toHaveLength(0);
 });
@@ -121,10 +121,10 @@ test("failure after a fact write replays checkpoints without duplicate episodes,
 			throw new Error("crash after fact write");
 		}
 	};
-	await drainPromotionSpool(chatId, dependencies);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	const pending = await loadPromotionSpool(chatId);
 	expect(pending[0]?.prepared).toBeDefined();
-	await drainPromotionSpool(chatId, dependencies);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	expect(evaluated).toBe(1);
 	expect(embedded).toBe(2);
 	expect(narrated).toBe(1);
@@ -145,11 +145,11 @@ test("a replay after all effects committed keeps personality and narrative uncha
 	dependencies.narrate = async () => {
 		throw new Error("narrative unavailable");
 	};
-	await drainPromotionSpool(chatId, dependencies);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	const checkpoint = (await loadPromotionSpool(chatId))[0];
 	expect(checkpoint?.prepared).toBeDefined();
 	dependencies.narrate = narrate;
-	await drainPromotionSpool(chatId, dependencies);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	const personalityBefore = await readFile(
 		memoryPath("personality.json"),
 		"utf8",
@@ -160,7 +160,7 @@ test("a replay after all effects committed keeps personality and narrative uncha
 		memoryPath("promotion-spool", `${chatId}.json`),
 		JSON.stringify({ schemaVersion: 1, data: [checkpoint] }),
 	);
-	await drainPromotionSpool(chatId, dependencies);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	expect(await readFile(memoryPath("personality.json"), "utf8")).toBe(
 		personalityBefore,
 	);
@@ -173,7 +173,7 @@ test("journaled transfers recover if the process stops before removing sensory m
 	buffer.messages = messages;
 	await saveSensory(buffer);
 	await queue();
-	await drainPromotionSpool(chatId, dependencies);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	expect((await loadSensory(chatId)).messages).toHaveLength(0);
 	expect((await loadWorkingMemory(chatId)).episodes).toHaveLength(1);
 });
@@ -203,7 +203,8 @@ test("exhausted retries retain the original messages for recovery", async () => 
 	dependencies.evaluate = async () => {
 		throw new Error("provider unavailable");
 	};
-	for (let i = 0; i < 10; i++) await drainPromotionSpool(chatId, dependencies);
+	for (let i = 0; i < 10; i++)
+		await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	const chunks = await loadPromotionSpool(chatId);
 	expect(chunks).toHaveLength(1);
 	expect(chunks[0]?.failed).toBe(true);
@@ -245,9 +246,9 @@ for (const phase of [
 				crash();
 				await defaultPromotionDependencies.complete(...args);
 			};
-		await drainPromotionSpool(chatId, dependencies);
+		await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 		expect(await loadPromotionSpool(chatId)).toHaveLength(1);
-		await drainPromotionSpool(chatId, dependencies);
+		await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 		expect(await loadPromotionSpool(chatId)).toHaveLength(0);
 		expect((await loadWorkingMemory(chatId)).episodes).toHaveLength(1);
 		expect(await loadSemanticStore()).toHaveLength(1);
@@ -260,19 +261,7 @@ for (const phase of [
 for (const phase of ["relationship", "chapter"] as const) {
 	test(`a delayed ${phase} retry preserves narrative from later promotions`, async () => {
 		await queue();
-		await spoolChunk({
-			chatId,
-			messages: [
-				{
-					id: "later-message",
-					role: "user",
-					name: "Ana",
-					timestamp: stamp,
-					content: "A new job",
-				},
-			],
-			reason: "overflow",
-		});
+
 		const evaluate = dependencies.evaluate;
 		dependencies.evaluate = async (...args) => ({
 			...(await evaluate(...args)),
@@ -312,9 +301,22 @@ for (const phase of ["relationship", "chapter"] as const) {
 				failOnce();
 				await defaultPromotionDependencies.saveChapter(...args);
 			};
-		await drainPromotionSpool(chatId, dependencies);
+		await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 		expect(await loadPromotionSpool(chatId)).toHaveLength(1);
-		await drainPromotionSpool(chatId, dependencies);
+		await spoolChunk({
+			chatId,
+			messages: [
+				{
+					id: "later-message",
+					role: "user",
+					name: "Ana",
+					timestamp: stamp,
+					content: "A new job",
+				},
+			],
+			reason: "overflow",
+		});
+		await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 		const relationship = await loadRelationshipMemory(chatId);
 		const chapter = await getChapterForMonth(
 			chatId,
@@ -351,4 +353,194 @@ test("a failed journal write does not remove the original sensory messages", asy
 	expect((await loadSensory(chatId)).messages).toHaveLength(10);
 	expect(await readFile(path, "utf8")).toBe("{damaged");
 	await rm(path);
+});
+
+test("four promotions share one narrative call while facts are saved immediately", async () => {
+	for (let i = 0; i < 4; i++) {
+		await spoolChunk({
+			chatId,
+			messages: [
+				{
+					role: "user",
+					name: "Ana",
+					id: `batch-${i}`,
+					timestamp: Date.now(),
+					content: `Plan ${i}`,
+				},
+			],
+			reason: "overflow",
+		});
+		await drainPromotionSpool(chatId, dependencies);
+		expect((await loadWorkingMemory(chatId)).episodes).toHaveLength(i + 1);
+		if (i < 3) {
+			expect(narrated).toBe(0);
+			expect(
+				(await loadPromotionSpool(chatId)).every(
+					(chunk) => chunk.prepared?.effectsApplied,
+				),
+			).toBe(true);
+		}
+	}
+	expect(evaluated).toBe(4);
+	expect(narrated).toBe(1);
+	expect(await loadPromotionSpool(chatId)).toHaveLength(0);
+	expect((await loadRelationshipMemory(chatId))?.interactionCount).toBe(4);
+});
+
+test("pending narrative survives reload and flush without repeating extraction", async () => {
+	await queue();
+	await drainPromotionSpool(chatId, dependencies);
+	expect(narrated).toBe(0);
+	const pending = await loadPromotionSpool(chatId);
+	expect(pending[0]?.prepared?.effectsApplied).toBe(true);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
+	expect(evaluated).toBe(1);
+	expect(narrated).toBe(1);
+	expect(await loadPromotionSpool(chatId)).toHaveLength(0);
+});
+
+test("narrative is flushed on inactivity even below the batch threshold", async () => {
+	await spoolChunk({ chatId, messages, reason: "inactivity-wipe" });
+	await drainPromotionSpool(chatId, dependencies);
+	expect(narrated).toBe(1);
+	expect(await loadPromotionSpool(chatId)).toHaveLength(0);
+});
+
+test("a complete media transcript reaches extraction after overflow and disk reload", async () => {
+	const tail = "My favorite hobby is restoring antique clocks";
+	const buffer = await loadSensory(chatId);
+	await addMessageToSensory(buffer, {
+		role: "user",
+		name: "Ana",
+		content: `[Audio from Ana]: ${"Some introductory words. ".repeat(100)}${tail}`,
+		timestamp: Date.now(),
+	});
+	for (let i = 1; i < 11; i++)
+		await addMessageToSensory(buffer, {
+			role: "user",
+			name: "Ana",
+			content: `message ${i}`,
+			timestamp: Date.now(),
+		});
+	let extracted = "";
+	const evaluate = dependencies.evaluate;
+	dependencies.evaluate = async (...args) => {
+		extracted = args[0];
+		return evaluate(...args);
+	};
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
+	expect(extracted).toContain(tail);
+	expect(extracted).not.toContain("Previous transcription compacted");
+});
+
+test("confirmations require a saved id and evidence from a user, and replay only once", async () => {
+	const oldTime = Date.now() - 100 * 86400000;
+	await saveSemanticStore([
+		{
+			id: "hobby",
+			subject: "Ana",
+			content: "Ana enjoys pottery",
+			category: "person",
+			importance: 3,
+			embedding: [1, 0, 0],
+			confidence: 0,
+			archivedAt: oldTime,
+			createdAt: oldTime,
+			lastConfirmed: oldTime,
+		},
+	]);
+	const confirmationTime = Date.now();
+	await spoolChunk({
+		chatId,
+		reason: "overflow",
+		messages: [
+			{
+				id: "user-confirmation",
+				role: "user",
+				name: "Ana",
+				content: "I still enjoy pottery every weekend",
+				timestamp: confirmationTime,
+			},
+			{
+				id: "bot-claim",
+				role: "model",
+				content: "You enjoy painting every weekend",
+				timestamp: confirmationTime,
+			},
+		],
+	});
+	dependencies.evaluate = async () => ({
+		summary: "A hobby confirmed",
+		importance: 1,
+		facts: [],
+		confirmedFacts: [
+			{ id: "hobby", evidence: "I still enjoy pottery every weekend" },
+			{ id: "invented", evidence: "I still enjoy pottery every weekend" },
+		],
+	});
+	await drainPromotionSpool(chatId, dependencies);
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
+	const stored = await loadSemanticStore();
+	expect(stored).toHaveLength(1);
+	expect(stored[0]?.lastConfirmed).toBe(confirmationTime);
+	expect(stored[0]?.archivedAt).toBeUndefined();
+	expect(stored[0]?.appliedFactIds).toHaveLength(1);
+	await spoolChunk({
+		chatId,
+		reason: "overflow",
+		messages: [
+			{
+				id: "question",
+				role: "user",
+				name: "Ana",
+				content: "What is the weather?",
+				timestamp: Date.now(),
+			},
+			{
+				id: "bot-only-confirmation",
+				role: "model",
+				content: "I still enjoy pottery every weekend",
+				timestamp: Date.now(),
+			},
+		],
+	});
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
+	expect((await loadSemanticStore())[0]?.appliedFactIds).toHaveLength(1);
+});
+
+test("a four-episode batch recovers a partial narrative write without repeating model calls", async () => {
+	for (let i = 0; i < 4; i++)
+		await spoolChunk({
+			chatId,
+			messages: [
+				{
+					id: `batch-retry-${i}`,
+					role: "user",
+					name: "Ana",
+					content: `Update ${i}`,
+					timestamp: Date.now(),
+				},
+			],
+			reason: "overflow",
+		});
+	const saveChapter = dependencies.saveChapter;
+	let fail = true;
+	dependencies.saveChapter = async (...args) => {
+		if (fail) {
+			fail = false;
+			throw new Error("chapter write unavailable");
+		}
+		return saveChapter(...args);
+	};
+	await drainPromotionSpool(chatId, dependencies);
+	expect((await loadRelationshipMemory(chatId))?.interactionCount).toBe(4);
+	expect(await loadPromotionSpool(chatId)).toHaveLength(4);
+	await drainPromotionSpool(chatId, dependencies);
+	expect(evaluated).toBe(4);
+	expect(narrated).toBe(1);
+	expect((await loadRelationshipMemory(chatId))?.interactionCount).toBe(4);
+	expect(
+		(await getChapterForMonth(chatId, botNow().format("YYYY-MM")))?.episodeIds,
+	).toHaveLength(4);
+	expect(await loadPromotionSpool(chatId)).toHaveLength(0);
 });

@@ -18,7 +18,7 @@ function formatTimeAgo(timestamp: number): string {
 function formatFactAge(fact: SemanticFact): string {
 	const reference = fact.lastConfirmed ?? fact.createdAt;
 	if (!reference) return "";
-	return ` _(heard ${formatTimeAgo(reference)})_`;
+	return ` _(heard ${formatTimeAgo(reference)}${fact.archivedAt ? "; archived historical memory, may no longer be current" : ""})_`;
 }
 
 function groupBySubject(

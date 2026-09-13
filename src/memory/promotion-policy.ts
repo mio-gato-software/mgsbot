@@ -34,6 +34,8 @@ export interface PromotionSignal {
 	importance: number;
 	/** Importance of each extracted fact, 1-5. */
 	factImportances: number[];
+	/** Existing facts explicitly reconfirmed by a user, not new extractions. */
+	confirmationImportances?: number[];
 	/** Whether the chunk produced personality trait movement. */
 	hasPersonalitySignals: boolean;
 }
@@ -52,9 +54,13 @@ export function meetsPromotionBar(
 	defaultBar: number = defaultPromotionBar(),
 ): boolean {
 	const aboveDefaultBar = bar > defaultBar;
+	const importances = [
+		...signal.factImportances,
+		...(signal.confirmationImportances ?? []),
+	];
 	const hasQualifyingFacts = aboveDefaultBar
-		? signal.factImportances.some((importance) => importance >= bar)
-		: signal.factImportances.length > 0;
+		? importances.some((importance) => importance >= bar)
+		: importances.length > 0;
 	return (
 		signal.importance >= bar ||
 		hasQualifyingFacts ||

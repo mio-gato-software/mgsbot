@@ -148,7 +148,7 @@ Run the executable from a directory containing `.env`; relative data paths are r
 
 - **Backups:** verified daily snapshots live in `memory/backups/`, with seven dated snapshots retained. Startup awaits a verified snapshot before memory migrations. Keep an external copy as well; local snapshots share the runtime disk.
 - **Recovery:** malformed stores are preserved and writes fail instead of replacing them with empty data. Interrupted promotions retry from saved checkpoints; after ten failures, the chunk stays available for operator recovery.
-- **Routine work:** confidence decay and the memory janitor run automatically. `bun run promote:stats` reports promotion decisions and extraction quality.
+- **Routine work:** confidence decay and the memory janitor run automatically. `bun run promote:stats` reports promotion decisions and extraction quality; `bun run memory:stats` reports background usage, cache hits, and prompt size. Low-confidence facts are archived for relevant historical recall rather than deleted. Full media text is preserved through extraction, and narrative updates are batched.
 - **Embedding changes:** startup rebuilds stale vectors when the embedding provider, model, or dimensions change. `AUTO_REEMBED=false` disables this; `bun run scripts/reembed-memory.ts` forces a rebuild. Stop the bot and preserve a backup before running a manual rewrite.
 
 See [maintenance and recovery](docs/maintenance.md) for restoration and failed-promotion procedures, and [TODO.md](TODO.md) for pending operational checks.

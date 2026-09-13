@@ -10,6 +10,7 @@ import { wrapVersioned } from "./versioning.ts";
 export {
 	getChapterForMonth,
 	getRecentChapters,
+	getRelevantChapters,
 	loadChapterStore,
 	saveChapterStore,
 	upsertChapter,

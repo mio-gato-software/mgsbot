@@ -22,6 +22,9 @@ export const PROMOTION_SPOOL_DIR = memoryPath("promotion-spool");
 export const MAX_PROMOTION_ATTEMPTS = 10;
 
 export interface PreparedPromotion {
+	effectsApplied?: boolean;
+	confirmedFactIds?: string[];
+	narrativeEpisodeIds?: string[];
 	narrative?: LongTermMemoryUpdate;
 	narrativeBase?: { relationship: string; chapter: string };
 	episode: Episode;
@@ -30,6 +33,9 @@ export interface PreparedPromotion {
 	recentText: string;
 }
 const preparedSchema = z.object({
+	effectsApplied: z.boolean().optional(),
+	confirmedFactIds: z.array(z.string()).optional(),
+	narrativeEpisodeIds: z.array(z.string()).optional(),
 	narrativeBase: z
 		.object({ relationship: z.string(), chapter: z.string() })
 		.optional(),

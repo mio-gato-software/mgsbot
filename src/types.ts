@@ -88,12 +88,13 @@ export interface SemanticFact {
 	lastConfirmed: number; // genuine reconfirmation (extraction), NOT retrieval
 	lastRecalledAt?: number; // last time retrieval injected it into a prompt
 	lastDecayedAt?: number;
+	archivedAt?: number; // retained for relevant historical recall, excluded from routine context
 	scope?: "global" | "chat" | "person";
 	sourceChatId?: number;
 	validUntil?: number;
 	supersedes?: string[];
 	supersededBy?: string;
-	permanent?: boolean; // never decays, always included in prompt
+	permanent?: boolean; // never decays; selected within the prompt budget
 }
 
 export interface FollowUp {
@@ -168,7 +169,13 @@ export interface PersonalitySignals {
 	}>;
 }
 
+export interface FactConfirmation {
+	id: string;
+	evidence: string; // verbatim quote from a user message in this chunk
+}
+
 export interface PromotionResult {
+	confirmedFacts?: FactConfirmation[];
 	summary: string; // episode summary
 	importance: number; // 1-5
 	facts: Array<{

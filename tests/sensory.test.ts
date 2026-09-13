@@ -11,6 +11,7 @@ import {
 	persistInactivityWipe,
 	SENSORY_DIR,
 } from "../src/memory/sensory.ts";
+import { buildMessages } from "../src/prompt/history.ts";
 import type { ConversationMessage, SensoryBuffer } from "../src/types.ts";
 
 // Distinct fixture ID within the disposable test memory root.
@@ -78,7 +79,7 @@ describe("sensory buffer", () => {
 		expect(buf.messages[5]?.content).toBe("msg10");
 	});
 
-	test("media messages are compacted once they are not among the most recent 2", async () => {
+	test("media previews are compact but stored extraction content remains complete", async () => {
 		if (!existsSync(SENSORY_DIR)) await mkdir(SENSORY_DIR, { recursive: true });
 		const longTranscript = "lorem ipsum ".repeat(60).trim();
 		const buf = makeBuffer();
@@ -95,11 +96,19 @@ describe("sensory buffer", () => {
 		const first = buf.messages[0];
 		if (!first) throw new Error("expected a first message");
 		expect(first.content.startsWith("[Audio from tester]:")).toBe(true);
-		expect(first.content).toContain("[Previous transcription compacted]");
-		expect(first.content.length).toBeLessThan(longTranscript.length);
+		expect(first.content).toContain(longTranscript);
+		expect(buildMessages(buf)[0]?.content).toContain(
+			"[Previous transcription compacted]",
+		);
+		expect(buildMessages(buf)[0]?.content.length).toBeLessThan(
+			longTranscript.length,
+		);
+		expect((await loadSensory(TEST_CHAT_ID)).messages[0]?.content).toBe(
+			first.content,
+		);
 	});
 
-	test("plain-text attachments are compacted once they are not among the most recent 2", async () => {
+	test("text attachment previews preserve full durable extraction content", async () => {
 		if (!existsSync(SENSORY_DIR)) await mkdir(SENSORY_DIR, { recursive: true });
 		const longText = "lorem ipsum ".repeat(60).trim();
 		const buf = makeBuffer();
@@ -119,8 +128,11 @@ describe("sensory buffer", () => {
 		expect(first.content.startsWith("[Plain-text attachment from tester")).toBe(
 			true,
 		);
-		expect(first.content).toContain("[Previous text attachment compacted]");
-		expect(first.content.length).toBeLessThan(longText.length);
+		expect(first.content).toContain(longText);
+		expect(buildMessages(buf)[0]?.content).toContain(
+			"[Previous text attachment compacted]",
+		);
+		expect(buildMessages(buf)[0]?.content.length).toBeLessThan(longText.length);
 	});
 
 	test("messageCountSincePromotion increments on every append", async () => {
