@@ -105,6 +105,50 @@ test("historical-context bypass skips retrieval", async () => {
 	).toBe(true);
 });
 
+test("a searched reply sends a notice first and keeps raw references out of sensory memory", async () => {
+	const { ctx, spies } = makeMockContext({ chatId: ++chatId });
+	const services = dependencies();
+	let calls = 0;
+	let refreshes = 0;
+	services.web = {
+		isEnabled: () => true,
+		context: async () => "CACHED REFERENCE ONLY",
+		refreshHeadlines: async () => {
+			refreshes++;
+		},
+		search: async () => {
+			expect(spies.replies.map((reply) => reply.text)).toEqual([
+				"Déjame comprobarlo",
+			]);
+			return "RAW WEB REFERENCE ONLY https://example.com/story";
+		},
+	};
+	services.generate = async (_system, messages) => {
+		calls++;
+		if (calls === 1)
+			return '[WEB_SEARCH]{"query":"public news","notice":"Déjame comprobarlo"}[/WEB_SEARCH]';
+		expect(messages.at(-1)?.content).toContain("RAW WEB REFERENCE ONLY");
+		return "El reporte todavía no está confirmado: https://example.com/story";
+	};
+	expect(
+		await processConversation(
+			ctx,
+			"¿Qué se sabe de esa noticia?",
+			"Ana",
+			{},
+			services,
+		),
+	).toBe(true);
+	expect(spies.replies).toHaveLength(2);
+	const messages = (await loadSensory(chatId)).messages;
+	expect(messages.map((message) => message.role)).toEqual(["user", "model"]);
+	expect(JSON.stringify(messages)).not.toContain("REFERENCE ONLY");
+	expect(JSON.stringify(messages)).not.toContain("WEB_SEARCH");
+	expect(messages[1]?.content).toContain("no está confirmado");
+	await backgroundTasks.drain();
+	expect(refreshes).toBe(1);
+});
+
 test("a follow-up recovers the original image after disk reload and text-history truncation", async () => {
 	const id = ++chatId;
 	const services = dependencies();

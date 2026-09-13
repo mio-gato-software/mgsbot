@@ -40,6 +40,11 @@ import type { MediaAttachment } from "./providers/types.ts";
 import { type SendResponseResult, sendResponse } from "./response-processor.ts";
 import { isTtsAvailable } from "./tts/index.ts";
 import type { ConversationMessage, MentionType } from "./types.ts";
+import {
+	type ConversationWebContext,
+	generateWithWebSearch,
+} from "./web-conversation.ts";
+import { worldContext } from "./world-context.ts";
 
 export function isGroupChat(ctx: Context): boolean {
 	const type = ctx.chat?.type;
@@ -81,6 +86,7 @@ export interface ConversationDependencies {
 	send: typeof sendResponse;
 	assemble: typeof assembleSystemPrompt;
 	prepareImage: typeof prepareImageContext;
+	web: ConversationWebContext;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
 	generate: generateResponse,
@@ -88,6 +94,7 @@ export const defaultConversationDependencies: ConversationDependencies = {
 	send: sendResponse,
 	assemble: assembleSystemPrompt,
 	prepareImage: prepareImageContext,
+	web: worldContext,
 };
 
 export async function processConversation(
@@ -266,7 +273,27 @@ export async function processConversation(
 		}
 
 		// Generate response
-		const responseText = await dependencies.generate(systemPrompt, messages);
+		const responseText = await generateWithWebSearch({
+			systemPrompt,
+			messages,
+			chatId,
+			generate: dependencies.generate,
+			web: dependencies.web,
+			useCachedContext: !skipHistoricalContext,
+			announce: async (notice) => {
+				await ctx.reply(notice);
+				trackBackground("chat-log", logBotMessage(notice));
+			},
+		});
+		// Refresh ambient news only during active use, without delaying this reply or
+		// sending a bulletin. The shared service limits this to one attempt per day.
+		if (
+			dependencies.web.isEnabled() &&
+			!isSimpleAssistantMode &&
+			!skipHistoricalContext
+		) {
+			trackBackground("news-context", dependencies.web.refreshHeadlines());
+		}
 
 		// Process and send the response
 		result = await dependencies.send({

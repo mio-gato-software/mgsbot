@@ -12,3 +12,5 @@ process.env.ENABLE_CHECK_INS = "false";
 process.env.SIMPLE_ASSISTANT_MODE = "false";
 process.env.FULL_ACCESS_MODE = "false";
 process.env.SHOW_TRANSCRIPTION = "false";
+// Optional internet features must never spend inherited API credentials in tests.
+process.env.ENABLE_WEB_SEARCH = "false";
