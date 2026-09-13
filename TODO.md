@@ -9,6 +9,13 @@ Living document. Rules:
 
 ## Pending
 
+### Update the deployment guide with the current bot location
+
+- **Why:** `.agents/skills/deploy/SKILL.md` targets `eliaquin@178.156.187.168:2299`, directory `~/gatobot`, but that directory no longer exists. The host has no running `mgsbot` process or identifiable MGS Bot container. The 2026-09-13 memory fixes and Dockerfile update are merged; deployment requires the correct target.
+- **What to do:** obtain the current host and application directory/container from the owner, update the deployment guide, deploy the merged code, and verify the process/health. Do not initialize an empty bot installation at the obsolete path or replace unrelated services.
+- **Size:** Small once the target is known.
+- Added 2026-09-13.
+
 ### Calibrate the promotion bars from recorded data
 
 - **Why:** `PROMOTION_MIN_IMPORTANCE` (2) and `PASSIVE_PROMOTION_MIN_IMPORTANCE` (3) were picked a priori. Every promotion decision is now recorded to `memory/metrics/promotion-YYYY-MM.jsonl`, so the bars can be set from what they actually dropped instead of intuition — a bar that's too high silently loses context whose value only shows up weeks later.
