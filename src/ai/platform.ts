@@ -3,6 +3,7 @@ type EnvMap = NodeJS.ProcessEnv;
 export type AiPlatform = "gemini" | "openai";
 export type SupportProviderName = "gemini" | "openai";
 export type BackgroundProviderName = SupportProviderName | "fal";
+export type ClassifierProviderName = SupportProviderName | "fal";
 
 export const DEFAULT_GEMINI_CHAT_MODEL = "gemini-3.6-flash";
 export const DEFAULT_GEMINI_BACKGROUND_MODEL = "gemini-3.6-flash";
@@ -143,7 +144,9 @@ export function resolveBackgroundProvider(
 
 export function resolveClassifierProvider(
 	env: EnvMap = process.env,
-): SupportProviderName {
+): ClassifierProviderName {
+	if (envString(env, "CLASSIFIER_PROVIDER")?.toLowerCase() === "fal")
+		return "fal";
 	return resolveSupportProvider(
 		env,
 		"CLASSIFIER_PROVIDER",

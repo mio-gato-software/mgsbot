@@ -9,10 +9,10 @@ Living document. Rules:
 
 ## Pending
 
-### Release fal background support before updating Brendy
+### Release fal background and classifier support before updating Brendy
 
-- **Why:** Brendy runs a verified custom build based on v1.0.61 with background Luna through fal and OpenAI embeddings. Its release updater must not run until a published binary includes `BACKGROUND_PROVIDER=fal` support; older binaries would reject the new configuration.
-- **What to do:** publish a release containing fal background support, then use the normal release updater. Keep the migrated embeddings paired with the OpenAI embedding configuration if rolling back only the binary.
+- **Why:** Brendy runs a verified custom build based on v1.0.61 with background Luna through fal, OpenAI embeddings, and its group-message classifier routed through fal with `deepseek/deepseek-v4.1-flash`. Its release updater must not run until a published binary includes both `BACKGROUND_PROVIDER=fal` and `CLASSIFIER_PROVIDER=fal` support; older binaries would reject or ignore the custom configuration.
+- **What to do:** push/merge local branch `fix/fal-classifier-provider`, publish a release containing both fal support paths, then use the normal release updater. Keep the migrated embeddings paired with the OpenAI embedding configuration if rolling back only the binary.
 - **Size:** Small; creating a release is separate from merging and pushing the source changes.
 - Added 2026-09-16.
 

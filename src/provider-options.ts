@@ -231,7 +231,7 @@ interface ProviderEnv extends EnvMap {
 	VISION_PROVIDER?: "gemini" | "openai";
 	DOCUMENT_PROVIDER?: "gemini" | "openai";
 	BACKGROUND_PROVIDER?: "gemini" | "openai" | "fal";
-	CLASSIFIER_PROVIDER?: "gemini" | "openai";
+	CLASSIFIER_PROVIDER?: "gemini" | "openai" | "fal";
 	YOUTUBE_PROVIDER?: "gemini" | "openai";
 	OPENROUTER_TRANSPORT?: OpenRouterTransport;
 	FAL_IMAGE_MODEL?: string;
@@ -297,7 +297,9 @@ const ProviderEnvSchema = z.object({
 	BACKGROUND_PROVIDER: optionalProviderString(
 		z.enum(["gemini", "openai", "fal"]),
 	),
-	CLASSIFIER_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
+	CLASSIFIER_PROVIDER: optionalProviderString(
+		z.enum(["gemini", "openai", "fal"]),
+	),
 	YOUTUBE_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
 	OPENROUTER_TRANSPORT: optionalProviderString(z.enum(["direct", "fal"])),
 	FAL_IMAGE_MODEL: optionalString,

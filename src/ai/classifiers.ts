@@ -1,5 +1,6 @@
 import { createUserContent, GoogleGenAI } from "@google/genai";
 import { log } from "../logger.ts";
+import { FalChatProvider } from "../providers/fal.ts";
 import { createChatProvider } from "../providers/index.ts";
 import type { ConversationMessage } from "../types.ts";
 import { withRetry } from "../utils.ts";
@@ -160,6 +161,14 @@ async function runSingleWordClassifier(
 ): Promise<string> {
 	const provider = resolveClassifierProvider();
 	if (supportProviderHasKey(provider)) {
+		if (provider === "fal") {
+			return await new FalChatProvider(
+				resolveClassifierModel(),
+				"CLASSIFIER_PROVIDER=fal",
+				false,
+			).generateResponse("", [{ role: "user", content: prompt }]);
+		}
+
 		if (provider === "openai") {
 			const model = resolveClassifierModel();
 			const effort = resolveOpenAIClassifierReasoningEffort();

@@ -158,6 +158,19 @@ describe("independent support axes", () => {
 		expect(hasAnyAiKey({ OPENAI_API_KEY: "sk" })).toBe(true);
 		expect(hasAnyAiKey({})).toBe(false);
 	});
+
+	test("classifiers can use fal independently from the chat model", () => {
+		const env = {
+			CLASSIFIER_PROVIDER: "fal",
+			CLASSIFIER_MODEL: "deepseek/deepseek-v4.1-flash",
+			FAL_API_KEY: "test-fal-key",
+			CHAT_PROVIDER: "fal",
+			FAL_MODEL: "openai/gpt-6-astra",
+		};
+		expect(resolveClassifierProvider(env)).toBe("fal");
+		expect(resolveClassifierModel(env)).toBe("deepseek/deepseek-v4.1-flash");
+		expect(supportProviderHasKey("fal", env)).toBe(true);
+	});
 });
 
 describe("independent image models", () => {
