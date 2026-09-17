@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { generateBackgroundResponseWithModel } from "../src/ai/core.ts";
 import {
 	loadMemoryUsage,
 	recordMemoryUsage,
@@ -73,65 +72,69 @@ test("usage report distinguishes unknown usage, retries, cache hits and fallback
 });
 
 test("background Responses usage is recorded with its operation", async () => {
-	const originalFetch = globalThis.fetch;
-	const saved = {
-		BACKGROUND_PROVIDER: process.env.BACKGROUND_PROVIDER,
-		BACKGROUND_MODEL: process.env.BACKGROUND_MODEL,
-		OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-		PROMOTION_METRICS: process.env.PROMOTION_METRICS,
-	};
-	process.env.BACKGROUND_PROVIDER = "openai";
-	process.env.BACKGROUND_MODEL = "gpt-test-memory";
-	process.env.OPENAI_API_KEY = "test-key";
-	process.env.PROMOTION_METRICS = "true";
-	globalThis.fetch = Object.assign(
-		async () =>
-			new Response(
-				JSON.stringify({
-					id: "resp_test",
-					object: "response",
-					status: "completed",
-					output: [
-						{
-							type: "message",
-							role: "assistant",
-							content: [{ type: "output_text", text: "ok", annotations: [] }],
-						},
-					],
-					usage: {
-						input_tokens: 80,
-						output_tokens: 12,
-						total_tokens: 92,
-						input_tokens_details: { cached_tokens: 20 },
-						output_tokens_details: { reasoning_tokens: 4 },
-					},
-				}),
-				{ status: 200, headers: { "content-type": "application/json" } },
-			),
-		{ preconnect: originalFetch.preconnect },
-	);
-	try {
+	// A prior test may have initialized the SDK singleton with another fetch.
+	// Isolate the client and install the transport mock before its first use.
+	const script = `
+		import './tests/preload.ts';
+		import { generateBackgroundResponseWithModel } from './src/ai/core.ts';
+		import { loadMemoryUsage } from './src/memory/usage-metrics.ts';
+		let requests = 0;
+		globalThis.fetch = Object.assign(async (url, init) => {
+			if (String(url) !== 'https://api.openai.com/v1/responses')
+				throw new Error('Unexpected endpoint');
+			if (JSON.parse(init.body).model !== 'gpt-test-memory')
+				throw new Error('Unexpected model');
+			requests++;
+			return Response.json({
+				id: 'resp_test', object: 'response', status: 'completed',
+				output: [{ type: 'message', role: 'assistant', content: [
+					{ type: 'output_text', text: 'ok', annotations: [] }
+				] }],
+				usage: {
+					input_tokens: 80, output_tokens: 12, total_tokens: 92,
+					input_tokens_details: { cached_tokens: 20 },
+					output_tokens_details: { reasoning_tokens: 4 }
+				}
+			});
+		}, { preconnect: globalThis.fetch.preconnect });
 		const response = await generateBackgroundResponseWithModel(
-			"system",
-			[{ role: "user", content: "hello" }],
-			"test-provider-usage",
+			'system', [{ role: 'user', content: 'hello' }], 'test-provider-usage'
 		);
-		expect(response.text).toBe("ok");
 		const record = (await loadMemoryUsage()).find(
-			(record) => record.operation === "test-provider-usage",
+			entry => entry.operation === 'test-provider-usage'
 		);
-		expect(record).toMatchObject({
-			inputTokens: 80,
-			outputTokens: 12,
-			cachedInputTokens: 20,
-			reasoningTokens: 4,
-			status: "ok",
-		});
-	} finally {
-		globalThis.fetch = originalFetch;
-		for (const [key, value] of Object.entries(saved)) {
-			if (value === undefined) delete process.env[key];
-			else process.env[key] = value;
-		}
-	}
+		console.log('RESULT:' + JSON.stringify({ response, record, requests }));
+	`;
+	const proc = Bun.spawn([process.execPath, "--eval", script], {
+		cwd: `${import.meta.dir}/..`,
+		env: {
+			...process.env,
+			BACKGROUND_PROVIDER: "openai",
+			BACKGROUND_MODEL: "gpt-test-memory",
+			BACKGROUND_FALLBACK_TO_CHAT: "false",
+			OPENAI_API_KEY: "test-no-network",
+			PROMOTION_METRICS: "true",
+			NODE_ENV: "production",
+		},
+		stdout: "pipe",
+		stderr: "pipe",
+	});
+	const [stdout, stderr, exit] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+	expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
+	const { response, record, requests } = JSON.parse(
+		stdout.split("RESULT:")[1] ?? "{}",
+	);
+	expect(requests).toBe(1);
+	expect(response.text).toBe("ok");
+	expect(record).toMatchObject({
+		inputTokens: 80,
+		outputTokens: 12,
+		cachedInputTokens: 20,
+		reasoningTokens: 4,
+		status: "ok",
+	});
 });
