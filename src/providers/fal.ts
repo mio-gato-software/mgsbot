@@ -21,7 +21,11 @@ export class FalChatProvider implements ChatProvider {
 
 	private readonly apiKey: string;
 
-	constructor(model?: string, requiredFor = "CHAT_PROVIDER=fal") {
+	constructor(
+		model?: string,
+		requiredFor = "CHAT_PROVIDER=fal",
+		private readonly reasoning = true,
+	) {
 		const apiKey = process.env.FAL_API_KEY;
 		if (!apiKey) {
 			throw new Error(`FAL_API_KEY is required when ${requiredFor}`);
@@ -34,6 +38,13 @@ export class FalChatProvider implements ChatProvider {
 		systemPrompt: string,
 		messages: ChatMessage[],
 	): Promise<string> {
+		return (await this.generateResponseWithUsage(systemPrompt, messages)).text;
+	}
+
+	async generateResponseWithUsage(
+		systemPrompt: string,
+		messages: ChatMessage[],
+	) {
 		const prompt = messages
 			.map((msg) =>
 				msg.role === "user"
@@ -62,7 +73,7 @@ export class FalChatProvider implements ChatProvider {
 					system_prompt: systemPrompt,
 					prompt,
 					temperature: 0.7,
-					reasoning: true,
+					reasoning: this.reasoning,
 				}),
 				signal: AbortSignal.timeout(60_000),
 			});
@@ -87,7 +98,17 @@ export class FalChatProvider implements ChatProvider {
 
 		const text = data.output ?? "";
 		log.debug("[FalChatProvider] Response:", text.slice(0, 200));
-		return text;
+		if (!this.reasoning && (!text.trim() || data.partial))
+			throw new Error(
+				"fal.ai returned an empty or partial background response",
+			);
+		return {
+			text,
+			usage: {
+				inputTokens: data.usage?.prompt_tokens,
+				outputTokens: data.usage?.completion_tokens,
+			},
+		};
 	}
 }
 

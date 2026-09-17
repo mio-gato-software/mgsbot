@@ -9,6 +9,13 @@ Living document. Rules:
 
 ## Pending
 
+### Release fal background support before updating Brendy
+
+- **Why:** Brendy runs a verified custom build based on v1.0.61 with background Luna through fal and OpenAI embeddings. Its release updater must not run until a published binary includes `BACKGROUND_PROVIDER=fal` support; older binaries would reject the new configuration.
+- **What to do:** publish a release containing fal background support, then use the normal release updater. Keep the migrated embeddings paired with the OpenAI embedding configuration if rolling back only the binary.
+- **Size:** Small; creating a release is separate from merging and pushing the source changes.
+- Added 2026-09-16.
+
 ### Update the deployment guide with the current bot location
 
 - **Why:** `.agents/skills/deploy/SKILL.md` targets `eliaquin@178.156.187.168:2299`, directory `~/gatobot`, but that directory no longer exists. The host has no running `mgsbot` process or identifiable MGS Bot container. The 2026-09-13 memory fixes and Dockerfile update are merged; deployment requires the correct target.

@@ -68,6 +68,8 @@ On a computer with a browser, `bun run start -- --setup` opens the configuration
 | Image / PDF analysis | `VISION_PROVIDER`, `DOCUMENT_PROVIDER` |
 | Routing classifiers | `CLASSIFIER_PROVIDER`, `CLASSIFIER_MODEL` |
 
+For background work through fal, set `BACKGROUND_PROVIDER=fal` and `BACKGROUND_MODEL=openai/gpt-5.6-luna` with `FAL_API_KEY`. This is independent of the main chat model and disables reasoning for background calls. Set `BACKGROUND_FALLBACK_TO_CHAT=false` to propagate failures for caller handling/retry instead of charging the chat model; fallback remains enabled by default.
+
 Chat supports `gemini`, `openai`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `deepseek`, and `fal`. Keep an OpenAI or Google key configured for support services even when using another chat provider.
 
 Use `/provider` in an owner DM to inspect the active configuration, or `/provider <name> [model]` to change chat until restart. This does not change transcription, voice, images, or background memory work. For a persistent change, edit `.env`.

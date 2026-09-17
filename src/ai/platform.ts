@@ -2,6 +2,7 @@ type EnvMap = NodeJS.ProcessEnv;
 
 export type AiPlatform = "gemini" | "openai";
 export type SupportProviderName = "gemini" | "openai";
+export type BackgroundProviderName = SupportProviderName | "fal";
 
 export const DEFAULT_GEMINI_CHAT_MODEL = "gemini-3.6-flash";
 export const DEFAULT_GEMINI_BACKGROUND_MODEL = "gemini-3.6-flash";
@@ -130,7 +131,9 @@ export function resolveDocumentProvider(
 
 export function resolveBackgroundProvider(
 	env: EnvMap = process.env,
-): SupportProviderName {
+): BackgroundProviderName {
+	if (envString(env, "BACKGROUND_PROVIDER")?.toLowerCase() === "fal")
+		return "fal";
 	return resolveSupportProvider(
 		env,
 		"BACKGROUND_PROVIDER",
@@ -176,6 +179,7 @@ export function resolveEmbeddingDim(env: EnvMap = process.env): number {
 export function resolveBackgroundModel(env: EnvMap = process.env): string {
 	const explicit = envString(env, "BACKGROUND_MODEL");
 	if (explicit) return explicit;
+	if (resolveBackgroundProvider(env) === "fal") return "openai/gpt-5.6-luna";
 	return resolveBackgroundProvider(env) === "openai"
 		? DEFAULT_OPENAI_BACKGROUND_MODEL
 		: DEFAULT_GEMINI_BACKGROUND_MODEL;
@@ -337,8 +341,9 @@ function normalizeReasoningEffort(
 }
 
 export function supportProviderHasKey(
-	provider: SupportProviderName,
+	provider: BackgroundProviderName,
 	env: EnvMap = process.env,
 ): boolean {
+	if (provider === "fal") return !!envString(env, "FAL_API_KEY");
 	return provider === "openai" ? hasOpenAiApiKey(env) : hasGoogleApiKey(env);
 }

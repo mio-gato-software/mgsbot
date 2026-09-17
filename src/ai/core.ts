@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { alertOwner, errorSummary } from "../alerts.ts";
 import { log } from "../logger.ts";
 import { recordMemoryUsage, type TokenUsage } from "../memory/usage-metrics.ts";
+import { FalChatProvider } from "../providers/fal.ts";
 import { type ChatMessage, createChatProvider } from "../providers/index.ts";
 import { withRetry } from "../utils.ts";
 import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
@@ -112,6 +113,7 @@ export async function generateBackgroundResponseWithModel(
 ): Promise<{ text: string; model: string }> {
 	const provider = resolveBackgroundProvider();
 	const model = backgroundModelId();
+	const allowChatFallback = process.env.BACKGROUND_FALLBACK_TO_CHAT !== "false";
 	const inputChars =
 		systemPrompt.length +
 		messages.reduce((sum, message) => sum + message.content.length, 0);
@@ -124,13 +126,23 @@ export async function generateBackgroundResponseWithModel(
 					attempt++;
 					const start = Date.now();
 					try {
-						const result = await (provider === "openai"
-							? generateOpenAIBackgroundResponse(systemPrompt, messages, model)
-							: generateGeminiBackgroundResponse(
-									systemPrompt,
-									messages,
+						const result = await (provider === "fal"
+							? new FalChatProvider(
 									model,
-								));
+									"BACKGROUND_PROVIDER=fal",
+									false,
+								).generateResponseWithUsage(systemPrompt, messages)
+							: provider === "openai"
+								? generateOpenAIBackgroundResponse(
+										systemPrompt,
+										messages,
+										model,
+									)
+								: generateGeminiBackgroundResponse(
+										systemPrompt,
+										messages,
+										model,
+									));
 						await recordMemoryUsage({
 							operation,
 							model: `${provider}:${model}`,
@@ -154,19 +166,29 @@ export async function generateBackgroundResponseWithModel(
 						throw error;
 					}
 				},
-				2,
+				provider === "fal" ? 1 : 2,
 				500,
 			);
 			return { text: result.text, model: `${provider}:${model}` };
 		} catch (error) {
+			if (!allowChatFallback) throw error;
 			log.warn(
 				"[background-model] Background model failed, falling back to chat provider:",
 				error,
 			);
 		}
+	} else if (!allowChatFallback) {
+		throw new Error(
+			`Missing API key for background provider ${provider}; chat fallback is disabled.`,
+		);
 	} else if (!warnedBackgroundFallback) {
 		warnedBackgroundFallback = true;
-		const missing = provider === "openai" ? "OPENAI_API_KEY" : "GOOGLE_API_KEY";
+		const missing =
+			provider === "fal"
+				? "FAL_API_KEY"
+				: provider === "openai"
+					? "OPENAI_API_KEY"
+					: "GOOGLE_API_KEY";
 		log.warn(
 			`[background-model] ${missing} not set — background memory work will use the configured chat provider.`,
 		);

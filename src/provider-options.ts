@@ -230,7 +230,7 @@ interface ProviderEnv extends EnvMap {
 	EMBEDDING_PROVIDER?: "gemini" | "openai";
 	VISION_PROVIDER?: "gemini" | "openai";
 	DOCUMENT_PROVIDER?: "gemini" | "openai";
-	BACKGROUND_PROVIDER?: "gemini" | "openai";
+	BACKGROUND_PROVIDER?: "gemini" | "openai" | "fal";
 	CLASSIFIER_PROVIDER?: "gemini" | "openai";
 	YOUTUBE_PROVIDER?: "gemini" | "openai";
 	OPENROUTER_TRANSPORT?: OpenRouterTransport;
@@ -294,7 +294,9 @@ const ProviderEnvSchema = z.object({
 	EMBEDDING_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
 	VISION_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
 	DOCUMENT_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
-	BACKGROUND_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
+	BACKGROUND_PROVIDER: optionalProviderString(
+		z.enum(["gemini", "openai", "fal"]),
+	),
 	CLASSIFIER_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
 	YOUTUBE_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
 	OPENROUTER_TRANSPORT: optionalProviderString(z.enum(["direct", "fal"])),
@@ -336,6 +338,7 @@ const CORE_ENV_VARS = [
 	"GEMINI_IMAGE_SIZE",
 	"BACKGROUND_MODEL",
 	"BACKGROUND_PROVIDER",
+	"BACKGROUND_FALLBACK_TO_CHAT",
 	"CLASSIFIER_MODEL",
 	"CLASSIFIER_PROVIDER",
 	"EMBEDDING_PROVIDER",
@@ -734,7 +737,7 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 	const supportChecks: Array<{
 		label: string;
 		name: string;
-		provider: "gemini" | "openai" | undefined;
+		provider: "gemini" | "openai" | "fal" | undefined;
 	}> = [
 		{
 			label: "Embeddings",
@@ -765,7 +768,11 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 	for (const check of supportChecks) {
 		if (!check.provider) continue;
 		const required =
-			check.provider === "openai" ? "OPENAI_API_KEY" : "GOOGLE_API_KEY";
+			check.provider === "fal"
+				? "FAL_API_KEY"
+				: check.provider === "openai"
+					? "OPENAI_API_KEY"
+					: "GOOGLE_API_KEY";
 		if (!providerEnv[required]) {
 			errors.push(
 				`${check.label} require ${required} when ${check.name}=${check.provider}.`,

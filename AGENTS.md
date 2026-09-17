@@ -183,7 +183,7 @@ There are four independent provider axes:
 | Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` -> `openai`; Cartesia and fal only when explicit |
 | Images | `IMAGE_PROVIDER` + model env | Character image generation/editing | `openai` or `gemini` from `AI_PLATFORM`; fal defaults to `nano-banana-pro` |
 
-`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work is pinned to `BACKGROUND_MODEL` on `BACKGROUND_PROVIDER` (defaults to `AI_PLATFORM`) so the chat model choice doesn't multiply background costs.
+`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work is pinned to `BACKGROUND_MODEL` on `BACKGROUND_PROVIDER` (defaults to `AI_PLATFORM`; also accepts `fal`, defaulting to `openai/gpt-5.6-luna` through `FAL_API_KEY`). Set `BACKGROUND_FALLBACK_TO_CHAT=false` to prevent failures from invoking the chat model so the chat model choice doesn't multiply background costs.
 
 ### Memory System
 
