@@ -13,6 +13,10 @@ import {
 	resolveOpenAIClassifierReasoningEffort,
 	supportProviderHasKey,
 } from "./platform.ts";
+import {
+	classifyWithTypeSafe,
+	editIntentWithTypeSafe,
+} from "./typesafe-classifier.ts";
 
 const GROUP_ROUTER_MAX_MESSAGES = 6;
 const GROUP_ROUTER_MAX_MESSAGE_CHARS = 500;
@@ -159,18 +163,21 @@ async function runSingleWordClassifier(
 	prompt: string,
 	maxOutputTokens: number,
 ): Promise<string> {
-	const provider = resolveClassifierProvider();
+	// TypeSafe returns typed decisions directly. This path remains the legacy
+	// classifier and fallback, with its own model rather than the Jev model.
+	const env = { ...process.env, TYPESAFE_API_KEY: undefined };
+	const provider = resolveClassifierProvider(env);
 	if (supportProviderHasKey(provider)) {
 		if (provider === "fal") {
 			return await new FalChatProvider(
-				resolveClassifierModel(),
+				resolveClassifierModel(env),
 				"CLASSIFIER_PROVIDER=fal",
 				false,
 			).generateResponse("", [{ role: "user", content: prompt }]);
 		}
 
 		if (provider === "openai") {
-			const model = resolveClassifierModel();
+			const model = resolveClassifierModel(env);
 			const effort = resolveOpenAIClassifierReasoningEffort();
 			const response = await withRetry(
 				() =>
@@ -193,7 +200,7 @@ async function runSingleWordClassifier(
 		const response = await withRetry(
 			() =>
 				getAI().models.generateContent({
-					model: resolveClassifierModel(),
+					model: resolveClassifierModel(env),
 					contents: createUserContent([prompt]),
 					config: {
 						temperature: 0,
@@ -254,6 +261,10 @@ export async function classifyEditIntent(
 ): Promise<boolean | null> {
 	const trimmed = caption.trim();
 	if (!trimmed) return false;
+	if (resolveClassifierProvider() === "typesafe") {
+		const decision = await editIntentWithTypeSafe(truncateText(trimmed, 2000));
+		if (decision !== null) return decision;
+	}
 
 	const provider = resolveClassifierProvider();
 	if (!supportProviderHasKey(provider) && !warnedClassifierFallback) {
@@ -299,6 +310,24 @@ export async function classifyGroupSocialIntent(
 	const currentMessage = input.currentMessage.trim();
 	if (!currentMessage) {
 		return { addressing: "ambient", action: "silence", confidence: 1 };
+	}
+	if (resolveClassifierProvider() === "typesafe") {
+		const decision = await classifyWithTypeSafe({
+			botName: truncateText(input.botName, 100),
+			mode: input.mode,
+			currentSpeaker: truncateText(input.currentSpeaker, 100),
+			currentMessage: truncateText(
+				currentMessage,
+				GROUP_ROUTER_MAX_MESSAGE_CHARS,
+			),
+			recentMessages: formatRecentGroupMessages(input.recentMessages),
+			lastBotMessage: truncateText(
+				input.lastBotMessage ?? "",
+				GROUP_ROUTER_MAX_MESSAGE_CHARS,
+			),
+			replyContext: formatReplyContext(input.replyContext),
+		});
+		if (decision !== null) return decision;
 	}
 
 	const provider = resolveClassifierProvider();

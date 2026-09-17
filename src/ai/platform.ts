@@ -3,7 +3,7 @@ type EnvMap = NodeJS.ProcessEnv;
 export type AiPlatform = "gemini" | "openai";
 export type SupportProviderName = "gemini" | "openai";
 export type BackgroundProviderName = SupportProviderName | "fal";
-export type ClassifierProviderName = SupportProviderName | "fal";
+export type ClassifierProviderName = SupportProviderName | "fal" | "typesafe";
 
 export const DEFAULT_GEMINI_CHAT_MODEL = "gemini-3.6-flash";
 export const DEFAULT_GEMINI_BACKGROUND_MODEL = "gemini-3.6-flash";
@@ -145,6 +145,12 @@ export function resolveBackgroundProvider(
 export function resolveClassifierProvider(
 	env: EnvMap = process.env,
 ): ClassifierProviderName {
+	const explicit = envString(env, "CLASSIFIER_PROVIDER")?.toLowerCase();
+	if (
+		(!explicit || explicit === "typesafe") &&
+		envString(env, "TYPESAFE_API_KEY")
+	)
+		return "typesafe";
 	if (envString(env, "CLASSIFIER_PROVIDER")?.toLowerCase() === "fal")
 		return "fal";
 	return resolveSupportProvider(
@@ -189,6 +195,8 @@ export function resolveBackgroundModel(env: EnvMap = process.env): string {
 }
 
 export function resolveClassifierModel(env: EnvMap = process.env): string {
+	if (resolveClassifierProvider(env) === "typesafe")
+		return envString(env, "TYPESAFE_MODEL") ?? "jev-1.13.0";
 	const explicit = envString(env, "CLASSIFIER_MODEL");
 	if (explicit) return explicit;
 	return resolveClassifierProvider(env) === "openai"
@@ -344,9 +352,10 @@ function normalizeReasoningEffort(
 }
 
 export function supportProviderHasKey(
-	provider: BackgroundProviderName,
+	provider: BackgroundProviderName | ClassifierProviderName,
 	env: EnvMap = process.env,
 ): boolean {
+	if (provider === "typesafe") return !!envString(env, "TYPESAFE_API_KEY");
 	if (provider === "fal") return !!envString(env, "FAL_API_KEY");
 	return provider === "openai" ? hasOpenAiApiKey(env) : hasGoogleApiKey(env);
 }
