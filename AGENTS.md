@@ -93,6 +93,7 @@ src/
                                per-modality switching (typing/upload_photo/record_voice), proactive typing pulse
   utils.ts                   ← atomicWriteFile(), withRetry(), env file parsing, misc helpers
   ai/
+    typesafe-classifier.ts    ← Optional typed group/image-edit classifier; bounded requests and confidence gates, with legacy fallback
     core.ts                  ← generateResponse() + background work (Gemini or OpenAI)
     platform.ts              ← AI_PLATFORM + independent support-axis model/provider resolution
     classifiers.ts           ← Lightweight LLM classifiers (routing decisions)
@@ -288,6 +289,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `GOOGLE_API_KEY`: Optional if OpenAI is set. Still required for Gemini chat/support and YouTube analysis.
 - `GEMINI_MODEL`: Gemini chat model (default: `gemini-3.6-flash`)
 - `BACKGROUND_MODEL`: Pinned model for background memory work — fact extraction, narrative updates, janitor (defaults to `gpt-5.6-luna` or `gemini-3.6-flash` from `BACKGROUND_PROVIDER`)
+- `TYPESAFE_API_KEY` / `TYPESAFE_MODEL`: Optional routing/image-edit classification (default `jev-1.13.0`). Auto-selected if `CLASSIFIER_PROVIDER` is unset; explicit `typesafe` also selects it, while explicit openai/gemini/fal overrides it. Missing key, unavailable/invalid/uncertain results fall back to the existing AI-platform classifier and its `CLASSIFIER_MODEL`. Background memory generation is unchanged.
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/claude-3.5-sonnet`)
 - `OPENROUTER_HTTP_REFERER` / `OPENROUTER_TITLE`: Optional attribution headers for OpenRouter requests
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `claude-sonnet-4-5-20250929`)

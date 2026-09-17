@@ -14,3 +14,4 @@ process.env.FULL_ACCESS_MODE = "false";
 process.env.SHOW_TRANSCRIPTION = "false";
 // Optional internet features must never spend inherited API credentials in tests.
 process.env.ENABLE_WEB_SEARCH = "false";
+delete process.env.TYPESAFE_API_KEY;

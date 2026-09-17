@@ -5,6 +5,8 @@ import {
 	DEFAULT_OPENAI_IMAGE_MODEL,
 	resolveAiPlatform,
 	resolveBackgroundProvider,
+	resolveClassifierModel,
+	resolveClassifierProvider,
 	resolveDefaultChatProviderName,
 	resolveDefaultImageProviderName,
 	resolveEmbeddingProvider,
@@ -231,7 +233,7 @@ interface ProviderEnv extends EnvMap {
 	VISION_PROVIDER?: "gemini" | "openai";
 	DOCUMENT_PROVIDER?: "gemini" | "openai";
 	BACKGROUND_PROVIDER?: "gemini" | "openai" | "fal";
-	CLASSIFIER_PROVIDER?: "gemini" | "openai" | "fal";
+	CLASSIFIER_PROVIDER?: "gemini" | "openai" | "fal" | "typesafe";
 	YOUTUBE_PROVIDER?: "gemini" | "openai";
 	OPENROUTER_TRANSPORT?: OpenRouterTransport;
 	FAL_IMAGE_MODEL?: string;
@@ -298,8 +300,10 @@ const ProviderEnvSchema = z.object({
 		z.enum(["gemini", "openai", "fal"]),
 	),
 	CLASSIFIER_PROVIDER: optionalProviderString(
-		z.enum(["gemini", "openai", "fal"]),
+		z.enum(["gemini", "openai", "fal", "typesafe"]),
 	),
+	TYPESAFE_API_KEY: optionalString,
+	TYPESAFE_MODEL: optionalString,
 	YOUTUBE_PROVIDER: optionalProviderString(z.enum(["gemini", "openai"])),
 	OPENROUTER_TRANSPORT: optionalProviderString(z.enum(["direct", "fal"])),
 	FAL_IMAGE_MODEL: optionalString,
@@ -764,7 +768,11 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 		{
 			label: "Classifiers",
 			name: "CLASSIFIER_PROVIDER",
-			provider: providerEnv.CLASSIFIER_PROVIDER,
+			// TypeSafe is optional even when explicitly selected without a key.
+			provider:
+				providerEnv.CLASSIFIER_PROVIDER === "typesafe"
+					? undefined
+					: providerEnv.CLASSIFIER_PROVIDER,
 		},
 	];
 	for (const check of supportChecks) {
@@ -843,6 +851,7 @@ export function formatProviderStartupSummary(
 		`[startup] Chat provider: ${chat}${chatTransport}`,
 		`[startup] Embeddings: ${resolveEmbeddingProvider(env)}`,
 		`[startup] Background: ${resolveBackgroundProvider(env)}`,
+		`[startup] Classifiers: ${resolveClassifierProvider(env)} (${resolveClassifierModel(env)})`,
 		`[startup] STT provider order: ${stt}`,
 		`[startup] TTS provider: ${tts}`,
 		`[startup] Image provider: ${imageSummary}`,
@@ -889,6 +898,7 @@ export function formatProviderCommandStatus(
 		"Independientes de /provider:",
 		`- STT: ${stt} (STT_PROVIDER)`,
 		`- TTS: ${tts} (TTS_PROVIDER)`,
+		`- Clasificadores: ${resolveClassifierProvider(env)} (${resolveClassifierModel(env)})`,
 		`- Imágenes: ${imageSummary} (IMAGE_PROVIDER, GEMINI_IMAGE_MODEL, OPENAI_IMAGE_MODEL, FAL_IMAGE_MODEL, FAL_IMAGE_QUALITY)`,
 		"",
 		"/provider solo cambia el chat. Voz, transcripción e imágenes se combinan aparte por env vars.",
