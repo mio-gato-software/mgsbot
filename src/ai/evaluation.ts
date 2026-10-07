@@ -98,19 +98,24 @@ export function validatePromotionResult(
 	const rawFacts = raw.facts ?? [];
 	const facts = rawFacts
 		.filter((f) => {
+			if (!f || typeof f !== "object") return false;
 			if (!f.content || typeof f.content !== "string" || !f.content.trim())
 				return false;
 			if (!VALID_CATEGORIES.has(f.category)) return false;
-			if (f.category === "person" && !f.subject?.trim()) return false;
+			if (
+				f.category === "person" &&
+				(typeof f.subject !== "string" || !f.subject.trim())
+			)
+				return false;
 			return true;
 		})
 		.map((f) => ({
 			...f,
 			content: f.content.trim(),
-			subject: f.subject?.trim(),
-			context: f.context?.trim(),
+			subject: typeof f.subject === "string" ? f.subject.trim() : undefined,
+			context: typeof f.context === "string" ? f.context.trim() : undefined,
 			importance:
-				typeof f.importance === "number"
+				typeof f.importance === "number" && Number.isFinite(f.importance)
 					? Math.max(1, Math.min(5, Math.round(f.importance)))
 					: importance,
 			permanent: f.permanent === true,
@@ -124,17 +129,19 @@ export function validatePromotionResult(
 
 	// Validate personality signals
 	let personalitySignals = raw.personalitySignals;
-	if (personalitySignals?.traitChanges) {
+	if (Array.isArray(personalitySignals?.traitChanges)) {
 		const validChanges = personalitySignals.traitChanges
 			.filter(
 				(c) =>
-					c.trait &&
+					c?.trait &&
 					typeof c.trait === "string" &&
 					VALID_TRAIT_NAMES.has(c.trait.toLowerCase().trim()) &&
 					typeof c.delta === "number" &&
+					Number.isFinite(c.delta) &&
 					Math.abs(c.delta) >= 0.01 &&
 					c.reason &&
-					typeof c.reason === "string",
+					typeof c.reason === "string" &&
+					c.reason.trim().length > 0,
 			)
 			.map((c) => ({
 				trait: c.trait.toLowerCase().trim(),
@@ -435,7 +442,9 @@ If nothing should be retired: {"retire": []}`;
 				(
 					entry,
 				): entry is { id: string; supersededBy?: unknown; reason?: unknown } =>
-					typeof entry.id === "string" && entry.id.trim().length > 0,
+					entry != null &&
+					typeof entry.id === "string" &&
+					entry.id.trim().length > 0,
 			)
 			.map((entry) => ({
 				id: entry.id.trim(),
@@ -504,12 +513,13 @@ ${recentMessages}`;
 		// Validate each follow-up
 		return parsed.followUps.filter(
 			(fu) =>
-				fu.event &&
+				fu?.event &&
 				typeof fu.event === "string" &&
 				fu.when &&
 				typeof fu.when === "string" &&
 				!Number.isNaN(Date.parse(fu.when)) &&
 				typeof fu.followUpDelayHours === "number" &&
+				Number.isFinite(fu.followUpDelayHours) &&
 				fu.followUpDelayHours > 0 &&
 				fu.question &&
 				typeof fu.question === "string",
