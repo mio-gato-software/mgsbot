@@ -1,4 +1,5 @@
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
@@ -75,7 +76,7 @@ export class FalChatProvider implements ChatProvider {
 					temperature: 0.7,
 					reasoning: this.reasoning,
 				}),
-				signal: AbortSignal.timeout(60_000),
+				signal: requestSignal(60_000),
 			});
 			if (!response.ok) {
 				const errorBody = await response.text().catch(() => "");

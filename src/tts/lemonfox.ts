@@ -1,4 +1,5 @@
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import type { TtsProvider } from "./types.ts";
 
 export class LemonFoxTtsProvider implements TtsProvider {
@@ -25,7 +26,7 @@ export class LemonFoxTtsProvider implements TtsProvider {
 				voice: "heart",
 				response_format: "mp3",
 			}),
-			signal: AbortSignal.timeout(15000),
+			signal: requestSignal(15000),
 		});
 
 		log.debug("[TTS:lemonfox] Response status:", response.status);

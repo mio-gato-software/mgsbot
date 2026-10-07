@@ -2,13 +2,14 @@ import * as fs from "node:fs";
 import {
 	createUserContent,
 	type GenerateContentResponse,
-	GoogleGenAI,
+	type GoogleGenAI,
 	type Part,
 } from "@google/genai";
 import { log } from "../logger.ts";
 import { createChatProvider } from "../providers/index.ts";
 import { supportsVision } from "../providers/types.ts";
 import { withRetry } from "../utils.ts";
+import { createGoogleClient } from "./google-client.ts";
 import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
 import {
 	hasGoogleApiKey,
@@ -30,7 +31,7 @@ export function describeImagePrompt(caption?: string): string {
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
-	if (!_ai) _ai = new GoogleGenAI({});
+	if (!_ai) _ai = createGoogleClient();
 	return _ai;
 }
 

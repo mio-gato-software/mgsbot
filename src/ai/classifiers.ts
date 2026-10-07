@@ -1,9 +1,10 @@
-import { createUserContent, GoogleGenAI } from "@google/genai";
+import { createUserContent, type GoogleGenAI } from "@google/genai";
 import { log } from "../logger.ts";
 import { FalChatProvider } from "../providers/fal.ts";
 import { createChatProvider } from "../providers/index.ts";
 import type { ConversationMessage } from "../types.ts";
 import { withRetry } from "../utils.ts";
+import { createGoogleClient } from "./google-client.ts";
 import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
 import {
 	openAIModelSupportsReasoning,
@@ -24,7 +25,7 @@ const GROUP_ROUTER_MAX_TOTAL_CHARS = 3000;
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
-	if (!_ai) _ai = new GoogleGenAI({});
+	if (!_ai) _ai = createGoogleClient();
 	return _ai;
 }
 

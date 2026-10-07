@@ -65,6 +65,12 @@ src/
                                provider call, response send, episode promotion, background evaluation
   response-plan.ts           ← Pure marker parsing into a structured delivery plan
   background-tasks.ts        ← Recurring jobs, overlap protection, and shutdown draining
+  chat-update-queue.ts        ← Bounded per-chat FIFO queues with concurrent execution across chats
+  update-processing.ts       ← Polling runner, deadlines, cancellation, and timeout replies
+  operation-deadline.ts       ← Shared operation signals and retry-budget ownership
+  runtime-health.ts          ← Polling/turn progress in the JSON heartbeat and Docker health check
+  pinned-web-request.ts       ← Direct HTTP transport pinned to validated public IPs
+  telegram-delivery.ts       ← Shared formatting-only plain-text fallback
   runtime-paths.ts           ← MEMORY_DIR resolution; tests override it with a disposable root
   response-processor.ts      ← Validated response delivery and marker handling ([SILENCE], [REACT], [IMAGE], [TTS], [QUOTE_REPLY]),
                                image/TTS sending, Markdown fallback
@@ -95,6 +101,7 @@ src/
   ai/
     typesafe-classifier.ts    ← Optional typed group/image-edit classifier; bounded requests and confidence gates, with legacy fallback
     core.ts                  ← generateResponse() + background work (Gemini or OpenAI)
+    google-client.ts         ← Gemini SDK client with operation cancellation and application-owned retries
     platform.ts              ← AI_PLATFORM + independent support-axis model/provider resolution
     classifiers.ts           ← Lightweight LLM classifiers (routing decisions)
     evaluation.ts            ← Background memory evaluation: semantic facts, personality signals, follow-ups
@@ -226,7 +233,7 @@ Proactive follow-up feature (`src/follow-ups.ts`), enabled via `ENABLE_FOLLOW_UP
 - Detects planned events/activities from conversations and schedules follow-up questions.
 - DR timezone-aware scheduling (8am–9:30pm reasonable hours).
 - Rate limited: max 2 sends/day, 2-hour cooldown between sends (based on recorded `sentAt`).
-- Expiration after 3 days. Cancelled if user already mentioned the topic.
+- Expiration after 3 days. Cancelled only by later user mentions of the topic; the source planning turn and bot replies do not resolve it.
 - Topic dedup: a newly detected event similar to any follow-up tracked in the last 14 days (any status) is skipped, so the same topic can't resurface week after week.
 - Won't interrupt active conversations (15-min cooldown).
 - Stored in `memory/follow-ups.json` (gitignored).

@@ -7,6 +7,7 @@
       "dependencies": {
         "@elevenlabs/elevenlabs-js": "^2.71.0",
         "@google/genai": "2.27.0",
+        "@grammyjs/runner": "^2.0.3",
         "dayjs": "^1.11.23",
         "grammy": "^1.46.0",
         "openai": "^7.30.0",
@@ -41,6 +42,8 @@
     "@elevenlabs/elevenlabs-js": ["@elevenlabs/elevenlabs-js@2.71.0", "", { "dependencies": { "command-exists": "^1.2.9", "node-fetch": "^2.7.0", "ws": "^8.18.3" } }, "sha512-TI4rj95rk1JzuinnlP2bR839IUdv4ZVaP1fHqAIxtQoSHU8y66gqy2o4XXEna+E801fGlrUos/pdLr2GSz6HQg=="],
 
     "@google/genai": ["@google/genai@2.27.0", "", { "dependencies": { "google-auth-library": "^10.3.0", "p-retry": "^4.6.2", "protobufjs": "^7.5.4", "ws": "^8.18.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": "^1.25.2" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-W6F9Y9d4h7cVQNa85IPCOVVP9PiUzve/ZQPBvQnBmnBJcLvxstEw+R2X/RyCH0SOe0HVDQzeKDpDUf6ZRtbmdQ=="],
+
+    "@grammyjs/runner": ["@grammyjs/runner@2.0.3", "", { "dependencies": { "abort-controller": "^3.0.0" }, "peerDependencies": { "grammy": "^1.13.1" } }, "sha512-nckmTs1dPWfVQteK9cxqxzE+0m1VRvluLWB8UgFzsjg62w3qthPJt0TYtJBEdG7OedvfQq4vnFAyE6iaMkR42A=="],
 
     "@grammyjs/types": ["@grammyjs/types@5.0.0", "", {}, "sha512-iq1Qrq1iPKkB8yAa0qSuIURMZOCuqTY5pWy5gHpCeL1oQ+GPadGhw/cDTVE8waJwuCzacUzuIjRv1sESvk7u7A=="],
 

@@ -24,6 +24,7 @@ import { buildPromptContext } from "./prompt/context.ts";
 import { buildMessages } from "./prompt/history.ts";
 import { retrieveMemoryContext } from "./prompt/retrieval.ts";
 import { memoryPath } from "./runtime-paths.ts";
+import { withMarkdownFallback } from "./telegram-delivery.ts";
 import type {
 	CheckInSlot,
 	CheckInState,
@@ -299,6 +300,10 @@ export async function checkAndSendCheckIns(
 	api: Api,
 	isBotOff: () => boolean,
 	isSleepingHour: () => boolean,
+	dependencies = {
+		generate: generateCheckInMessage,
+		pulse: pulseTypingBeforeSend,
+	},
 ): Promise<void> {
 	if (process.env.ENABLE_CHECK_INS !== "true") return;
 	if (isBotOff()) return;
@@ -402,7 +407,7 @@ export async function checkAndSendCheckIns(
 			);
 
 			try {
-				const message = await generateCheckInMessage(chatId, strategy, {
+				const message = await dependencies.generate(chatId, strategy, {
 					avoidTopics,
 					unanswered: unansweredStreak >= 1,
 				});
@@ -416,12 +421,14 @@ export async function checkAndSendCheckIns(
 
 				// Send the message (brief typing pulse first — a person types for a
 				// moment before hitting send)
-				await pulseTypingBeforeSend(api, chatId);
-				try {
-					await api.sendMessage(chatId, message, { parse_mode: "Markdown" });
-				} catch {
-					await api.sendMessage(chatId, message);
-				}
+				await dependencies.pulse(api, chatId);
+				await withMarkdownFallback((parseMode) =>
+					api.sendMessage(
+						chatId,
+						message,
+						parseMode ? { parse_mode: parseMode } : {},
+					),
+				);
 
 				pendingSlot.status = "sent";
 				state.lastSentTimestamp = now;

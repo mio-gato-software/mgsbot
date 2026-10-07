@@ -24,6 +24,7 @@
 	"dependencies": {
 		"@elevenlabs/elevenlabs-js": "^2.71.0",
 		"@google/genai": "2.27.0",
+		"@grammyjs/runner": "^2.0.3",
 		"dayjs": "^1.11.23",
 		"grammy": "^1.46.0",
 		"openai": "^7.30.0",

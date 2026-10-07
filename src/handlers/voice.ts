@@ -14,6 +14,7 @@ import { claimGroupContinuationSlot } from "../group-state.ts";
 import { log } from "../logger.ts";
 import { downloadAndTranscribe } from "../media-handlers.ts";
 import { loadSensory } from "../memory/index.ts";
+import { isTimeoutError } from "../operation-deadline.ts";
 import type { MentionType } from "../types.ts";
 import { isDev, safeMediaExtension } from "../utils.ts";
 import {
@@ -196,6 +197,8 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 				},
 			);
 		} catch (error) {
+			if (isTimeoutError(error) && (!isGroup || mentionType !== "none"))
+				throw error;
 			log.error("[voice handler] Error:", error);
 			if (isDev)
 				await ctx.reply(`[Dev] Voice handler error: ${error}`).catch(() => {});
@@ -246,6 +249,7 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 				},
 			);
 		} catch (error) {
+			if (isTimeoutError(error)) throw error;
 			log.error("[audio handler] Error:", error);
 			if (isDev)
 				await ctx.reply(`[Dev] Audio handler error: ${error}`).catch(() => {});

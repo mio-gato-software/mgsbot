@@ -9,6 +9,14 @@ import {
 } from "node:fs";
 import { mkdir, open, rename, unlink } from "node:fs/promises";
 import { dirname } from "node:path";
+import {
+	abortable,
+	abortableDelay,
+	currentOperationSignal,
+	isTimeoutError,
+	ownsRetryBudget,
+	withRetryBudget,
+} from "./operation-deadline.ts";
 import { withPersistenceLock } from "./persistence-coordination.ts";
 
 /**
@@ -66,23 +74,32 @@ export async function withRetry<T>(
 	maxAttempts = 3,
 	baseDelayMs = 1000,
 ): Promise<T> {
-	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		try {
-			return await fn();
-		} catch (error) {
-			if (attempt === maxAttempts) throw error;
-			const message = error instanceof Error ? error.message : String(error);
-			const isTimeout =
-				(error instanceof DOMException && error.name === "TimeoutError") ||
-				message.includes("timed out");
-			const isRetryable =
-				message.includes("429") || message.includes("503") || isTimeout;
-			if (!isRetryable) throw error;
-			const delay = baseDelayMs * 2 ** (attempt - 1);
-			await new Promise((resolve) => setTimeout(resolve, delay));
-		}
+	if (ownsRetryBudget()) {
+		currentOperationSignal()?.throwIfAborted();
+		return abortable(Promise.resolve().then(fn), currentOperationSignal());
 	}
-	throw new Error("withRetry: unreachable");
+	return withRetryBudget(async () => {
+		for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+			try {
+				currentOperationSignal()?.throwIfAborted();
+				return await abortable(
+					Promise.resolve().then(fn),
+					currentOperationSignal(),
+				);
+			} catch (error) {
+				currentOperationSignal()?.throwIfAborted();
+				if (attempt === maxAttempts) throw error;
+				const message = error instanceof Error ? error.message : String(error);
+				const isTimeout = isTimeoutError(error);
+				const isRetryable =
+					message.includes("429") || message.includes("503") || isTimeout;
+				if (!isRetryable) throw error;
+				const delay = baseDelayMs * 2 ** (attempt - 1);
+				await abortableDelay(delay);
+			}
+		}
+		throw new Error("withRetry: unreachable");
+	});
 }
 
 /**

@@ -45,6 +45,7 @@ import {
 	extractYouTubeUrl,
 } from "./media-handlers.ts";
 import { loadSensory } from "./memory/index.ts";
+import { isTimeoutError } from "./operation-deadline.ts";
 import { isSimpleAssistantMode } from "./prompt/modes.ts";
 import { processSetupConversation } from "./setup.ts";
 import { isDev, safeMediaExtension } from "./utils.ts";
@@ -323,6 +324,7 @@ export function registerHandlers(bot: Bot): void {
 						},
 					);
 				} catch (error) {
+					if (isTimeoutError(error)) throw error;
 					log.error("[reply-to-audio handler] Error:", error);
 					if (isDev)
 						await ctx

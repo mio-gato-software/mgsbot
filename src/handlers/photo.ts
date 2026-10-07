@@ -12,6 +12,7 @@ import {
 import { getMessageImage } from "../image-context.ts";
 import { log } from "../logger.ts";
 import { cleanupFile, downloadImageByFileId } from "../media-handlers.ts";
+import { isTimeoutError } from "../operation-deadline.ts";
 import { isSimpleAssistantMode } from "../prompt/modes.ts";
 import { createChatProvider } from "../providers/index.ts";
 import {
@@ -108,6 +109,7 @@ export async function handlePhoto(
 			await cleanupFile(filePath);
 		}
 	} catch (error) {
+		if (isTimeoutError(error)) throw error;
 		log.error("[photo handler] Error:", error);
 		await ctx
 			.reply(

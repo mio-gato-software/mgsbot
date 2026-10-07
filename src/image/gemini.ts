@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
-import { createUserContent, GoogleGenAI } from "@google/genai";
+import { createUserContent, type GoogleGenAI } from "@google/genai";
+import { createGoogleClient } from "../ai/google-client.ts";
 import {
 	resolveGeminiImageModel,
 	resolveGeminiImageSize,
@@ -11,7 +12,7 @@ const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
-	if (!_ai) _ai = new GoogleGenAI({});
+	if (!_ai) _ai = createGoogleClient(undefined, 300_000);
 	return _ai;
 }
 

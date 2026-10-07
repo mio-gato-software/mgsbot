@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import {
 	FAL_IMAGE_MODELS,
 	resolveFalImageModelName,
@@ -104,7 +105,7 @@ export class FalImageProvider implements ImageProvider {
 					"Content-Type": "application/json",
 				},
 				body: JSON.stringify(body),
-				signal: AbortSignal.timeout(this.generationTimeoutMs),
+				signal: requestSignal(this.generationTimeoutMs),
 			});
 			if (!response.ok) {
 				const errorBody = await response.text().catch(() => "");
@@ -122,7 +123,7 @@ export class FalImageProvider implements ImageProvider {
 
 		// Download the generated image
 		const imageResponse = await fetch(imageUrl, {
-			signal: AbortSignal.timeout(this.downloadTimeoutMs),
+			signal: requestSignal(this.downloadTimeoutMs),
 		});
 		if (!imageResponse.ok) {
 			throw new Error(

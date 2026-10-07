@@ -1,11 +1,12 @@
 import {
 	createPartFromUri,
 	createUserContent,
-	GoogleGenAI,
+	type GoogleGenAI,
 } from "@google/genai";
 import { toFile } from "openai";
 import { log } from "../logger.ts";
 import { withRetry } from "../utils.ts";
+import { createGoogleClient } from "./google-client.ts";
 import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
 import {
 	resolveDocumentProvider,
@@ -20,7 +21,7 @@ const POLL_INTERVAL_MS = 1000;
 let ai: GoogleGenAI | null = null;
 
 function getAI(): GoogleGenAI {
-	if (!ai) ai = new GoogleGenAI({});
+	if (!ai) ai = createGoogleClient();
 	return ai;
 }
 
