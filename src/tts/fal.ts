@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
 import type { TtsProvider } from "./types.ts";
@@ -64,7 +65,7 @@ export class FalTtsProvider implements TtsProvider {
 			);
 		}
 
-		const filePath = `./audios/tts_fal_${Date.now()}.mp3`;
+		const filePath = `./audios/tts_fal_${Date.now()}_${randomUUID()}.mp3`;
 		const buffer = Buffer.from(await audioResponse.arrayBuffer());
 		log.debug("[TTS:fal] Received bytes:", buffer.byteLength);
 		await Bun.write(filePath, buffer);

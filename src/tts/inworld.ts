@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
 import type { TtsProvider } from "./types.ts";
@@ -57,7 +58,7 @@ export class InworldTtsProvider implements TtsProvider {
 			);
 
 		const audioBuffer = Buffer.from(data.audioContent, "base64");
-		const filePath = `./audios/tts_${Date.now()}.mp3`;
+		const filePath = `./audios/tts_${Date.now()}_${randomUUID()}.mp3`;
 		await Bun.write(filePath, audioBuffer);
 		log.debug("[TTS:inworld] Saved bytes:", audioBuffer.byteLength);
 		return filePath;

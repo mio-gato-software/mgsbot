@@ -1,7 +1,12 @@
 import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { trackBackground } from "./background-tasks.ts";
-import { type BotLanguage, loadConfig, saveConfig } from "./config.ts";
+import {
+	type BotLanguage,
+	loadConfig,
+	parseManualProfile,
+	saveConfig,
+} from "./config.ts";
 import { log } from "./logger.ts";
 import {
 	addMessageToSensory,
@@ -11,6 +16,7 @@ import {
 } from "./memory/index.ts";
 import { drainPromotionSpool } from "./memory/promotion.ts";
 import { buildMessages } from "./prompt/history.ts";
+import { withMarkdownFallback } from "./telegram-delivery.ts";
 import type { ConversationMessage } from "./types.ts";
 
 const SETUP_SYSTEM_PROMPT_ES = `Eres un asistente de configuración inicial para un nuevo bot de Telegram.
@@ -125,14 +131,23 @@ export async function processSetupConversation(
 	);
 
 	if (jsonMatch) {
+		let configData: Record<string, unknown> | undefined;
 		try {
-			const configData = JSON.parse(jsonMatch[0]);
-			const { botName, birthYear, gender, personality } = configData;
+			configData = JSON.parse(jsonMatch[0]);
+		} catch (error) {
+			log.error("[setup] Error parsing setup JSON:", error);
+		}
+		if (configData) {
+			const { birthYear, gender } = configData;
 
 			const validGenders = VALID_GENDERS[lang];
-			const normalizedGender = gender?.toLowerCase().trim();
+			const normalizedGender =
+				typeof gender === "string" ? gender.toLowerCase().trim() : undefined;
 
-			if (gender && !validGenders.includes(normalizedGender)) {
+			if (
+				gender !== undefined &&
+				!validGenders.includes(normalizedGender ?? "")
+			) {
 				const genderOptions = validGenders
 					.map((g) => `*${g}*`)
 					.join(lang === "en" ? " or " : " o ");
@@ -140,18 +155,28 @@ export async function processSetupConversation(
 					lang === "en"
 						? `⚠️ The bot's gender can only be ${genderOptions}. Please choose one of those two options.`
 						: `⚠️ El sexo del bot solo puede ser ${genderOptions}. Por favor, elige una de esas dos opciones.`;
-				await ctx.reply(msg, { parse_mode: "Markdown" });
+				await withMarkdownFallback((parse_mode) =>
+					ctx.reply(msg, { parse_mode }),
+				);
 				return;
 			}
 
-			if (botName && birthYear && normalizedGender && personality) {
-				currentConfig.isConfigured = true;
-				currentConfig.botName = botName;
-				currentConfig.birthYear = Number(birthYear);
-				currentConfig.gender = normalizedGender;
-				currentConfig.personality = personality;
-				currentConfig.language = lang;
-				saveConfig(currentConfig);
+			const profile = parseManualProfile({ ...configData, language: lang });
+			if (
+				profile &&
+				typeof birthYear === "number" &&
+				Number.isInteger(birthYear) &&
+				birthYear > 0 &&
+				birthYear <= new Date().getFullYear()
+			) {
+				saveConfig(profile);
+
+				// Clear the setup conversation to start fresh
+				await withChatLock(chatId, async () => {
+					const fresh = await loadSensory(chatId);
+					fresh.messages = [];
+					await saveSensory(fresh);
+				});
 
 				// Send confirmation to user
 				const cleanText = responseText
@@ -160,35 +185,22 @@ export async function processSetupConversation(
 					.replace(/```/g, "")
 					.trim();
 				if (cleanText) {
-					try {
-						await ctx.reply(cleanText, { parse_mode: "Markdown" });
-					} catch {
-						await ctx.reply(cleanText);
-					}
+					await withMarkdownFallback((parse_mode) =>
+						ctx.reply(cleanText, { parse_mode }),
+					);
 				}
 				const confirmMsg =
 					lang === "en"
-						? `✅ Setup complete! I am now ${botName}.`
-						: `✅ ¡Configuración completada! Ahora soy ${botName}.`;
+						? `✅ Setup complete! I am now ${profile.botName}.`
+						: `✅ ¡Configuración completada! Ahora soy ${profile.botName}.`;
 				await ctx.reply(confirmMsg);
 
-				// Clear the setup conversation to start fresh
-				await withChatLock(chatId, async () => {
-					const fresh = await loadSensory(chatId);
-					fresh.messages = [];
-					await saveSensory(fresh);
-				});
 				return;
 			}
-		} catch (error) {
-			log.error("[setup] Error parsing setup JSON:", error);
-			// Fallback to normal reply if parsing fails
 		}
 	}
 
-	try {
-		await ctx.reply(responseText, { parse_mode: "Markdown" });
-	} catch {
-		await ctx.reply(responseText);
-	}
+	await withMarkdownFallback((parse_mode) =>
+		ctx.reply(responseText, { parse_mode }),
+	);
 }

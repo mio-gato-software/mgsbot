@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { log } from "../logger.ts";
+import { operationFetch } from "../operation-deadline.ts";
 import type { TtsProvider } from "./types.ts";
 
 export class ElevenLabsTtsProvider implements TtsProvider {
@@ -11,7 +13,12 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 	constructor() {
 		const apiKey = process.env.ELEVENLABS_API_KEY;
 		if (!apiKey) throw new Error("ELEVENLABS_API_KEY is required");
-		this.client = new ElevenLabsClient({ apiKey });
+		this.client = new ElevenLabsClient({
+			apiKey,
+			fetch: operationFetch as typeof fetch,
+			maxRetries: 0,
+			timeoutInSeconds: 60,
+		});
 		this.voiceId = process.env.ELEVENLABS_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb";
 		this.modelId = process.env.ELEVENLABS_MODEL || "eleven_v3";
 	}
@@ -25,7 +32,7 @@ export class ElevenLabsTtsProvider implements TtsProvider {
 			outputFormat: "mp3_44100_128",
 		});
 
-		const filePath = `./audios/tts_${Date.now()}.mp3`;
+		const filePath = `./audios/tts_${Date.now()}_${randomUUID()}.mp3`;
 		const chunks: Uint8Array[] = [];
 		for await (const chunk of audio) {
 			chunks.push(chunk);
