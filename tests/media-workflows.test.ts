@@ -336,3 +336,52 @@ test("YouTube extraction handles visible links, hidden links and fallback URLs",
 	).toBeNull();
 	expect(extractYouTubeUrl(context("unused", { noMessage: true }))).toBeNull();
 });
+
+test("concurrent audio downloads with the same Telegram message ID remain independent", async () => {
+	response("audio bytes");
+	const transcribe = spyOn(stt, "transcribeAudio");
+	restores.push(() => transcribe.mockRestore());
+	const paths: string[] = [];
+	let signalBoth: () => void = () => {};
+	const both = new Promise<void>((resolve) => {
+		signalBoth = resolve;
+	});
+	transcribe.mockImplementation(async (path) => {
+		paths.push(path);
+		if (paths.length === 2) signalBoth();
+		await both;
+		return await Bun.file(path).text();
+	});
+	const first = context("a.ogg", { chatId: 890001, messageId: 7 });
+	const second = context("b.ogg", { chatId: 890002, messageId: 7 });
+	const results = await Promise.all([
+		downloadAndTranscribe(
+			first,
+			"test-token",
+			"audio/ogg",
+			"ogg",
+			"coverage-parallel",
+		),
+		downloadAndTranscribeByFileId(
+			second.api,
+			"test-token",
+			"second",
+			"audio/ogg",
+			"ogg",
+			"coverage-parallel",
+			7,
+		),
+	]);
+	expect(results).toEqual(["audio bytes", "audio bytes"]);
+	expect(paths[0]).not.toBe(paths[1]);
+	for (const path of paths) expect(existsSync(path)).toBe(false);
+});
+test("concurrent PDF downloads with the same message ID get independent files", async () => {
+	response("%PDF");
+	const paths = await Promise.all([
+		downloadPdfByFileId(context().api, "test-token", "first", 8),
+		downloadPdfByFileId(context().api, "test-token", "second", 8),
+	]);
+	files.push(...paths);
+	expect(paths[0]).not.toBe(paths[1]);
+});

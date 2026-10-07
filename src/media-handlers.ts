@@ -39,7 +39,7 @@ export async function downloadAndTranscribe(
 	}
 
 	const buffer = Buffer.from(await response.arrayBuffer());
-	const filePath = `./audios/${prefix}_${ctx.message?.message_id}.${fileExtension}`;
+	const filePath = `./audios/${prefix}_${ctx.message?.message_id}_${randomUUID()}.${fileExtension}`;
 	await Bun.write(filePath, buffer);
 	log.debug(
 		"[downloadAndTranscribe] Saved to:",
@@ -86,7 +86,7 @@ export async function downloadAndTranscribeByFileId(
 	}
 
 	const buffer = Buffer.from(await response.arrayBuffer());
-	const filePath = `./audios/${prefix}_${messageId}.${fileExtension}`;
+	const filePath = `./audios/${prefix}_${messageId}_${randomUUID()}.${fileExtension}`;
 	await Bun.write(filePath, buffer);
 	log.debug(
 		"[downloadAndTranscribeByFileId] Saved to:",
@@ -172,7 +172,7 @@ export async function downloadPdfByFileId(
 		);
 	}
 
-	const filePath = `./audios/pdf_${messageId}.pdf`;
+	const filePath = `./audios/pdf_${messageId}_${randomUUID()}.pdf`;
 	const buffer = Buffer.from(await response.arrayBuffer());
 	await Bun.write(filePath, buffer);
 	log.debug("[downloadPdf] Saved to:", filePath, `(${buffer.length} bytes)`);

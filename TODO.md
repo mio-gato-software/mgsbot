@@ -9,13 +9,6 @@ Living document. Rules:
 
 ## Pending
 
-### Extend voice and setup workflow coverage
-
-- **Why:** the 2026-10-06 coverage pass raised the suite to about 75% lines / 72% functions by covering extraction, attachment processing, and chat-provider requests. Voice/photo routing, STT/TTS provider adapters, and interactive setup still have low measured coverage; some existing routing tests execute in subprocesses and do not contribute to Bun's aggregate report.
-- **What to do:** add in-process workflow tests for passive versus addressed group voice, transcription failures, TTS delivery failures, and setup completion/cancellation. Mock only network/provider boundaries, assert delivery and cleanup, and restore environment and module spies. Keep tests independent of live credentials; do not duplicate subprocess scenarios solely to raise the percentage.
-- **Size:** Medium; requires isolating environment-dependent routing and cached provider state.
-- Added 2026-10-06.
-
 ### Release fal background and classifier support before updating Brendy
 
 - **Why:** Brendy runs a verified custom build based on v1.0.61 with background Luna through fal, OpenAI embeddings, and its group-message classifier routed through fal with `deepseek/deepseek-v4.1-flash`. Its release updater must not run until a published binary includes both `BACKGROUND_PROVIDER=fal` and `CLASSIFIER_PROVIDER=fal` support; older binaries would reject or ignore the custom configuration.
