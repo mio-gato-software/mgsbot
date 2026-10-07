@@ -13,6 +13,7 @@ export interface MockUser {
 
 export interface MockMessageEntity {
 	type: string;
+	url?: string;
 	offset: number;
 	length: number;
 }
