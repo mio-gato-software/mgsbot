@@ -83,6 +83,23 @@ describe("provider options", () => {
 		).toBe("nano-banana-pro");
 	});
 
+	test("accepts Nano Banana 2.1 Fal endpoint as an image model", () => {
+		expect(
+			resolveFalImageModelName({
+				FAL_IMAGE_MODEL: "google/nano-banana-2.1",
+			}),
+		).toBe("nano-banana-2.1");
+		expect(
+			validateProviderConfiguration({
+				CHAT_PROVIDER: "fal",
+				IMAGE_PROVIDER: "fal",
+				FAL_API_KEY: "fal-test",
+				OPENAI_API_KEY: "openai-test",
+				FAL_IMAGE_MODEL: "google/nano-banana-2.1",
+			}).errors,
+		).toEqual([]);
+	});
+
 	test("resolves automatic STT provider order", () => {
 		expect(
 			resolveSttProviderOrder({
@@ -248,7 +265,7 @@ describe("provider options", () => {
 			FAL_IMAGE_MODEL: "typo",
 		});
 		expect(result.errors).toContain(
-			"fal.ai images require FAL_IMAGE_MODEL to be gpt-image-2 or nano-banana-pro when set.",
+			"fal.ai images require FAL_IMAGE_MODEL to be gpt-image-2, nano-banana-pro, or nano-banana-2.1 when set.",
 		);
 	});
 

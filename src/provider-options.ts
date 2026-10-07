@@ -207,6 +207,12 @@ export const FAL_IMAGE_MODELS = [
 		editEndpoint: "openai/gpt-image-2/edit",
 	},
 	{
+		name: "nano-banana-2.1",
+		label: "Nano Banana 2.1",
+		textEndpoint: "google/nano-banana-2.1",
+		editEndpoint: "google/nano-banana-2.1/edit",
+	},
+	{
 		name: "nano-banana-pro",
 		label: "Nano Banana Pro",
 		textEndpoint: "fal-ai/nano-banana-pro",
@@ -542,6 +548,10 @@ function normalizeFalImageModelName(value?: string): FalImageModelName | null {
 		case "fal-ai/nano-banana-pro":
 		case "fal-ai/nano-banana-pro/edit":
 			return "nano-banana-pro";
+		case "nano-banana-2.1":
+		case "google/nano-banana-2.1":
+		case "google/nano-banana-2.1/edit":
+			return "nano-banana-2.1";
 		default:
 			return null;
 	}
@@ -554,7 +564,9 @@ export function resolveFalImageModelName(
 		parseProviderEnv(env).FAL_IMAGE_MODEL,
 	);
 	if (!model) {
-		throw new Error("FAL_IMAGE_MODEL must be gpt-image-2 or nano-banana-pro.");
+		throw new Error(
+			"FAL_IMAGE_MODEL must be gpt-image-2, nano-banana-pro, or nano-banana-2.1.",
+		);
 	}
 	return model;
 }
@@ -687,7 +699,7 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 		}
 		if (imageProvider === "fal" && !falImageModel) {
 			errors.push(
-				"fal.ai images require FAL_IMAGE_MODEL to be gpt-image-2 or nano-banana-pro when set.",
+				"fal.ai images require FAL_IMAGE_MODEL to be gpt-image-2, nano-banana-pro, or nano-banana-2.1 when set.",
 			);
 		}
 		if (

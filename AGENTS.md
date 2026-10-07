@@ -311,7 +311,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `GROUP_PASSIVE_VOICE_MAX_SECONDS`: Maximum duration for passive group voice-note transcription (default: `120`)
 - `GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS`: Maximum transcript characters stored for passive group voice context (default: `1200`)
 - `IMAGE_PROVIDER`: `gemini`, `openai`, or `fal` (defaults from `AI_PLATFORM`)
-- `FAL_IMAGE_MODEL`: fal.ai image model, `nano-banana-pro` (default) or `gpt-image-2`
+- `FAL_IMAGE_MODEL`: fal.ai image model, `nano-banana-pro` (default), `gpt-image-2`, or `google/nano-banana-2.1` (text and reference-image edit endpoints)
 - `FAL_IMAGE_QUALITY`: fal.ai GPT Image 2 quality, `low`, `medium`, or `high` (default)
 - `FAL_IMAGE_TIMEOUT_MS`: fal.ai generation timeout in milliseconds (default: `300000`)
 - `SIMPLE_ASSISTANT_MODE`: Set `true` to disable personality, media processing, image gen, and memory
