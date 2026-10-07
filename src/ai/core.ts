@@ -1,10 +1,16 @@
-import { GoogleGenAI } from "@google/genai";
+import type { GoogleGenAI } from "@google/genai";
 import { alertOwner, errorSummary } from "../alerts.ts";
 import { log } from "../logger.ts";
 import { recordMemoryUsage, type TokenUsage } from "../memory/usage-metrics.ts";
+import {
+	BACKGROUND_TIMEOUT_MS,
+	CHAT_TIMEOUT_MS,
+	withDeadline,
+} from "../operation-deadline.ts";
 import { FalChatProvider } from "../providers/fal.ts";
 import { type ChatMessage, createChatProvider } from "../providers/index.ts";
 import { withRetry } from "../utils.ts";
+import { createGoogleClient } from "./google-client.ts";
 import { getOpenAIClient, openaiReasoningConfig } from "./openai-client.ts";
 import {
 	resolveBackgroundModel,
@@ -24,10 +30,13 @@ let warnedBackgroundFallback = false;
 export async function generateResponse(
 	systemPrompt: string,
 	messages: ChatMessage[],
+	dependencies = { provider: createChatProvider, timeoutMs: CHAT_TIMEOUT_MS },
 ): Promise<string> {
-	const provider = createChatProvider();
+	const provider = dependencies.provider();
 	try {
-		return await provider.generateResponse(systemPrompt, messages);
+		return await withDeadline("chat response", dependencies.timeoutMs, () =>
+			provider.generateResponse(systemPrompt, messages),
+		);
 	} catch (error) {
 		await alertOwner(
 			"chat-provider",
@@ -46,7 +55,7 @@ async function generateGeminiBackgroundResponse(
 	messages: ChatMessage[],
 	model: string,
 ): Promise<BackgroundResult> {
-	if (!backgroundAI) backgroundAI = new GoogleGenAI({});
+	if (!backgroundAI) backgroundAI = createGoogleClient();
 	const response = await backgroundAI.models.generateContent({
 		model,
 		config: systemPrompt ? { systemInstruction: systemPrompt } : {},
@@ -111,6 +120,16 @@ export async function generateBackgroundResponseWithModel(
 	messages: ChatMessage[],
 	operation = "background",
 ): Promise<{ text: string; model: string }> {
+	return withDeadline("background generation", BACKGROUND_TIMEOUT_MS, () =>
+		generateBackgroundWithinDeadline(systemPrompt, messages, operation),
+	);
+}
+
+async function generateBackgroundWithinDeadline(
+	systemPrompt: string,
+	messages: ChatMessage[],
+	operation: string,
+): Promise<{ text: string; model: string }> {
 	const provider = resolveBackgroundProvider();
 	const model = backgroundModelId();
 	const allowChatFallback = process.env.BACKGROUND_FALLBACK_TO_CHAT !== "false";
@@ -166,7 +185,7 @@ export async function generateBackgroundResponseWithModel(
 						throw error;
 					}
 				},
-				provider === "fal" ? 1 : 2,
+				provider === "fal" ? 3 : 2,
 				500,
 			);
 			return { text: result.text, model: `${provider}:${model}` };

@@ -24,11 +24,14 @@ export interface RetrievalInput {
 }
 
 /** Shared memory retrieval for user turns and proactive messages. No Telegram side effects. */
-export async function retrieveMemoryContext(input: RetrievalInput) {
+export async function retrieveMemoryContext(
+	input: RetrievalInput,
+	dependencies = { queryEmbedding: getQueryEmbedding },
+) {
 	const { chatId, messages } = input;
 	const [{ embedding, text }, names] = await Promise.all([
 		messages.length
-			? getQueryEmbedding(messages)
+			? dependencies.queryEmbedding(messages)
 			: generateEmbedding(
 					"casual greeting everyday conversation how are you",
 				).then((embedding) => ({ embedding, text: "" })),
@@ -59,7 +62,7 @@ export async function retrieveMemoryContext(input: RetrievalInput) {
 			maxCount: input.factLimit ?? 8,
 			chatId,
 		}),
-		getFactsForSubjects(subjects, input.participantFactLimit ?? 3),
+		getFactsForSubjects(subjects, input.participantFactLimit ?? 3, chatId),
 		getPermanentFacts({
 			queryText: text,
 			queryEmbedding: embedding,

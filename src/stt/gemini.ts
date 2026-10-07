@@ -1,8 +1,9 @@
 import {
 	createPartFromUri,
 	createUserContent,
-	GoogleGenAI,
+	type GoogleGenAI,
 } from "@google/genai";
+import { createGoogleClient } from "../ai/google-client.ts";
 import { resolveGeminiSttModel } from "../ai/platform.ts";
 import { log } from "../logger.ts";
 import { isTutorActive } from "../prompt/modes.ts";
@@ -11,7 +12,7 @@ import type { SttProvider } from "./types.ts";
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
-	if (!_ai) _ai = new GoogleGenAI({});
+	if (!_ai) _ai = createGoogleClient();
 	return _ai;
 }
 

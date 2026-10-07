@@ -93,3 +93,18 @@ test("missing background key does not invoke chat when fallback is disabled", as
 	);
 	expect(fetchSpy).not.toHaveBeenCalled();
 });
+
+test("fal background retries use one application budget instead of nested attempts", async () => {
+	configure();
+	let calls = 0;
+	mockFetch(async () => {
+		calls++;
+		return new Response("503 unavailable", { status: 503 });
+	});
+	await expect(
+		generateBackgroundResponseWithModel("test", [
+			{ role: "user", content: "test" },
+		]),
+	).rejects.toThrow("503");
+	expect(calls).toBe(3);
+});

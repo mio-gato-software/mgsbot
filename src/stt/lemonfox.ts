@@ -1,4 +1,5 @@
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import { isTutorActive } from "../prompt/modes.ts";
 import type { SttProvider } from "./types.ts";
 
@@ -33,7 +34,7 @@ export class LemonFoxSttProvider implements SttProvider {
 					Authorization: `Bearer ${this.apiKey}`,
 				},
 				body,
-				signal: AbortSignal.timeout(30_000),
+				signal: requestSignal(30_000),
 			},
 		);
 

@@ -17,6 +17,10 @@ import { followUpsSchema } from "./memory/schemas.ts";
 import { readStore, writeStore } from "./memory/storage.ts";
 import type { ChatMessage } from "./providers/types.ts";
 import { memoryPath } from "./runtime-paths.ts";
+import {
+	isTelegramRejection,
+	withMarkdownFallback,
+} from "./telegram-delivery.ts";
 import type { ConversationMessage, FollowUp } from "./types.ts";
 
 export const FOLLOW_UPS_PATH = memoryPath("follow-ups.json");
@@ -166,6 +170,7 @@ export async function wasFollowUpSentToday(): Promise<boolean> {
 export async function checkAndCancelResolvedFollowUps(
 	chatId: number,
 	userContent: string,
+	messageAt = Date.now(),
 ): Promise<void> {
 	await withFollowUpsLock(async () => {
 		const all = await loadFollowUps();
@@ -177,6 +182,7 @@ export async function checkAndCancelResolvedFollowUps(
 
 		let changed = false;
 		for (const fu of pending) {
+			if (messageAt <= (fu.sourceMessageAt ?? fu.detectedAt)) continue;
 			const score = computeTextScore(fu.event, userContent);
 			if (score >= TOPIC_RESOLVED_THRESHOLD) {
 				fu.status = "cancelled";
@@ -208,6 +214,10 @@ export async function checkAndSendFollowUps(
 	api: Api,
 	isBotOff: () => boolean,
 	isSleepingHour: () => boolean,
+	dependencies = {
+		generate: generateFollowUpMessage,
+		pulse: pulseTypingBeforeSend,
+	},
 ): Promise<void> {
 	if (process.env.ENABLE_FOLLOW_UPS !== "true") return;
 	if (isBotOff()) return;
@@ -253,7 +263,14 @@ export async function checkAndSendFollowUps(
 		}
 
 		// Check if user already mentioned the topic in recent messages
-		const recentText = buffer.messages.map((m) => m.content).join(" ");
+		const recentText = buffer.messages
+			.filter(
+				(m) =>
+					m.role === "user" &&
+					m.timestamp > (followUp.sourceMessageAt ?? followUp.detectedAt),
+			)
+			.map((m) => m.content)
+			.join(" ");
 		if (
 			computeTextScore(followUp.event, recentText) >= TOPIC_RESOLVED_THRESHOLD
 		) {
@@ -268,9 +285,10 @@ export async function checkAndSendFollowUps(
 		// Generate and send
 		followUp.attempts++;
 		expired = false; // any expirations get persisted by the saves below
+		let deliveryAttempted = false;
 
 		try {
-			const message = await generateFollowUpMessage(followUp);
+			const message = await dependencies.generate(followUp);
 
 			if (!message.trim()) {
 				log.debug("[follow-ups] Empty message generated, skipping");
@@ -283,14 +301,15 @@ export async function checkAndSendFollowUps(
 
 			// Send the message (brief typing pulse first — receipt feedback and
 			// a more human cadence for proactive messages)
-			await pulseTypingBeforeSend(api, followUp.chatId);
-			try {
-				await api.sendMessage(followUp.chatId, message, {
-					parse_mode: "Markdown",
-				});
-			} catch {
-				await api.sendMessage(followUp.chatId, message);
-			}
+			await dependencies.pulse(api, followUp.chatId);
+			deliveryAttempted = true;
+			await withMarkdownFallback((parseMode) =>
+				api.sendMessage(
+					followUp.chatId,
+					message,
+					parseMode ? { parse_mode: parseMode } : {},
+				),
+			);
 
 			followUp.status = "sent";
 			followUp.sentAt = Date.now();
@@ -313,7 +332,22 @@ export async function checkAndSendFollowUps(
 			});
 		} catch (error) {
 			log.error("[follow-ups] Error sending follow-up:", error);
-			if (followUp.attempts >= MAX_ATTEMPTS) {
+			if (
+				followUp.status === "pending" &&
+				deliveryAttempted &&
+				!isTelegramRejection(error)
+			) {
+				// Telegram may have accepted the message. Keep the entry for inspection,
+				// but never resend the same question on the next checker tick.
+				followUp.status = "expired";
+				followUp.deliveryUnconfirmedAt = Date.now();
+				log.warn(
+					"[follow-ups] Unconfirmed delivery; automatic resend disabled",
+				);
+			} else if (
+				followUp.status === "pending" &&
+				followUp.attempts >= MAX_ATTEMPTS
+			) {
 				followUp.status = "expired";
 				log.debug(`[follow-ups] Max attempts reached for: "${followUp.event}"`);
 			}
@@ -329,6 +363,7 @@ export async function detectAndStoreFollowUps(
 	chatId: number,
 	recentMessages: string,
 	latestMessage: string,
+	sourceMessageAt = Date.now(),
 ): Promise<void> {
 	if (process.env.ENABLE_FOLLOW_UPS !== "true") return;
 
@@ -357,6 +392,7 @@ export async function detectAndStoreFollowUps(
 			event: fu.event,
 			followUpQuestion: fu.question,
 			detectedAt: Date.now(),
+			sourceMessageAt,
 			scheduledFor,
 		});
 	}

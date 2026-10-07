@@ -133,6 +133,8 @@ export const followUpsSchema = z.array(
 			event: z.string(),
 			followUpQuestion: z.string(),
 			detectedAt: timestamp,
+			sourceMessageAt: timestamp.optional(),
+			deliveryUnconfirmedAt: timestamp.optional(),
 			scheduledFor: timestamp,
 			sentAt: timestamp.optional(),
 			status: z.enum(["pending", "sent", "cancelled", "expired"]),

@@ -111,6 +111,8 @@ export interface FollowUp {
 	event: string; // "ir al cine a las 8pm"
 	followUpQuestion: string; // Pre-generated fallback question
 	detectedAt: number;
+	sourceMessageAt?: number; // Source user turn; only later user turns can resolve it
+	deliveryUnconfirmedAt?: number; // Terminal ambiguous send, retained for operator inspection
 	scheduledFor: number; // When to ask
 	sentAt?: number; // Actual send moment (absent on legacy entries)
 	status: "pending" | "sent" | "cancelled" | "expired";

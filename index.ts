@@ -117,8 +117,15 @@ if (needsSetup) {
 
 // --- Bot imports (after env vars are confirmed present) ---
 
-const { unlink } = await import("node:fs/promises");
+const { rename, unlink } = await import("node:fs/promises");
 const { Bot } = await import("grammy");
+const { cancelActiveOperations } = await import("./src/operation-deadline.ts");
+const { registerUpdateProcessing, startBotRunner } = await import(
+	"./src/update-processing.ts"
+);
+const { HEARTBEAT_FILE, RuntimeHealth } = await import(
+	"./src/runtime-health.ts"
+);
 const { flushEmbeddingCache, initEmbeddingCache } = await import(
 	"./src/embeddings.ts"
 );
@@ -176,7 +183,9 @@ log.info(
 	`[startup] Web pages: ${isBrowserbaseEnabled() ? "Browserbase Fetch (direct reader fallback)" : "direct reader"}`,
 );
 
-const bot = new Bot(token);
+const bot = new Bot(token, { client: { timeoutSeconds: 45 } });
+const health = new RuntimeHealth();
+registerUpdateProcessing(bot, health);
 
 // Owner alert delivery: plain-text DM to OWNER_USER_ID (no-op if unset)
 const ownerUserId = process.env.OWNER_USER_ID;
@@ -211,14 +220,21 @@ bot.catch((err) => {
 	alertOwner("bot-middleware", `Middleware error: ${errorSummary(err.error)}`);
 });
 
-bot.start().catch((error) => {
+const runner = startBotRunner(bot, health);
+runner.task()?.catch((error) => {
 	log.error("[polling] Bot stopped unexpectedly:", error);
 	process.exit(1);
 });
 
-const HEARTBEAT_FILE = "/tmp/mgsbot-heartbeat";
-backgroundTasks.every("heartbeat", 30_000, () =>
-	Bun.write(HEARTBEAT_FILE, String(Date.now())),
+backgroundTasks.every(
+	"heartbeat",
+	30_000,
+	async () => {
+		const staging = `${HEARTBEAT_FILE}.tmp`;
+		await Bun.write(staging, JSON.stringify(health.snapshot(runner.size())));
+		await rename(staging, HEARTBEAT_FILE);
+	},
+	true,
 );
 backgroundTasks.every("embedding-cache", 60_000, flushEmbeddingCache);
 backgroundTasks.every("backup", 3_600_000, () => runMemoryBackup());
@@ -271,9 +287,11 @@ async function shutdown(signal: string): Promise<void> {
 	}, SHUTDOWN_TIMEOUT_MS);
 
 	backgroundTasks.stopTimers();
+	health.stopAccepting();
+	cancelActiveOperations();
 
 	try {
-		await bot.stop();
+		await runner.stop();
 		await backgroundTasks.close();
 		await flushEmbeddingCache();
 		await unlink(HEARTBEAT_FILE).catch(() => {});

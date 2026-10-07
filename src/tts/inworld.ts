@@ -1,4 +1,5 @@
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import type { TtsProvider } from "./types.ts";
 
 export class InworldTtsProvider implements TtsProvider {
@@ -34,7 +35,7 @@ export class InworldTtsProvider implements TtsProvider {
 				temperature: 1,
 				applyTextNormalization: "ON",
 			}),
-			signal: AbortSignal.timeout(15000),
+			signal: requestSignal(15000),
 		});
 
 		log.debug("[TTS:inworld] Response status:", response.status);

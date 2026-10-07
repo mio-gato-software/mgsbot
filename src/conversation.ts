@@ -12,6 +12,7 @@ import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
+import { loadConfig } from "./config.ts";
 import {
 	checkAndCancelResolvedFollowUps,
 	detectAndStoreFollowUps,
@@ -32,12 +33,14 @@ import {
 	reinforceRecalledFacts,
 	withChatLock,
 } from "./memory/index.ts";
+import { isTimeoutError } from "./operation-deadline.ts";
 import { assembleSystemPrompt } from "./prompt/assemble.ts";
 import { buildPromptContext } from "./prompt/context.ts";
 import { buildMessages } from "./prompt/history.ts";
 import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
 import type { MediaAttachment } from "./providers/types.ts";
 import { type SendResponseResult, sendResponse } from "./response-processor.ts";
+import { timeoutReply } from "./telegram-delivery.ts";
 import { isTtsAvailable } from "./tts/index.ts";
 import type { ConversationMessage, MentionType } from "./types.ts";
 import {
@@ -170,9 +173,12 @@ export async function processConversation(
 
 		// Follow-up detection and cancellation (DMs only, background)
 		if (!isGroupChat(ctx)) {
+			const sourceMessageAt =
+				buffer.messages.findLast((m) => m.role === "user")?.timestamp ??
+				Date.now();
 			trackBackground(
 				"follow-up-cancel",
-				checkAndCancelResolvedFollowUps(chatId, userContent),
+				checkAndCancelResolvedFollowUps(chatId, userContent, sourceMessageAt),
 			);
 			const recentText = buffer.messages
 				.filter((m) => m.role === "user")
@@ -180,7 +186,12 @@ export async function processConversation(
 				.join("\n");
 			trackBackground(
 				"follow-up-detect",
-				detectAndStoreFollowUps(chatId, recentText, userContent),
+				detectAndStoreFollowUps(
+					chatId,
+					recentText,
+					userContent,
+					sourceMessageAt,
+				),
 			);
 		}
 
@@ -306,6 +317,11 @@ export async function processConversation(
 			userImagePath,
 			chatAction: typing,
 		});
+	} catch (error) {
+		if (!isTimeoutError(error)) throw error;
+		log.warn("[conversation] Provider deadline exceeded");
+		await ctx.reply(timeoutReply(loadConfig().language));
+		return false;
 	} finally {
 		typing.stop();
 		if (recoveredImagePath) await cleanupFile(recoveredImagePath);
