@@ -22,17 +22,17 @@
 	],
 	"module": "index.ts",
 	"dependencies": {
-		"@elevenlabs/elevenlabs-js": "^2.71.0",
-		"@google/genai": "2.27.0",
+		"@elevenlabs/elevenlabs-js": "^2.74.0",
+		"@google/genai": "2.30.0",
 		"@grammyjs/runner": "^2.0.3",
 		"dayjs": "^1.11.23",
 		"grammy": "^1.46.0",
-		"openai": "^7.30.0",
-		"zod": "^4.6.5"
+		"openai": "^7.39.0",
+		"zod": "^4.6.7"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.15",
-		"@types/bun": "1.4.2",
+		"@types/bun": "1.4.3",
 		"typescript": "7.0.2"
 	},
 	"private": true,
