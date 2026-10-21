@@ -454,3 +454,34 @@ test("model selection validates indices and accepts opting out", async () => {
 		selectGroupNewsStory(candidates, [], async () => "not json"),
 	).rejects.toThrow();
 });
+
+test("actual post wording persists across restart and reaches the next composition", async () => {
+	const previousText =
+		"Diache, esa subida se va a sentir cuando toque hacer la compra.";
+	const nextText =
+		"Lo de las inspecciones me dejó pensando en la gente que trabaja ahí.";
+	const { api, deps } = await setup({
+		compose: async (_chatId, _source, recent) => {
+			expect(recent.at(-1)?.text).toBe(previousText);
+			return nextText;
+		},
+	});
+	const saved = await state();
+	saved.recent = [
+		{
+			url: "https://example.org/previous",
+			title: "Precios",
+			sentAt: now - 7 * 86400000,
+			kind: "local",
+			text: previousText,
+		},
+	];
+	await writeStore(path, saved, groupNewsSchema, true);
+	await new GroupNewsService(deps).tick(
+		api,
+		() => false,
+		() => false,
+	);
+	expect(sends).toBe(1);
+	expect((await state()).recent.at(-1)?.text).toBe(nextText);
+});
