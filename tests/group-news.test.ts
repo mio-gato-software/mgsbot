@@ -3,11 +3,13 @@ import { rm } from "node:fs/promises";
 import type { Api } from "grammy";
 import { botNow, getDateString, getWeekStart } from "../src/bot-time.ts";
 import {
+	DEFAULT_GROUP_NEWS_LOCAL_QUERY,
 	type GroupNewsDependencies,
 	GroupNewsService,
 	groupNewsSchema,
 	isFreshGroupStory,
 	scheduleGroupNews,
+	selectGroupNewsStory,
 } from "../src/group-news.ts";
 import {
 	claimGroupContinuationSlot,
@@ -20,6 +22,7 @@ import { atomicWriteFile } from "../src/utils.ts";
 
 const chatId = -987654321;
 const originalGroup = process.env.ALLOWED_GROUP_ID;
+const originalLocalQuery = process.env.GROUP_NEWS_LOCAL_QUERY;
 const path = memoryPath("group-news", `${chatId}.json`);
 const sensory = memoryPath("sensory", `${chatId}.json`);
 const now = botNow().hour(12).minute(0).second(0).valueOf();
@@ -35,6 +38,7 @@ let learns = 0;
 let compositions = 0;
 async function setup(overrides: Partial<GroupNewsDependencies> = {}) {
 	process.env.ALLOWED_GROUP_ID = String(chatId);
+	delete process.env.GROUP_NEWS_LOCAL_QUERY;
 	searches = sends = learns = compositions = 0;
 	resetGroupState();
 	await atomicWriteFile(
@@ -63,6 +67,7 @@ async function setup(overrides: Partial<GroupNewsDependencies> = {}) {
 			searches++;
 			return [source];
 		},
+		select: async () => 0,
 		compose: async () => {
 			compositions++;
 			return "Esto está interesante, ¿qué les parece?";
@@ -83,6 +88,9 @@ async function state() {
 	});
 }
 afterEach(async () => {
+	if (originalLocalQuery === undefined)
+		delete process.env.GROUP_NEWS_LOCAL_QUERY;
+	else process.env.GROUP_NEWS_LOCAL_QUERY = originalLocalQuery;
 	if (originalGroup === undefined) delete process.env.ALLOWED_GROUP_ID;
 	else process.env.ALLOWED_GROUP_ID = originalGroup;
 	await rm(path, { force: true });
@@ -119,7 +127,7 @@ describe("group news", () => {
 			() => false,
 			() => false,
 		);
-		expect([learns, searches, sends]).toEqual([1, 1, 1]);
+		expect([learns, searches, sends]).toEqual([1, 2, 1]);
 		expect((await state()).recent[0]?.url).toBe(source.url);
 		expect((await loadSensory(chatId)).messages.at(-1)?.content).toContain(
 			source.url,
@@ -158,30 +166,28 @@ describe("group news", () => {
 				throw new Error("offline");
 			},
 		});
-		await expect(
-			service.tick(
-				api,
-				() => false,
-				() => false,
-			),
-		).rejects.toThrow("offline");
+		await service.tick(
+			api,
+			() => false,
+			() => false,
+		);
 		await new GroupNewsService(deps).tick(
 			api,
 			() => false,
 			() => false,
 		);
-		expect(searches).toBe(1);
+		expect(searches).toBe(2);
 		expect(sends).toBe(0);
 	});
-	test("empty interests never search or invent a topic", async () => {
+	test("empty interests still discover local news", async () => {
 		const { service, api } = await setup({ learn: async () => [] });
 		await service.tick(
 			api,
 			() => false,
 			() => false,
 		);
-		expect(searches).toBe(0);
-		expect(sends).toBe(0);
+		expect(searches).toBe(1);
+		expect(sends).toBe(1);
 	});
 	test("active group is deferred even if it becomes active during generation", async () => {
 		const { service, api } = await setup({
@@ -211,16 +217,23 @@ describe("group news", () => {
 		const saved = await state();
 		saved.researchDay = getDateString(now);
 		saved.lastDeliveryResearchAt = now;
-		saved.stories = [{ source, fetchedAt: now - 3 * 86400000 }];
+		saved.stories = [
+			{ source, fetchedAt: now - 3 * 86400000, kind: "interest" },
+		];
 		await writeStore(path, saved, groupNewsSchema, true);
 		await service.tick(
 			api,
 			() => false,
 			() => false,
 		);
-		saved.stories = [{ source, fetchedAt: now }];
+		saved.stories = [{ source, fetchedAt: now, kind: "interest" }];
 		saved.recent = [
-			{ url: source.url, title: source.title, sentAt: now - 86400000 },
+			{
+				url: source.url,
+				title: source.title,
+				sentAt: now - 86400000,
+				kind: "interest",
+			},
 		];
 		await writeStore(path, saved, groupNewsSchema, true);
 		await service.tick(
@@ -307,4 +320,137 @@ test("freshness follows publication time, including relative age anchored at fet
 			now,
 		),
 	).toBe(true);
+});
+
+const localSource = {
+	...source,
+	title: "Trabajo detecta violaciones laborales en comercios dominicanos",
+	text: "El Ministerio informó hoy sobre nuevas inspecciones y cierres por riesgos laborales.",
+	url: "https://example.org/noticias-laborales",
+};
+
+test("local news competes with learned interests and the selected source is delivered", async () => {
+	const queries: string[] = [];
+	const { service, api } = await setup({
+		search: async (query) => {
+			queries.push(query);
+			return [query === DEFAULT_GROUP_NEWS_LOCAL_QUERY ? localSource : source];
+		},
+		select: async (stories) => {
+			expect(stories.map((story) => story.kind).sort()).toEqual([
+				"interest",
+				"local",
+			]);
+			return stories.findIndex((story) => story.source.url === localSource.url);
+		},
+		compose: async (_chatId, selected) => {
+			expect(selected.url).toBe(localSource.url);
+			return "Eso de dejar a la gente sin descanso está fuerte.";
+		},
+	});
+	await service.tick(
+		api,
+		() => false,
+		() => false,
+	);
+	expect(queries).toEqual([DEFAULT_GROUP_NEWS_LOCAL_QUERY, "astronomy"]);
+	expect((await state()).recent[0]?.kind).toBe("local");
+	expect((await loadSensory(chatId)).messages.at(-1)?.content).toContain(
+		localSource.url,
+	);
+});
+
+test("failed interest learning still researches and posts local news", async () => {
+	const queries: string[] = [];
+	const { service, api } = await setup({
+		learn: async () => {
+			throw new Error("unavailable");
+		},
+		search: async (query) => {
+			queries.push(query);
+			return [localSource];
+		},
+	});
+	await service.tick(
+		api,
+		() => false,
+		() => false,
+	);
+	expect(queries).toEqual([DEFAULT_GROUP_NEWS_LOCAL_QUERY]);
+	expect(sends).toBe(1);
+});
+
+test("a failed research path preserves the other path's stories", async () => {
+	for (const failedQuery of [DEFAULT_GROUP_NEWS_LOCAL_QUERY, "astronomy"]) {
+		const { service, api } = await setup({
+			search: async (query) => {
+				if (query === failedQuery) throw new Error("unavailable");
+				return [query === "astronomy" ? source : localSource];
+			},
+		});
+		await service.tick(
+			api,
+			() => false,
+			() => false,
+		);
+		expect(sends).toBe(1);
+		expect((await state()).recent[0]?.url).toBe(
+			failedQuery === "astronomy" ? localSource.url : source.url,
+		);
+	}
+});
+
+test("delivery refresh researches both paths and discards yesterday's candidates", async () => {
+	const queries: string[] = [];
+	const { service, api } = await setup({
+		search: async (query) => {
+			queries.push(query);
+			return [localSource];
+		},
+	});
+	const saved = await state();
+	saved.researchDay = getDateString(now);
+	saved.interests = ["astronomy"];
+	saved.lastDeliveryResearchAt = now - 2 * 3600000;
+	saved.stories = [{ source, fetchedAt: now - 2 * 3600000, kind: "interest" }];
+	await writeStore(path, saved, groupNewsSchema, true);
+	await service.tick(
+		api,
+		() => false,
+		() => false,
+	);
+	expect(queries).toEqual([DEFAULT_GROUP_NEWS_LOCAL_QUERY, "astronomy"]);
+	expect((await state()).recent[0]?.url).toBe(localSource.url);
+	expect((await state()).stories).toHaveLength(1);
+});
+
+test("selector rejection and invalid indices cannot send an arbitrary first result", async () => {
+	for (const index of [-1, 100, 0.5]) {
+		const { service, api } = await setup({ select: async () => index });
+		await service.tick(
+			api,
+			() => false,
+			() => false,
+		);
+		expect(sends).toBe(0);
+		expect(compositions).toBe(0);
+	}
+});
+
+test("model selection validates indices and accepts opting out", async () => {
+	const candidates = [
+		{ source: localSource, fetchedAt: now, kind: "local" as const },
+	];
+	expect(
+		await selectGroupNewsStory(candidates, [], async () => '{"index":0}'),
+	).toBe(0);
+	expect(
+		await selectGroupNewsStory(candidates, [], async () => '{"index":-1}'),
+	).toBe(-1);
+	await expect(
+		selectGroupNewsStory(candidates, [], async () => '{"index":4}'),
+	).rejects.toThrow();
+	await expect(
+		selectGroupNewsStory(candidates, [], async () => "not json"),
+	).rejects.toThrow();
 });
