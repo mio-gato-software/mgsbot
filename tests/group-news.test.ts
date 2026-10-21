@@ -6,6 +6,7 @@ import {
 	type GroupNewsDependencies,
 	GroupNewsService,
 	groupNewsSchema,
+	isFreshGroupStory,
 	scheduleGroupNews,
 } from "../src/group-news.ts";
 import {
@@ -23,6 +24,7 @@ const path = memoryPath("group-news", `${chatId}.json`);
 const sensory = memoryPath("sensory", `${chatId}.json`);
 const now = botNow().hour(12).minute(0).second(0).valueOf();
 const source = {
+	published: new Date(now - 3_600_000).toISOString(),
 	title: "A new telescope",
 	text: "A telescope launched today",
 	url: "https://example.org/telescope",
@@ -208,6 +210,7 @@ describe("group news", () => {
 		const { service, api } = await setup();
 		const saved = await state();
 		saved.researchDay = getDateString(now);
+		saved.lastDeliveryResearchAt = now;
 		saved.stories = [{ source, fetchedAt: now - 3 * 86400000 }];
 		await writeStore(path, saved, groupNewsSchema, true);
 		await service.tick(
@@ -270,4 +273,38 @@ describe("group news", () => {
 		expect(sends).toBe(0);
 		expect(compositions).toBe(1);
 	});
+});
+
+test("freshness follows publication time, including relative age anchored at fetch", () => {
+	expect(isFreshGroupStory(source, now, now)).toBe(true);
+	expect(
+		isFreshGroupStory(
+			{ ...source, published: source.published.replace("Z", "") },
+			now,
+			now,
+		),
+	).toBe(true);
+	for (const published of [
+		undefined,
+		"unknown",
+		"2020-01-01T12:00:00Z",
+		new Date(now + 3600000).toISOString(),
+		"2 days ago",
+	]) {
+		expect(isFreshGroupStory({ ...source, published }, now, now)).toBe(false);
+	}
+	expect(
+		isFreshGroupStory(
+			{ ...source, published: "20 hours ago" },
+			now - 5 * 3600000,
+			now,
+		),
+	).toBe(false);
+	expect(
+		isFreshGroupStory(
+			{ ...source, published: "2 hours ago" },
+			now - 3600000,
+			now,
+		),
+	).toBe(true);
 });
