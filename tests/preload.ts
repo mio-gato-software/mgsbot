@@ -18,4 +18,5 @@ process.env.GROUP_PASSIVE_VOICE_MAX_SECONDS = "120";
 process.env.GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS = "1200";
 // Optional internet features must never spend inherited API credentials in tests.
 process.env.ENABLE_WEB_SEARCH = "false";
+process.env.ENABLE_COMMITMENTS = "false";
 delete process.env.TYPESAFE_API_KEY;

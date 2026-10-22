@@ -107,10 +107,23 @@ test("malformed optional facts and traits cannot discard a usable episode", () =
 				traitChanges: [
 					null,
 					{ trait: "Warmth", delta: Number.POSITIVE_INFINITY, reason: "trust" },
-					{ trait: " humor ", delta: 0.4, reason: " jokes " },
+					{
+						trait: " humor ",
+						delta: 0.4,
+						reason: " jokes ",
+						directToBot: true,
+						evidence: " Keep making those jokes ",
+					},
 					{ trait: "made-up", delta: 0.1, reason: "bad" },
 					{ trait: "warmth", delta: 0.001, reason: "tiny" },
-					{ trait: "energy", delta: -0.4, reason: " tired " },
+					{
+						trait: "energy",
+						delta: -0.4,
+						reason: " tired ",
+						directToBot: true,
+						evidence: "Please be less energetic",
+					},
+					{ trait: "curiosity", delta: 0.1, reason: "no direct evidence" },
 				],
 			},
 		} as unknown as PromotionResult,
@@ -129,8 +142,20 @@ test("malformed optional facts and traits cannot discard a usable episode", () =
 	]);
 	expect(result.extraction?.droppedFacts).toBe(3);
 	expect(result.personalitySignals?.traitChanges).toEqual([
-		{ trait: "humor", delta: 0.15, reason: "jokes" },
-		{ trait: "energy", delta: -0.15, reason: "tired" },
+		{
+			trait: "humor",
+			delta: 0.15,
+			reason: "jokes",
+			directToBot: true,
+			evidence: "Keep making those jokes",
+		},
+		{
+			trait: "energy",
+			delta: -0.15,
+			reason: "tired",
+			directToBot: true,
+			evidence: "Please be less energetic",
+		},
 	]);
 });
 

@@ -9,6 +9,13 @@ Living document. Rules:
 
 ## Pending
 
+### Evaluate adaptive personality against actual conversation quality
+
+- **Why:** Inspection of Brendy on 2026-10-22 found six of eight traits at 1.0; recent growth included interactions between other people. The implementation now requires direct, verbatim user evidence, uses bounded smoothing with 30-day half-life toward neutral, and keeps configured identity/context above adaptive tendencies. Unit tests establish these mechanics, not whether responses feel noticeably better.
+- **What to do:** after deployment, compare matched serious, playful, repeated-question and explicit-boundary scenarios with adaptation enabled/disabled. Assess appropriateness and naturalness, not just trait movement. Monitor rejected/accepted evidence and repeated saturation; consider per-chat/person adaptation if global learning still transfers a relationship's tone to unrelated chats. Do not reset live personality history merely to demonstrate a difference.
+- **Size:** Medium; needs representative conversations and human evaluation. `ENABLE_ADAPTIVE_PERSONALITY=false` provides an operational comparison/disable switch.
+- Added 2026-10-22.
+
 ### Release fal background and classifier support before updating Brendy
 
 - **Why:** Brendy runs a verified custom build based on v1.0.61 with background Luna through fal, OpenAI embeddings, and its group-message classifier routed through fal with `deepseek/deepseek-v4.1-flash`. Its release updater must not run until a published binary includes both `BACKGROUND_PROVIDER=fal` and `CLASSIFIER_PROVIDER=fal` support; older binaries would reject or ignore the custom configuration.

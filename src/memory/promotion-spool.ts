@@ -64,6 +64,8 @@ const preparedSchema = z.object({
 					trait: z.string(),
 					delta: z.number().finite(),
 					reason: z.string(),
+					evidence: z.string().optional(),
+					directToBot: z.boolean().optional(),
 				}),
 			),
 		})

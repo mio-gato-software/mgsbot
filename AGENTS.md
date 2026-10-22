@@ -80,6 +80,7 @@ src/
   embeddings.ts              ← Embedding generation (Gemini or OpenAI) with disk-persisted LRU cache
   personality.ts             ← Emergent personality: 8 fixed traits with momentum, growth events, prompt tiers
   identities.ts              ← User identity tracking: canonical names, aliases, name change handling
+  commitments/               ← Explicit finite reminders/research, durable scoped preferences, request interpretation, calendar and crash-aware delivery
   check-ins.ts               ← Proactive check-in messages: cadence-driven weekly scheduling, strategy rotation
   follow-ups.ts              ← Proactive follow-up detection, scheduling, and delivery (timezone-aware)
   image-scheduler.ts         ← Weekly character image schedule (week start, random target date/time)
@@ -221,10 +222,18 @@ Per-chat writes are serialized with `withChatLock()` (`src/memory/locks.ts`); st
 The bot develops emergent personality traits that evolve over conversations (`src/personality.ts`):
 
 - **Traits**: A fixed set of 8 traits (`TRAIT_NAMES` in `src/types.ts`): warmth, humor, patience, curiosity, assertiveness, energy, vulnerability, playfulness. Each has `value` (0.0–1.0), `momentum`, and `lastReinforced` timestamp.
-- **Updates**: Background evaluation emits per-trait deltas; momentum smooths changes (`momentum = momentum * 0.7 + delta`) and values are clamped to [0, 1].
+- **Updates**: Background evaluation requires direct-to-bot user feedback with verbatim evidence, verified against user text. A bounded exponential moving average (70% retained momentum, 30% new delta) drives slow convergence toward a target in [0.15, 0.85], rather than adding deltas forever. Tendencies decay toward neutral with a 30-day half-life. The configured identity and current situation take priority; neutral traits add no instructions. `ENABLE_ADAPTIVE_PERSONALITY=false` disables extraction/application/rendering of adaptive tendencies.
 - **Growth events**: Records what caused trait changes (max 10 recent events kept).
 - **Prompt rendering**: Each trait maps to a tier (low ≤ 0.33, mid, high ≥ 0.67) that selects the phrasing injected into the system prompt.
 - Stored in `memory/personality.json` (legacy free-form trait files are migrated to the fixed set on load).
+
+### Agenda and Standing Preferences
+
+`src/commitments/` handles explicit requests independently of ordinary memory promotion. Enabled by default (`ENABLE_COMMITMENTS=false` disables it; also disabled in simple mode). The original user text or own voice-note transcript is interpreted before generation; referenced web/media content and quoted bot promises cannot authorize changes. Dictated links require written clarification. Successful persistence precedes conversational confirmation.
+
+Tasks support one-time, daily and weekly schedules with selected weekdays/excluded weekends in the saved bot timezone. Recurrences are capped at one calendar month and require explicit renewal; one-time reminders can be further in the future. Each task keeps its objective, public search query and optional source domains. Standing source/style preferences remain active until changed/cancelled and match by topic within their chat. Creator or owner can manage entries; limits are 10 active tasks and 20 preferences per chat.
+
+State lives in validated, versioned `memory/commitments.json` and is covered by ordinary backups. The lifecycle polls every 30 seconds, respects off/sleep/access controls, skips occurrences over an hour late and never floods a restart backlog. Persisted send intent prevents automatic retries after uncertain Telegram delivery; owner alerts report failures. Research uses current source-specific searches plus general fallback within the existing daily budget. See `docs/agenda-and-preferences.md` for operational details and limitations.
 
 ### Follow-Up System
 

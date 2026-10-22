@@ -292,6 +292,7 @@ export async function routeGroupNameMention(
 	options?: {
 		conversationContent?: string;
 		isVoiceMessage?: boolean;
+		directUserText?: string;
 	},
 ): Promise<"full" | "handled"> {
 	const chatId = ctx.chat?.id;
@@ -344,6 +345,7 @@ export async function routeGroupNameMention(
 			botOff: isBotOff(),
 			isSleepingHour: isSleepingHour(),
 			isVoiceMessage: options?.isVoiceMessage,
+			directUserText: options?.directUserText,
 			...buildGroupResponseOptions({
 				groupAutoReply: decision.addressing !== "continuation",
 				groupContinuation: decision.addressing === "continuation",

@@ -85,11 +85,17 @@ OpenRouter can also use fal.ai: set `CHAT_PROVIDER=openrouter`, `OPENROUTER_TRAN
 | `BOT_TIMEZONE` | `America/Santo_Domingo` | Time awareness and scheduling |
 | `ENABLE_SLEEP_SCHEDULE` | `true` | Quiet hours, 23:30–06:00; suppresses group replies and proactive messages |
 | `ENABLE_FOLLOW_UPS` | `false` | DM follow-ups about plans mentioned in conversation |
+| `ENABLE_COMMITMENTS` | `true` | Explicit reminders/research with finite recurrence; durable scoped preferences |
+| `ENABLE_ADAPTIVE_PERSONALITY` | `true` | Gradual, evidence-backed personality tendencies; disable to use only configured identity/rules |
 | `ENABLE_CHECK_INS` | `false` | Periodic DM check-ins; `CHECK_INS_PER_WEEK` defaults to `2` |
 | `SIMPLE_ASSISTANT_MODE` | `false` | Basic assistant prompt with multimedia processing disabled |
 | `ENABLE_TUTOR_MODE` | `false` | English practice and English transcription guidance |
 | `FULL_ACCESS_MODE` | `false` | On-demand images without the weekly limit; does not change access control |
 | `ENABLE_CHAT_LOG` | `false` | Daily text logs in `logs/`; `CHAT_LOG_RETENTION_DAYS` defaults to `30` |
+
+Adaptive tendencies are grounded in direct user feedback and fade toward the configured baseline; see [adaptive personality](docs/adaptive-personality.md) for the saturation diagnosis, corrections and evaluation limits.
+
+Ask naturally for a reminder or recurring research task, including selected weekdays, a time and optional sources. Recurrences expire after at most one calendar month and require explicit renewal. Ambiguous requests and dictated links require clarification. See [agenda and standing preferences](docs/agenda-and-preferences.md) for examples, permissions, reliability limits and source handling.
 
 Weather context defaults to Santo Domingo. Set `WEATHER_LATITUDE`, `WEATHER_LONGITUDE`, and `WEATHER_CITY` for another location.
 

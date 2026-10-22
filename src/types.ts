@@ -8,6 +8,8 @@
 export type MentionType = "none" | "reply" | "tag" | "name";
 
 export interface ConversationMessage {
+	/** Original user instruction kept separate from fetched/transcribed reference material. */
+	userText?: string;
 	id?: string; // stable identity across durable promotion retries
 	role: "user" | "model";
 	name?: string;
@@ -176,6 +178,8 @@ export interface PersonalitySignals {
 		trait: string; // must be one of TRAIT_NAMES
 		delta: number; // -0.15 to +0.15
 		reason: string; // why it changed
+		evidence?: string; // exact user statement directed to the bot
+		directToBot?: boolean;
 	}>;
 }
 

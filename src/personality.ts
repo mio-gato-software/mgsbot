@@ -17,6 +17,7 @@ const PERSONALITY_PATH = memoryPath("personality.json");
 
 const MAX_RECENT_GROWTH = 10;
 const MOMENTUM_DECAY = 0.7;
+const TRAIT_HALF_LIFE_MS = 30 * 86_400_000;
 const CURRENT_VERSION = 3;
 
 // --- Fixed trait definitions with behavioral instructions per tier ---
@@ -321,10 +322,15 @@ export function applySignalsToState(
 	now = Date.now(),
 ): string[] {
 	const affectedTraits: string[] = [];
+	const seen = new Set<string>();
 
 	for (const change of signals.traitChanges) {
 		const traitName = change.trait.toLowerCase().trim();
-		if (!VALID_TRAIT_SET.has(traitName)) {
+		if (
+			!VALID_TRAIT_SET.has(traitName) ||
+			seen.has(traitName) ||
+			!Number.isFinite(change.delta)
+		) {
 			log.debug(`[personality] Rejected unknown trait: "${traitName}"`);
 			continue;
 		}
@@ -334,10 +340,22 @@ export function applySignalsToState(
 
 		const trait = state.traits[traitName];
 		if (!trait) continue;
+		seen.add(traitName);
 
-		trait.value = Math.max(0, Math.min(1, trait.value + delta));
-		trait.momentum = trait.momentum * MOMENTUM_DECAY + delta;
-		trait.momentum = Math.max(-1, Math.min(1, trait.momentum));
+		const elapsed = Math.max(0, now - trait.lastReinforced);
+		const retained = 2 ** (-elapsed / TRAIT_HALF_LIFE_MS);
+		trait.momentum = Math.max(
+			-0.15,
+			Math.min(
+				0.15,
+				trait.momentum * retained * MOMENTUM_DECAY +
+					delta * (1 - MOMENTUM_DECAY),
+			),
+		);
+		// Track a bounded recent tendency rather than adding deltas forever.
+		// Repeated +0.08 feedback converges instead of pinning the trait at 1.
+		const target = 0.5 + (trait.momentum / 0.15) * 0.35;
+		trait.value = effectiveTraitValue(trait, now) * 0.9 + target * 0.1;
 		trait.lastReinforced = now;
 
 		log.debug(
@@ -369,6 +387,7 @@ export async function applyPersonalitySignals(
 	conversationContext: string,
 	promotionId?: string,
 ): Promise<void> {
+	if (process.env.ENABLE_ADAPTIVE_PERSONALITY === "false") return;
 	// Serialize load-modify-save: concurrent background promotions would
 	// otherwise overwrite each other's changes to the file.
 	await withPersonalityLock(async () => {
@@ -392,6 +411,16 @@ export function getTraitTier(value: number): "low" | "mid" | "high" {
 	return "mid";
 }
 
+/** Read-time decay changes the prompt without rewriting stored history. */
+export function effectiveTraitValue(
+	trait: PersonalityTrait,
+	now = Date.now(),
+): number {
+	const retained =
+		2 ** (-Math.max(0, now - trait.lastReinforced) / TRAIT_HALF_LIFE_MS);
+	return 0.5 + (Math.max(0, Math.min(1, trait.value)) - 0.5) * retained;
+}
+
 function getTierLabel(tier: "low" | "mid" | "high"): string {
 	if (tier === "low") return "low";
 	if (tier === "high") return "high";
@@ -399,6 +428,7 @@ function getTierLabel(tier: "low" | "mid" | "high"): string {
 }
 
 export async function getPersonalityInstructions(): Promise<string> {
+	if (process.env.ENABLE_ADAPTIVE_PERSONALITY === "false") return "";
 	const state = await loadPersonality();
 
 	const lines: string[] = [];
@@ -406,13 +436,20 @@ export async function getPersonalityInstructions(): Promise<string> {
 		const trait = state.traits[name];
 		if (!trait) continue;
 		const def = TRAIT_DEFINITIONS[name];
-		const tier = getTraitTier(trait.value);
+		const value = effectiveTraitValue(trait);
+		// Neutral adaptation leaves the manually configured personality in charge.
+		if (Math.abs(value - 0.5) < 0.08) continue;
+		const tier = getTraitTier(value);
 		const label = getTierLabel(tier);
-		const instruction = def[tier];
+		const instruction =
+			tier === "mid"
+				? `Relative to your configured baseline, lean slightly toward this tendency: ${value > 0.5 ? def.high : def.low}`
+				: def[tier];
 		lines.push(`- **${def.display}** (${label}): ${instruction}`);
 	}
 
-	return `## Your current personality\n\nYour personality has been shaped by your experiences. Follow these behavioral guidelines:\n\n${lines.join("\n")}`;
+	if (!lines.length) return "";
+	return `## Learned conversational tendencies\n\nThese are gradual tendencies from user interactions, not a replacement for your configured identity or personality. Apply them subtly when appropriate. The current situation, explicit user boundaries, and chat-specific preferences take priority; a serious moment does not require joking even with high humor. Never announce numerical traits or claim personal growth just to demonstrate it.\n\n${lines.join("\n")}`;
 }
 
 // --- Export trait definitions for the evaluation prompt ---

@@ -269,6 +269,18 @@ if (process.env.ENABLE_CHECK_INS === "true") {
 	);
 }
 
+if (process.env.ENABLE_COMMITMENTS !== "false") {
+	const { checkAndSendScheduledTasks } = await import(
+		"./src/commitments/runner.ts"
+	);
+	backgroundTasks.every(
+		"scheduled-tasks",
+		30_000,
+		() => checkAndSendScheduledTasks(bot.api, isBotOff, isSleepingHour),
+		true,
+	);
+}
+
 // --- Graceful shutdown ---
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
