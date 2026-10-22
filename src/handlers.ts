@@ -8,6 +8,10 @@ import { analyzeYouTube } from "./ai/vision.ts";
 import { isBotOff, isSleepingHour } from "./bot-state.ts";
 import { withChatAction } from "./chat-actions.ts";
 import { registerCommands } from "./commands.ts";
+import {
+	commitmentsEnabled,
+	isDeferredWebRequest,
+} from "./commitments/requests.ts";
 import { getBotName, isBotConfigured, loadConfig } from "./config.ts";
 import {
 	getUserDisplayName,
@@ -160,6 +164,19 @@ export function registerHandlers(bot: Bot): void {
 		}
 
 		// YouTube analysis disabled in simple assistant mode
+		if (
+			commitmentsEnabled() &&
+			(!isGroupChat(ctx) || mentionType !== "none") &&
+			isDeferredWebRequest(text)
+		) {
+			await processConversationAndTrackGroupContinuation(
+				ctx,
+				replyAwareText,
+				userName,
+				{ mentionType, botOff: isBotOff(), isSleepingHour: isSleepingHour() },
+			);
+			return;
+		}
 		const extractedYouTube = extractYouTubeUrl(ctx);
 		const yt = isSimpleAssistantMode ? null : extractedYouTube;
 		if (yt) {

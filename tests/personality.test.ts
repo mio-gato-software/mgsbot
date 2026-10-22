@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	applySignalsToState,
 	createEmptyState,
+	effectiveTraitValue,
 	getTraitTier,
 	migrateState,
 } from "../src/personality.ts";
@@ -45,9 +46,10 @@ describe("applySignalsToState", () => {
 			1000,
 		);
 		expect(affected).toEqual(["warmth"]);
-		expect(state.traits.warmth?.value).toBeCloseTo(0.6);
-		// momentum = 0 * 0.7 + 0.1
-		expect(state.traits.warmth?.momentum).toBeCloseTo(0.1);
+		expect(state.traits.warmth?.value).toBeGreaterThan(0.5);
+		expect(state.traits.warmth?.value).toBeLessThan(0.53);
+		// A single signal contributes 30% to the moving average.
+		expect(state.traits.warmth?.momentum).toBeCloseTo(0.03);
 		expect(state.traits.warmth?.lastReinforced).toBe(1000);
 	});
 
@@ -55,23 +57,26 @@ describe("applySignalsToState", () => {
 		const state = createEmptyState();
 		applySignalsToState(state, signals("humor", 0.1), "ctx");
 		applySignalsToState(state, signals("humor", 0.1), "ctx");
-		// momentum = (0 * 0.7 + 0.1) * 0.7 + 0.1 = 0.17
-		expect(state.traits.humor?.momentum).toBeCloseTo(0.17);
-		expect(state.traits.humor?.value).toBeCloseTo(0.7);
+		// Repeated evidence strengthens the moving average without a large jump.
+		expect(state.traits.humor?.momentum).toBeCloseTo(0.051);
+		expect(state.traits.humor?.value).toBeGreaterThan(0.51);
+		expect(state.traits.humor?.value).toBeLessThan(0.54);
 	});
 
 	test("clamps delta to ±0.15", () => {
 		const state = createEmptyState();
 		applySignalsToState(state, signals("energy", 0.9), "ctx");
-		expect(state.traits.energy?.value).toBeCloseTo(0.65);
+		expect(state.traits.energy?.value).toBeLessThan(0.52);
+		expect(state.traits.energy?.value).toBeGreaterThan(0.5);
 	});
 
-	test("clamps trait value to [0, 1]", () => {
+	test("sustained feedback stays bounded without saturating", () => {
 		const state = createEmptyState();
-		for (let i = 0; i < 10; i++) {
+		for (let i = 0; i < 200; i++) {
 			applySignalsToState(state, signals("patience", -0.15), "ctx");
 		}
-		expect(state.traits.patience?.value).toBe(0);
+		expect(state.traits.patience?.value).toBeGreaterThanOrEqual(0.15);
+		expect(state.traits.patience?.value).toBeLessThan(0.2);
 	});
 
 	test("ignores deltas below 0.01", () => {
@@ -171,4 +176,73 @@ describe("migrateState", () => {
 		expect(state.traits.humor?.value).toBe(0.5);
 		expect(state.traits.warmth?.value).toBe(0.5);
 	});
+});
+
+test("old saturation fades without modifying stored history, and new contrary feedback can reverse it", () => {
+	const state = createEmptyState();
+	state.traits.humor = { value: 1, momentum: 0.5, lastReinforced: 1000 };
+	expect(
+		effectiveTraitValue(state.traits.humor, 1000 + 30 * 86400000),
+	).toBeCloseTo(0.75);
+	expect(
+		effectiveTraitValue(state.traits.humor, 1000 + 90 * 86400000),
+	).toBeCloseTo(0.5625);
+	expect(state.traits.humor.value).toBe(1);
+	for (let i = 0; i < 40; i++)
+		applySignalsToState(
+			state,
+			{
+				traitChanges: [
+					{
+						trait: "humor",
+						delta: -0.1,
+						reason: "Please stop joking when I ask for help",
+					},
+				],
+			},
+			"feedback",
+			1000 + i * 86400000,
+		);
+	expect(state.traits.humor.value).toBeLessThan(0.5);
+});
+
+test("duplicate traits and nonfinite signals cannot amplify a single extraction", () => {
+	const state = createEmptyState();
+	const changes = [
+		{ trait: "humor", delta: 0.1, reason: "feedback" },
+		{ trait: "humor", delta: 0.1, reason: "same feedback" },
+		{ trait: "warmth", delta: NaN, reason: "invalid" },
+	];
+	expect(applySignalsToState(state, { traitChanges: changes }, "test")).toEqual(
+		["humor"],
+	);
+	expect(state.traits.humor?.value).toBeLessThan(0.53);
+	expect(state.traits.warmth?.value).toBe(0.5);
+});
+
+test("extraction rejects personality changes without direct user evidence", async () => {
+	const { validatePromotionResult } = await import("../src/ai/evaluation.ts");
+	const base = { summary: "chat", importance: 2, facts: [] };
+	const result = validatePromotionResult({
+		...base,
+		personalitySignals: {
+			traitChanges: [
+				{
+					trait: "warmth",
+					delta: 0.1,
+					reason: "Two friends were affectionate",
+				},
+				{
+					trait: "humor",
+					delta: -0.1,
+					reason: "User asked the bot to stop joking",
+					directToBot: true,
+					evidence: "Brendy, deja las bromas cuando te pregunto algo serio",
+				},
+			],
+		},
+	});
+	expect(result.personalitySignals?.traitChanges.map((c) => c.trait)).toEqual([
+		"humor",
+	]);
 });

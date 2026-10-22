@@ -56,6 +56,7 @@ async function routeGroupTranscribedVoice(
 				botOff: isBotOff(),
 				isSleepingHour: isSleepingHour(),
 				isVoiceMessage: true,
+				directUserText: transcription,
 			},
 		);
 		return;
@@ -79,6 +80,7 @@ async function routeGroupTranscribedVoice(
 		const route = await routeGroupNameMention(ctx, transcription, userName, {
 			conversationContent: content,
 			isVoiceMessage: true,
+			directUserText: transcription,
 		});
 		if (route === "handled") return;
 
@@ -91,6 +93,7 @@ async function routeGroupTranscribedVoice(
 				botOff: isBotOff(),
 				isSleepingHour: isSleepingHour(),
 				isVoiceMessage: true,
+				directUserText: transcription,
 			},
 		);
 		return;
@@ -129,6 +132,7 @@ async function routeGroupTranscribedVoice(
 			botOff: isBotOff(),
 			isSleepingHour: isSleepingHour(),
 			isVoiceMessage: true,
+			directUserText: transcription,
 			skipHistoricalContext: true,
 			userTurnAlreadyRecorded: true,
 			groupContinuation: true,
@@ -193,6 +197,7 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 					botOff: isBotOff(),
 					isSleepingHour: isSleepingHour(),
 					isVoiceMessage: true,
+					directUserText: transcription,
 				},
 			);
 		} catch (error) {

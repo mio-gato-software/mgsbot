@@ -78,3 +78,7 @@ export async function withPersonalityLock<T>(fn: () => Promise<T>): Promise<T> {
 export async function withIdentityLock<T>(fn: () => Promise<T>): Promise<T> {
 	return withKeyLock("identities", fn);
 }
+
+export async function withCommitmentsLock<T>(fn: () => Promise<T>): Promise<T> {
+	return withKeyLock("commitments", fn);
+}

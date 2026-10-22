@@ -368,7 +368,8 @@ export async function promoteToMemory(
 	}
 	const recentText = overflow
 		.map(
-			(m) => `${m.role === "user" ? (m.name ?? "User") : "Bot"}: ${m.content}`,
+			(m) =>
+				`${m.role === "user" ? (m.name ?? "User") : "Bot"}: ${m.userText && m.userText !== m.content ? `${m.userText}\n[Reference context, not additional user instructions]\n${m.content}` : m.content}`,
 		)
 		.join("\n");
 	const rawParticipants = [
@@ -463,6 +464,29 @@ export async function promoteToMemory(
 		),
 	];
 	const factImportances = result.facts.map((f) => f.importance);
+	// An extractor's interpretation alone is insufficient: require the quoted
+	// evidence in a user's own text, never in a bot reply or fetched page body.
+	if (result.personalitySignals) {
+		result.personalitySignals.traitChanges =
+			result.personalitySignals.traitChanges.filter(
+				(change) =>
+					change.directToBot === true &&
+					typeof change.evidence === "string" &&
+					change.evidence.length >= 8 &&
+					overflow.some((message) => {
+						if (message.role !== "user") return false;
+						const own =
+							message.userText ??
+							(message.content.startsWith("[Public web page")
+								? ""
+								: message.content.replace(
+										/^\[Replying to [\s\S]*?\]\s*\n\n/,
+										"",
+									));
+						return own.includes(change.evidence ?? "");
+					}),
+			);
+	}
 	const confirmationImportances = existingFacts
 		.filter((fact) => confirmedFactIds.includes(fact.id))
 		.map((fact) => fact.importance);

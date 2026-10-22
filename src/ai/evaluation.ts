@@ -132,6 +132,10 @@ export function validatePromotionResult(
 					typeof c.trait === "string" &&
 					VALID_TRAIT_NAMES.has(c.trait.toLowerCase().trim()) &&
 					typeof c.delta === "number" &&
+					Number.isFinite(c.delta) &&
+					c.directToBot === true &&
+					typeof c.evidence === "string" &&
+					c.evidence.trim().length >= 8 &&
 					Math.abs(c.delta) >= 0.01 &&
 					c.reason &&
 					typeof c.reason === "string",
@@ -140,6 +144,8 @@ export function validatePromotionResult(
 				trait: c.trait.toLowerCase().trim(),
 				delta: Math.max(-0.15, Math.min(0.15, c.delta)),
 				reason: c.reason.trim(),
+				evidence: c.evidence?.trim(),
+				directToBot: true,
 			}));
 		personalitySignals =
 			validChanges.length > 0 ? { traitChanges: validChanges } : undefined;
@@ -216,7 +222,8 @@ ${existingFactSummary}
    Be VERY selective: only data that will NEVER change in the person's life.
 5. **Supersession**: If a new fact replaces or contradicts an older mutable saved fact, set "supersedes" to the old fact id(s). If unsure, leave it empty.
 6. **Confirmations**: Return "confirmedFacts": [{"id": "saved fact id", "evidence": "verbatim user quote"}] for explicit user reconfirmations; otherwise []. A quote must affirm the fact, not ask about it or contradict it. Extract facts only from user-provided evidence, never from the bot repeating its memories.
-7. **Personality signals**: Does the conversation reveal something about how the bot is evolving emotionally? Only if the signals are clear.
+7. **Personality signals**: Extract only clear feedback or treatment DIRECTED AT THE BOT by a user that supports a lasting adjustment. Include "directToBot": true and "evidence": an exact verbatim user quote (at least 8 characters). Other people's affection, jokes or opinions toward each other are NOT evidence about the bot. The bot's own replies and quoted bot text are NEVER evidence. Do not infer growth just because a conversation was funny or pleasant. Most chunks should have no signals. Explicit requests for less humor/teasing, more restraint, patience or directness can justify negative as well as positive deltas. A temporary serious topic alone is not personality change. Do not manufacture balance or changes.
+${process.env.ENABLE_ADAPTIVE_PERSONALITY === "false" ? "Adaptive personality is disabled: return no traitChanges." : ""}
 You can ONLY use these EXACT trait names (do not invent others):
 ${getTraitDefinitionsForPrompt()}
 
@@ -224,7 +231,7 @@ If the conversation shows no clear signals, leave traitChanges empty.
 Each delta must be between -0.15 and +0.15.
 ${contextSection}
 Respond ONLY with JSON:
-{"summary": "brief summary", "importance": 1-5, "confirmedFacts": [], "facts": [{"content": "fact about the PERSON", "category": "person|group|rule|event", "subject": "name (only if person)", "context": "why it matters", "importance": 1-5, "permanent": false, "supersedes": []}], "personalitySignals": {"traitChanges": [{"trait": "warmth", "delta": 0.1, "reason": "reason for the change"}]}}
+{"summary": "brief summary", "importance": 1-5, "confirmedFacts": [], "facts": [{"content": "fact about the PERSON", "category": "person|group|rule|event", "subject": "name (only if person)", "context": "why it matters", "importance": 1-5, "permanent": false, "supersedes": []}], "personalitySignals": {"traitChanges": [{"trait": "warmth", "delta": 0.1, "reason": "reason for the change", "directToBot": true, "evidence": "exact user quote addressed to the bot"}]}}
 
 If there's nothing personally relevant: {"summary": "casual conversation", "importance": 1, "facts": [], "personalitySignals": {"traitChanges": []}}
 

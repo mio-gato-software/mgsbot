@@ -12,6 +12,7 @@ import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
+import { handleCommitmentRequest } from "./commitments/requests.ts";
 import {
 	checkAndCancelResolvedFollowUps,
 	detectAndStoreFollowUps,
@@ -79,6 +80,8 @@ export interface ConversationOptions {
 	userTurnAlreadyRecorded?: boolean;
 	groupAutoReply?: boolean;
 	groupContinuation?: boolean;
+	/** Current speaker's own transcription, never a quoted audio or page body. */
+	directUserText?: string;
 }
 export interface ConversationDependencies {
 	generate: typeof generateResponse;
@@ -87,6 +90,7 @@ export interface ConversationDependencies {
 	assemble: typeof assembleSystemPrompt;
 	prepareImage: typeof prepareImageContext;
 	web: ConversationWebContext;
+	commitments: typeof handleCommitmentRequest;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
 	generate: generateResponse,
@@ -95,6 +99,7 @@ export const defaultConversationDependencies: ConversationDependencies = {
 	assemble: assembleSystemPrompt,
 	prepareImage: prepareImageContext,
 	web: worldContext,
+	commitments: handleCommitmentRequest,
 };
 
 export async function processConversation(
@@ -133,6 +138,8 @@ export async function processConversation(
 	try {
 		// Register identity for this user
 		const { userId, username } = getUserInfo(ctx);
+		const directUserText =
+			options.directUserText ?? ctx.message?.text ?? ctx.message?.caption;
 		if (userId) {
 			await registerIdentity(userId, userName, username);
 		}
@@ -152,6 +159,7 @@ export async function processConversation(
 					name: userName,
 					userId,
 					content: userContent,
+					userText: directUserText,
 					timestamp: Date.now(),
 					image: getMessageImage(ctx),
 				};
@@ -265,7 +273,22 @@ export async function processConversation(
 			});
 		}
 
-		const systemPrompt = await dependencies.assemble(promptCtx);
+		const commitmentContext =
+			userId &&
+			ctx.message &&
+			!ctx.message.forward_origin &&
+			!options.groupAutoReply
+				? await dependencies.commitments({
+						chatId,
+						userId,
+						userName,
+						messageId: ctx.message.message_id,
+						text: directUserText ?? "",
+						voice: !!options.directUserText && isVoiceMessage === true,
+					})
+				: "";
+		const systemPrompt =
+			(await dependencies.assemble(promptCtx)) + commitmentContext;
 		const messages = buildMessages(buffer, mediaAttachment);
 		if (imageContextNote) {
 			const latest = messages.findLast((message) => message.role === "user");

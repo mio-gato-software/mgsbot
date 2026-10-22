@@ -39,7 +39,8 @@ const messages: ConversationMessage[] = [
 		id: "fixture-message",
 		role: "user",
 		name: "Ana",
-		content: "I will move next month",
+		content:
+			"I will move next month. Brendy, thank you for being so supportive.",
 		timestamp: stamp,
 	},
 ];
@@ -65,7 +66,15 @@ beforeEach(async () => {
 					},
 				],
 				personalitySignals: {
-					traitChanges: [{ trait: "warmth", delta: 0.1, reason: "support" }],
+					traitChanges: [
+						{
+							trait: "warmth",
+							delta: 0.1,
+							reason: "support",
+							directToBot: true,
+							evidence: "Brendy, thank you for being so supportive.",
+						},
+					],
 				},
 			};
 		},
@@ -543,4 +552,30 @@ test("a four-episode batch recovers a partial narrative write without repeating 
 		(await getChapterForMonth(chatId, botNow().format("YYYY-MM")))?.episodeIds,
 	).toHaveLength(4);
 	expect(await loadPromotionSpool(chatId)).toHaveLength(0);
+});
+
+test("unverifiable personality evidence cannot change the bot through promotion", async () => {
+	const { createEmptyState } = await import("../src/personality.ts");
+	const path = memoryPath("personality.json");
+	await writeFile(path, JSON.stringify(createEmptyState()));
+	const before = await readFile(path, "utf8");
+	const evaluate = dependencies.evaluate;
+	dependencies.evaluate = async (...args) => {
+		const result = await evaluate(...args);
+		result.personalitySignals = {
+			traitChanges: [
+				{
+					trait: "warmth",
+					delta: 0.15,
+					reason: "The bot praised itself",
+					directToBot: true,
+					evidence: "I am such a warm and affectionate bot",
+				},
+			],
+		};
+		return result;
+	};
+	await queue();
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
+	expect(await readFile(path, "utf8")).toBe(before);
 });

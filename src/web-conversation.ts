@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { generateResponse } from "./ai/core.ts";
+import { searchWithPreferences } from "./commitments/search.ts";
 import type { ChatMessage } from "./providers/types.ts";
 import type { WorldContextService } from "./world-context.ts";
 
@@ -86,7 +87,7 @@ export async function generateWithWebSearch(input: {
 			"Déjame ver qué encuentro.";
 		await input.announce(notice);
 		sentNotice = notice;
-		evidence = await input.web.search(input.chatId, {
+		evidence = await searchWithPreferences(input.web, input.chatId, {
 			query: request.query,
 			freshness: request.freshness,
 		});
