@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { z } from "zod";
+import { readPublicPage } from "./browser-reader.ts";
 import { log } from "./logger.ts";
 import { readStore, writeStore } from "./memory/storage.ts";
 import { memoryPath } from "./runtime-paths.ts";
@@ -37,6 +39,8 @@ export interface WorldContextOptions {
 	headlinesEnabled?: () => boolean;
 	newsQuery?: () => string;
 	dailyLimit?: () => number;
+	read?: typeof readPublicPage;
+	readEnabled?: () => boolean;
 }
 
 /** Bounded, expiring reference data. Never passed to semantic-memory promotion. */
@@ -54,6 +58,69 @@ export class WorldContextService {
 
 	isEnabled(): boolean {
 		return (this.options.enabled ?? isWebSearchEnabled)();
+	}
+
+	isReadEnabled(): boolean {
+		return (
+			this.options.readEnabled?.() ?? process.env.ENABLE_WEB_READING !== "false"
+		);
+	}
+
+	/** Public page evidence stays transient and separate from personal memory. */
+	async read(_chatId: number, url: string): Promise<string> {
+		if (!this.isReadEnabled())
+			return "Page reading is disabled. No page was opened.";
+		return this.serialized(async () => {
+			try {
+				const key = createHash("sha256").update(url).digest("hex");
+				const path = join(this.directory, "pages.json");
+				const schema = z
+					.array(
+						z.object({
+							key: z.string(),
+							at: z.number(),
+							evidence: z.string().max(150000),
+						}),
+					)
+					.max(20);
+				const entries = (await readStore(path, schema, () => [])).filter(
+					(entry) => this.now() - entry.at < 5 * 60000,
+				);
+				const cached = entries.find((entry) => entry.key === key);
+				if (cached)
+					return `Recent page snapshot reused; no new visit.\n${cached.evidence}`;
+				const budgetPath = join(this.directory, "read-budget.json");
+				const day = new Date(this.now()).toISOString().slice(0, 10);
+				const budget = await readStore(budgetPath, budgetSchema, () => ({
+					day,
+					attempts: 0,
+				}));
+				if (budget.day !== day) {
+					budget.day = day;
+					budget.attempts = 0;
+				}
+				const configured = Number(process.env.WEB_READ_DAILY_LIMIT ?? 20);
+				const limit =
+					Number.isFinite(configured) && configured >= 0
+						? Math.floor(configured)
+						: 20;
+				if (budget.attempts >= limit)
+					return "Daily page-reading limit reached. No new page was opened.";
+				budget.attempts++;
+				await writeStore(budgetPath, budget, budgetSchema, true);
+				const page = await (this.options.read ?? readPublicPage)(url);
+				const evidence = JSON.stringify(page);
+				await writeStore(
+					path,
+					[{ key, at: this.now(), evidence }, ...entries].slice(0, 20),
+					schema,
+					true,
+				);
+				return evidence;
+			} catch {
+				return "Could not read this page. Do not claim it was opened or infer that JavaScript, a paywall or any specific cause is responsible.";
+			}
+		});
 	}
 
 	private async serialized<T>(work: () => Promise<T>): Promise<T> {

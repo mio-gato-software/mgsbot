@@ -162,3 +162,60 @@ test("historical context bypass skips cached news and an undelivered notice prev
 		}),
 	).rejects.toThrow("Telegram offline");
 });
+
+test("explicit page reading works without search and feeds rendered evidence to the answer", async () => {
+	const service = web();
+	service.isEnabled = () => false;
+	const events: string[] = [];
+	service.read = async (_id, url) => {
+		events.push(url);
+		return JSON.stringify({
+			url,
+			method: "browser-rendered page",
+			content: "Latest scores",
+		});
+	};
+	let calls = 0;
+	const result = await generateWithWebSearch({
+		systemPrompt: "Persona",
+		messages: [
+			{ role: "user", content: "Abre https://example.com/resultados" },
+		],
+		chatId: 1,
+		web: service,
+		announce: async () => {
+			events.push("notice");
+		},
+		generate: async (system, messages) => {
+			calls++;
+			if (calls === 1) {
+				expect(system).toContain("PAGE READING");
+				return '[WEB_READ]{"urls":["https://example.com/resultados"],"notice":"Voy a abrirla."}[/WEB_READ]';
+			}
+			expect(messages.at(-1)?.content).toContain("Latest scores");
+			return "Aquí están los resultados.";
+		},
+	});
+	expect(result).toBe("Aquí están los resultados.");
+	expect(events).toEqual(["notice", "https://example.com/resultados"]);
+});
+
+test("too many pages and repeated read blocks cannot escape the lookup budget", async () => {
+	const service = web();
+	let reads = 0;
+	service.read = async () => {
+		reads++;
+		return "";
+	};
+	const result = await generateWithWebSearch({
+		systemPrompt: "Persona",
+		messages: [],
+		chatId: 1,
+		web: service,
+		announce: async () => {},
+		generate: async () =>
+			'[WEB_READ]{"urls":["https://a.com","https://b.com","https://c.com","https://d.com"],"notice":"Voy"}[/WEB_READ]',
+	});
+	expect(reads).toBe(0);
+	expect(result).not.toContain("WEB_READ");
+});

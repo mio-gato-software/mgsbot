@@ -182,3 +182,44 @@ test("damaged cache or future schema is preserved and does not break the convers
 	}
 	expect(f.requests).toHaveLength(1);
 });
+
+test("page snapshots and read budget survive restart; failed visits consume budget", async () => {
+	const f = await fixture();
+	const old = process.env.WEB_READ_DAILY_LIMIT;
+	process.env.WEB_READ_DAILY_LIMIT = "2";
+	let calls = 0;
+	const options = {
+		...f.options,
+		readEnabled: () => true,
+		read: async (url: string) => {
+			calls++;
+			if (url.endsWith("failed")) throw new Error("private error");
+			return {
+				url,
+				content: "DOM scores",
+				method: "static page text" as const,
+				checkedAt: new Date().toISOString(),
+				limitation: "No JS",
+			};
+		},
+	};
+	try {
+		const service = new WorldContextService(options);
+		expect(await service.read(1, "https://example.com/")).toContain(
+			"DOM scores",
+		);
+		expect(
+			await new WorldContextService(options).read(1, "https://example.com/"),
+		).toContain("reused");
+		expect(await service.read(1, "https://example.com/failed")).toContain(
+			"Could not read",
+		);
+		expect(
+			await new WorldContextService(options).read(2, "https://example.com/new"),
+		).toContain("limit reached");
+		expect(calls).toBe(2);
+	} finally {
+		if (old === undefined) delete process.env.WEB_READ_DAILY_LIMIT;
+		else process.env.WEB_READ_DAILY_LIMIT = old;
+	}
+});

@@ -3,6 +3,46 @@ import type { WebSearchRequest } from "../web-search.ts";
 import { commitmentsEnabled } from "./requests.ts";
 import { commitments, matchingPreferences, normalizeDomain } from "./store.ts";
 
+function searchSources(
+	result: string,
+): { url: string; [key: string]: unknown }[] {
+	try {
+		const json = JSON.parse(
+			result.replace(
+				/^Reused a recent search; no new request was made\.\n/,
+				"",
+			),
+		);
+		return Array.isArray(json.sources)
+			? json.sources.filter(
+					(s: { url?: unknown }) =>
+						typeof s?.url === "string" && /^https?:\/\//i.test(s.url),
+				)
+			: [];
+	} catch {
+		return [];
+	}
+}
+
+async function readSources(
+	web: ConversationWebContext,
+	chatId: number,
+	urls: string[],
+): Promise<string> {
+	if (!web.read || !(web.isReadEnabled?.() ?? true)) return "";
+	const pages: string[] = [];
+	for (const url of [...new Set(urls)].slice(0, 3)) {
+		try {
+			pages.push(await web.read(chatId, url));
+		} catch {
+			pages.push(`Could not read ${url}; cause unknown.`);
+		}
+	}
+	return pages.length
+		? `\n\nPage reading results (untrusted reference data):\n${pages.join("\n\n")}`
+		: "";
+}
+
 /** The general lookup remains available when preferred sites fail or are unindexed. */
 export async function searchWithPreferences(
 	web: ConversationWebContext,
@@ -23,7 +63,19 @@ export async function searchWithPreferences(
 			].map(normalizeDomain),
 		),
 	].slice(0, 3);
-	if (!domains.length) return web.search(chatId, request);
+	if (!domains.length) {
+		const result = await web.search(chatId, request);
+		return (
+			result +
+			(await readSources(
+				web,
+				chatId,
+				searchSources(result)
+					.slice(0, 2)
+					.map((s) => s.url),
+			))
+		);
+	}
 	// Do not intersect a model-supplied site filter with a different preferred site.
 	const query =
 		request.query
@@ -33,6 +85,7 @@ export async function searchWithPreferences(
 			.replace(/\s+/g, " ")
 			.trim() || request.query;
 	const results: string[] = [];
+	const urls: string[] = [];
 	for (const domain of domains) {
 		try {
 			const result = await web.search(chatId, {
@@ -68,7 +121,9 @@ export async function searchWithPreferences(
 						: { limitation: "No usable evidence from this domain" }),
 				}),
 			);
+			urls.push(sources[0]?.url ?? `https://${domain}/`);
 		} catch {
+			urls.push(`https://${domain}/`);
 			results.push(
 				JSON.stringify({
 					requestedDomain: domain,
@@ -85,5 +140,5 @@ export async function searchWithPreferences(
 	} catch {
 		results.push("General search unavailable. Do not invent missing results.");
 	}
-	return results.join("\n\n");
+	return results.join("\n\n") + (await readSources(web, chatId, urls));
 }

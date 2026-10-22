@@ -93,6 +93,7 @@ export async function generateScheduledMessage(
 		allowSpeech: false,
 	})
 		.text.replace(/\[WEB_SEARCH\][\s\S]*?(?:\[\/WEB_SEARCH\]|$)/gi, "")
+		.replace(/\[WEB_READ\][\s\S]*?(?:\[\/WEB_READ\]|$)/gi, "")
 		.trim();
 	if (!clean || clean.length > 4000)
 		throw new Error("Invalid scheduled message");
