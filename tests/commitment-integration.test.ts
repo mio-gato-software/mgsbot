@@ -125,3 +125,31 @@ test("explicit task sources are searched separately; off-domain evidence cannot 
 	expect(result).toContain("Could not obtain");
 	expect(result).toContain("General independent evidence");
 });
+
+test("research opens saved sources even when their search excerpts are empty", async () => {
+	const visited: string[] = [];
+	const evidence = await searchWithPreferences(
+		{
+			isEnabled: () => true,
+			context: async () => "",
+			refreshHeadlines: async () => {},
+			search: async () => JSON.stringify({ sources: [] }),
+			read: async (_id, url) => {
+				visited.push(url);
+				return JSON.stringify({
+					url,
+					method: "browser-rendered page",
+					content: "Actual scoreboard",
+				});
+			},
+		},
+		-99,
+		{ query: "LIDOM resultados" },
+		["pelotainvernal.com", "bengaleses.com"],
+	);
+	expect(visited).toEqual([
+		"https://pelotainvernal.com/",
+		"https://bengaleses.com/",
+	]);
+	expect(evidence).toContain("Actual scoreboard");
+});

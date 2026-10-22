@@ -61,6 +61,8 @@ src/
   group-state.ts             ← In-memory group rate limits: spontaneous-reply cooldowns, continuation windows
   web-content.ts             ← Public URL reading: optional Browserbase Fetch when BROWSERBASE_API_KEY is set,
                                direct-reader fallback, public-address/redirect validation, bounded extraction
+  browser-reader.ts          ← Bounded Browserbase CDP sessions for JavaScript-rendered public page text;
+                               pinned resource fetching, explicit cleanup, labeled static fallback
   conversation.ts            ← Main turn pipeline (named options and injectable generation/retrieval/delivery): sensory append, memory retrieval, prompt assembly,
                                provider call, response send, episode promotion, background evaluation
   response-plan.ts           ← Pure marker parsing into a structured delivery plan

@@ -150,7 +150,7 @@ async function resolveAddresses(hostname: string): Promise<PublicAddress[]> {
 	);
 }
 
-async function assertPublicUrl(
+export async function assertPublicUrl(
 	url: URL,
 	resolve = resolveAddresses,
 ): Promise<PublicAddress[]> {
@@ -189,7 +189,7 @@ async function assertPublicUrl(
 	return addresses;
 }
 
-async function readLimitedBody(response: Response): Promise<string> {
+export async function readLimitedBody(response: Response): Promise<string> {
 	const contentLength = Number(response.headers.get("content-length"));
 	if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
 		await response.body?.cancel();
