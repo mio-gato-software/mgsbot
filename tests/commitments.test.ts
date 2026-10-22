@@ -11,6 +11,8 @@ import {
 import {
 	handleCommitmentRequest,
 	hasCommitmentIntent,
+	isDeferredWebRequest,
+	writtenDomains,
 } from "../src/commitments/requests.ts";
 import { interpretationSchema } from "../src/commitments/schema.ts";
 import {
@@ -311,4 +313,155 @@ test("editing a schedule preserves validated sources without making the user rep
 	expect(tasks[0]?.status).toBe("cancelled");
 	expect(tasks[1]?.domains).toEqual(["bengaleses.com"]);
 	expect(tasks[1]?.schedule.time).toBe("08:00");
+});
+
+const screenshotRequest =
+	"Brendy. Aparte de la página oficial de LIDOM, ¿puedes tener en cuenta lo que dijo Wispe? pelotainvernal.com y https://bengaleses.com. Todos los días a las 7 AM darnos el estado del juego?";
+
+test("written bare domains are accepted and the screenshot request bypasses page expansion", async () => {
+	expect(isDeferredWebRequest(screenshotRequest)).toBe(true);
+	expect(writtenDomains(screenshotRequest)).toEqual([
+		"pelotainvernal.com",
+		"bengaleses.com",
+	]);
+	const scheduled = action();
+	scheduled.evidence = screenshotRequest;
+	scheduled.task.domains = ["pelotainvernal.com", "bengaleses.com"];
+	let calls = 0;
+	const result = await handleCommitmentRequest(
+		{ ...input, text: screenshotRequest },
+		{
+			store,
+			now: () => now,
+			interpret: async (_input, context) => {
+				calls++;
+				expect(context).toContain("pelotainvernal.com");
+				// The extractor must get one opportunity to correct a mistaken flag.
+				return plan([scheduled], { needsWrittenConfirmation: true });
+			},
+		},
+	);
+	expect(calls).toBe(2);
+	expect(result).toContain("saved successfully");
+	expect((await store.read()).tasks[0]?.domains).toEqual(
+		scheduled.task.domains,
+	);
+});
+
+test("a failed interpretation retains typed links and a short follow-up can finish after restart", async () => {
+	const first = await handleCommitmentRequest(input, {
+		store,
+		now: () => now,
+		interpret: async () => {
+			throw new SyntaxError("invalid JSON");
+		},
+	});
+	expect(first).toContain("retained");
+	expect((await store.read()).pending[0]?.writtenText).toBe(input.text);
+	const reloaded = new CommitmentStore(store.path, () => now);
+	const result = await handleCommitmentRequest(
+		{ ...input, messageId: 2, text: "Están pegadas en el texto las URL" },
+		{
+			store: reloaded,
+			now: () => now,
+			interpret: async (request, context) => {
+				expect(request.text).toContain(input.text);
+				expect(JSON.parse(context).writtenDomains).toContain("bengaleses.com");
+				return plan([action()]);
+			},
+		},
+	);
+	expect(result).toContain("saved successfully");
+	expect((await reloaded.read()).tasks).toHaveLength(1);
+});
+
+test("typed sources survive another clarification and need not be repeated with the answer", async () => {
+	await handleCommitmentRequest(input, {
+		store,
+		now: () => now,
+		interpret: async () => plan([], { clarification: "¿Solo LIDOM?" }),
+	});
+	const result = await handleCommitmentRequest(
+		{ ...input, text: "Sí, solo LIDOM", messageId: 2 },
+		{
+			store,
+			now: () => now,
+			interpret: async () => plan([action()]),
+		},
+	);
+	expect(result).toContain("saved successfully");
+	expect((await store.read()).tasks[0]?.domains).toEqual(["bengaleses.com"]);
+});
+
+test("voice sources can be written in separate messages without losing either link", async () => {
+	const scheduled = action();
+	scheduled.task.domains = ["bengaleses.com", "pelotainvernal.com"];
+	const services = {
+		store,
+		now: () => now,
+		interpret: async () => plan([scheduled]),
+	};
+	await handleCommitmentRequest({ ...input, voice: true }, services);
+	await handleCommitmentRequest(
+		{ ...input, text: "bengaleses.com", messageId: 2 },
+		services,
+	);
+	expect((await store.read()).tasks).toHaveLength(0);
+	const result = await handleCommitmentRequest(
+		{ ...input, text: "Y pelotainvernal.com", messageId: 3 },
+		services,
+	);
+	expect(result).toContain("saved successfully");
+	expect((await store.read()).tasks[0]?.domains).toEqual(
+		scheduled.task.domains,
+	);
+});
+
+test("failed voice interpretation never upgrades the transcript to written evidence", async () => {
+	await handleCommitmentRequest(
+		{ ...input, voice: true },
+		{
+			store,
+			now: () => now,
+			interpret: async () => {
+				throw new SyntaxError("broken");
+			},
+		},
+	);
+	expect((await store.read()).pending[0]?.writtenText).toBe("");
+	const result = await handleCommitmentRequest(
+		{ ...input, text: "Sí, hazlo", messageId: 2 },
+		{ store, now: () => now, interpret: async () => plan([action()]) },
+	);
+	expect(result).toContain("Nothing saved");
+	expect((await store.read()).tasks).toHaveLength(0);
+});
+
+test("pending details are isolated from other participants and expire", async () => {
+	await handleCommitmentRequest(input, {
+		store,
+		now: () => now,
+		interpret: async () => plan([], { clarification: "¿Solo LIDOM?" }),
+	});
+	let calls = 0;
+	const services = {
+		store,
+		now: () => now,
+		interpret: async () => {
+			calls++;
+			return plan([action()]);
+		},
+	};
+	await handleCommitmentRequest(
+		{ ...input, userId: 8, text: "sí", messageId: 2 },
+		services,
+	);
+	expect(calls).toBe(0);
+	now += 16 * 60000;
+	await handleCommitmentRequest(
+		{ ...input, text: "sí", messageId: 3 },
+		services,
+	);
+	expect(calls).toBe(0);
+	expect((await store.read()).tasks).toHaveLength(0);
 });

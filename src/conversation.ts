@@ -396,6 +396,9 @@ export async function observeConversationTurn(
 			name: userName,
 			userId,
 			content: userContent,
+			userText: ctx.message?.forward_origin
+				? undefined
+				: (ctx.message?.text ?? ctx.message?.caption),
 			timestamp: Date.now(),
 			image: getMessageImage(ctx),
 		};

@@ -101,6 +101,8 @@ export const stateSchema = z.object({
 				chatId: z.number().int(),
 				userId: z.number().int(),
 				text: z.string().max(5000),
+				/** Only text actually typed by this user, never speech transcription. */
+				writtenText: z.string().max(5000).optional(),
 				requireWritten: z.boolean().default(false),
 				expiresAt: z.number(),
 			}),
