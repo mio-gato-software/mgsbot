@@ -1,4 +1,5 @@
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
@@ -67,7 +68,7 @@ export class AnthropicChatProvider implements ChatProvider {
 					system: systemPrompt,
 					messages: anthropicMessages,
 				}),
-				signal: AbortSignal.timeout(30_000),
+				signal: requestSignal(30_000),
 			});
 			if (!response.ok) {
 				const errorBody = await response.text().catch(() => "");

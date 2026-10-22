@@ -1,5 +1,6 @@
 import { alertOwner, errorSummary } from "../alerts.ts";
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
@@ -110,7 +111,7 @@ export class OpenAiCompatibleChatProvider implements ChatProvider {
 				messages,
 				...this.extraBody,
 			}),
-			signal: AbortSignal.timeout(this.timeoutMs),
+			signal: requestSignal(this.timeoutMs),
 		});
 		if (!response.ok) {
 			const errorBody = await response.text().catch(() => "");

@@ -3,6 +3,12 @@ import { isIP } from "node:net";
 import type { Context } from "grammy";
 import { z } from "zod";
 import { log } from "./logger.ts";
+import { abortable, requestSignal } from "./operation-deadline.ts";
+import {
+	type PublicAddress,
+	requestPinnedWebPage,
+	WEB_REQUEST_HEADERS,
+} from "./pinned-web-request.ts";
 
 const MAX_REDIRECTS = 5;
 const MAX_RESPONSE_BYTES = 2_000_000;
@@ -138,7 +144,16 @@ function isPrivateIpAddress(address: string): boolean {
 	return true;
 }
 
-async function assertPublicUrl(url: URL): Promise<void> {
+async function resolveAddresses(hostname: string): Promise<PublicAddress[]> {
+	return (await lookup(hostname, { all: true, verbatim: true })).map(
+		({ address, family }) => ({ address, family: family === 6 ? 6 : 4 }),
+	);
+}
+
+async function assertPublicUrl(
+	url: URL,
+	resolve = resolveAddresses,
+): Promise<PublicAddress[]> {
 	if (url.protocol !== "http:" && url.protocol !== "https:") {
 		throw new Error("Unsupported redirect protocol");
 	}
@@ -158,16 +173,20 @@ async function assertPublicUrl(url: URL): Promise<void> {
 		if (isPrivateIpAddress(hostname)) {
 			throw new Error("Private addresses are not allowed");
 		}
-		return;
+		return [{ address: hostname, family: isIP(hostname) === 6 ? 6 : 4 }];
 	}
 
-	const addresses = await lookup(hostname, { all: true, verbatim: true });
+	const addresses = await abortable(
+		resolve(hostname),
+		requestSignal(REQUEST_TIMEOUT_MS),
+	);
 	if (
 		addresses.length === 0 ||
 		addresses.some(({ address }) => isPrivateIpAddress(address))
 	) {
 		throw new Error("URL does not resolve to a public address");
 	}
+	return addresses;
 }
 
 async function readLimitedBody(response: Response): Promise<string> {
@@ -277,15 +296,23 @@ export function extractReadableWebContent(html: string): {
 	return { title, content: content.slice(0, MAX_CONTENT_CHARS) };
 }
 
-function fetchDirectPage(url: URL, fetchImpl: typeof fetch): Promise<Response> {
-	return fetchImpl(url, {
-		headers: {
-			Accept: "text/html,application/xhtml+xml,text/plain;q=0.9",
-			"User-Agent":
-				"Mozilla/5.0 (compatible; MGSBot/1.0; +https://github.com/eliaquin/mgsbot)",
-		},
+function fetchDirectPage(
+	url: URL,
+	addresses: PublicAddress[],
+	options: WebReaderOptions,
+): Promise<Response> {
+	const signal = requestSignal(REQUEST_TIMEOUT_MS);
+	if (!options.fetch)
+		return (options.directRequest ?? requestPinnedWebPage)(
+			url,
+			addresses,
+			signal,
+		);
+	// An explicit fetch override is a trusted test transport, never the production reader.
+	return options.fetch(url, {
+		headers: WEB_REQUEST_HEADERS,
 		redirect: "manual",
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+		signal,
 	});
 }
 
@@ -307,7 +334,7 @@ async function fetchBrowserbasePage(
 			allowRedirects: false,
 		}),
 		redirect: "error",
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+		signal: requestSignal(REQUEST_TIMEOUT_MS),
 	});
 	if (!response.ok) {
 		await response.body?.cancel();
@@ -338,9 +365,16 @@ async function fetchBrowserbasePage(
 	);
 }
 
+interface WebReaderOptions {
+	fetch?: typeof fetch;
+	browserbaseApiKey?: string;
+	resolve?: typeof resolveAddresses;
+	directRequest?: typeof requestPinnedWebPage;
+}
+
 export async function fetchPublicWebPage(
 	rawUrl: string,
-	options: { fetch?: typeof fetch; browserbaseApiKey?: string } = {},
+	options: WebReaderOptions = {},
 ): Promise<PublicWebPage> {
 	let url = parseHttpUrl(rawUrl);
 	if (!url) throw new Error("Invalid public web URL");
@@ -350,7 +384,7 @@ export async function fetchPublicWebPage(
 	)?.trim();
 
 	for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
-		await assertPublicUrl(url);
+		const addresses = await assertPublicUrl(url, options.resolve);
 		let response: Response;
 		if (apiKey) {
 			try {
@@ -361,10 +395,10 @@ export async function fetchPublicWebPage(
 					"[web] Browserbase retrieval failed; using the direct reader.",
 				);
 				apiKey = undefined;
-				response = await fetchDirectPage(url, fetchImpl);
+				response = await fetchDirectPage(url, addresses, options);
 			}
 		} else {
-			response = await fetchDirectPage(url, fetchImpl);
+			response = await fetchDirectPage(url, addresses, options);
 		}
 
 		if (response.status >= 300 && response.status < 400) {

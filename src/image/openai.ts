@@ -57,12 +57,15 @@ export class OpenAIImageProvider implements ImageProvider {
 			);
 		}
 
-		const response = await getOpenAIClient().images.generate({
-			model,
-			prompt: `Generate an image of: ${prompt}. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
-			size: size as "1024x1024",
-			quality: quality as "high",
-		});
+		const response = await getOpenAIClient().images.generate(
+			{
+				model,
+				prompt: `Generate an image of: ${prompt}. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
+				size: size as "1024x1024",
+				quality: quality as "high",
+			},
+			{ timeout: 300_000 },
+		);
 		log.debug("[image:openai] Image generated successfully");
 		return bufferFromImageResponse(response);
 	}
@@ -80,13 +83,16 @@ export class OpenAIImageProvider implements ImageProvider {
 		const image = await toFile(fs.createReadStream(imagePath), "image.png", {
 			type: mimeFromPath(imagePath),
 		});
-		const response = await getOpenAIClient().images.edit({
-			model,
-			image,
-			prompt: `Edit this image according to the following instruction: ${prompt}. Preserve the overall composition and subject of the original image unless the instruction explicitly asks otherwise. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
-			size: size as "1024x1024",
-			quality: quality as "high",
-		});
+		const response = await getOpenAIClient().images.edit(
+			{
+				model,
+				image,
+				prompt: `Edit this image according to the following instruction: ${prompt}. Preserve the overall composition and subject of the original image unless the instruction explicitly asks otherwise. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
+				size: size as "1024x1024",
+				quality: quality as "high",
+			},
+			{ timeout: 300_000 },
+		);
 		log.debug("[image:openai:edit] Image edited successfully");
 		return bufferFromImageResponse(response);
 	}

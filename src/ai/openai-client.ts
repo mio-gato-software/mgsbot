@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { operationFetch, REQUEST_TIMEOUT_MS } from "../operation-deadline.ts";
 import {
 	type OpenAIReasoningEffort,
 	openAIModelSupportsReasoning,
@@ -12,7 +13,13 @@ export function getOpenAIClient(): OpenAI {
 	if (!apiKey) {
 		throw new Error("OPENAI_API_KEY is required for OpenAI support paths");
 	}
-	if (!_client) _client = new OpenAI({ apiKey });
+	if (!_client)
+		_client = new OpenAI({
+			apiKey,
+			timeout: REQUEST_TIMEOUT_MS,
+			maxRetries: 0,
+			fetch: operationFetch,
+		});
 	return _client;
 }
 

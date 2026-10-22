@@ -1,7 +1,7 @@
 {
 	"name": "mgsbot",
 	"description": "Conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities",
-	"version": "1.0.64",
+	"version": "1.0.65",
 	"author": "Mio Gato Software",
 	"license": "MIT",
 	"repository": {
@@ -22,16 +22,17 @@
 	],
 	"module": "index.ts",
 	"dependencies": {
-		"@elevenlabs/elevenlabs-js": "^2.66.0",
-		"@google/genai": "2.21.0",
+		"@elevenlabs/elevenlabs-js": "^2.71.0",
+		"@google/genai": "2.27.0",
+		"@grammyjs/runner": "^2.0.3",
 		"dayjs": "^1.11.23",
 		"grammy": "^1.46.0",
-		"openai": "^7.10.0",
-		"zod": "^4.5.4"
+		"openai": "^7.30.0",
+		"zod": "^4.6.5"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.12",
-		"@types/bun": "1.4.1",
+		"@biomejs/biome": "2.5.15",
+		"@types/bun": "1.4.2",
 		"typescript": "7.0.2"
 	},
 	"private": true,

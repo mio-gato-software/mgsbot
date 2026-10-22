@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import type { TtsProvider } from "./types.ts";
 
 const CARTESIA_TTS_URL = "https://api.cartesia.ai/tts/bytes";
@@ -83,7 +84,7 @@ export class CartesiaTtsProvider implements TtsProvider {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify(body),
-			signal: AbortSignal.timeout(60_000),
+			signal: requestSignal(60_000),
 		});
 
 		if (!response.ok) {

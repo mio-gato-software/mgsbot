@@ -312,3 +312,23 @@ test("a failed image recovery still answers with explicit missing-evidence conte
 		),
 	).toBe(true);
 });
+
+test("a provider deadline sends a retry notice without recording an invented answer", async () => {
+	const { withDeadline } = await import("../src/operation-deadline.ts");
+	for (const phase of ["retrieval", "generation"] as const) {
+		const { ctx, spies } = makeMockContext({ chatId: ++chatId });
+		const services = dependencies();
+		const hang = () =>
+			withDeadline(phase, 10, async () => new Promise<never>(() => {}));
+		if (phase === "retrieval") services.retrieve = hang;
+		else services.generate = hang;
+		expect(await processConversation(ctx, "hola", "Ana", {}, services)).toBe(
+			false,
+		);
+		expect(spies.replies).toHaveLength(1);
+		expect(spies.replies[0]?.text).toMatch(/tardó demasiado|took too long/);
+		expect((await loadSensory(chatId)).messages.map((m) => m.role)).toEqual([
+			"user",
+		]);
+	}
+});

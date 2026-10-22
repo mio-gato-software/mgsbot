@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { log } from "../logger.ts";
+import { operationFetch, REQUEST_TIMEOUT_MS } from "../operation-deadline.ts";
 import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
@@ -35,6 +36,9 @@ export class DeepSeekChatProvider implements ChatProvider {
 		this.client = new OpenAI({
 			baseURL: "https://api.deepseek.com",
 			apiKey,
+			timeout: REQUEST_TIMEOUT_MS,
+			maxRetries: 0,
+			fetch: operationFetch,
 		});
 		this.model = model ?? resolveChatModel("deepseek");
 	}

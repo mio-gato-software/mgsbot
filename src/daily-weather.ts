@@ -1,5 +1,6 @@
 import { BOT_TZ, getBotHour, getDateString } from "./bot-time.ts";
 import { log } from "./logger.ts";
+import { requestSignal } from "./operation-deadline.ts";
 import { memoryPath } from "./runtime-paths.ts";
 import { atomicWriteFile, withRetry } from "./utils.ts";
 
@@ -118,7 +119,7 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 
 		log.debug("[daily-weather] Fetching from Open-Meteo...");
 		const res = await withRetry(() =>
-			fetch(url, { signal: AbortSignal.timeout(10_000) }),
+			fetch(url, { signal: requestSignal(10_000) }),
 		);
 		if (!res.ok) {
 			log.error("[daily-weather] Fetch failed:", res.status);

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { GoogleGenAI } from "@google/genai";
+import type { GoogleGenAI } from "@google/genai";
+import { createGoogleClient } from "./ai/google-client.ts";
 import { getOpenAIClient } from "./ai/openai-client.ts";
 import {
 	resolveEmbeddingDim,
@@ -9,12 +10,18 @@ import {
 } from "./ai/platform.ts";
 import { log } from "./logger.ts";
 import { recordMemoryUsage } from "./memory/usage-metrics.ts";
+import {
+	abortableDelay,
+	currentOperationSignal,
+	EMBEDDING_TIMEOUT_MS,
+	withDeadline,
+} from "./operation-deadline.ts";
 import { memoryPath } from "./runtime-paths.ts";
 import { atomicWriteFile, isFileNotFound } from "./utils.ts";
 
 let _ai: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {
-	if (!_ai) _ai = new GoogleGenAI({});
+	if (!_ai) _ai = createGoogleClient();
 	return _ai;
 }
 
@@ -107,6 +114,14 @@ async function embedWithOpenAI(
 }
 
 export async function generateEmbedding(text: string): Promise<number[]> {
+	return withDeadline("embedding", EMBEDDING_TIMEOUT_MS, () =>
+		generateEmbeddingWithinDeadline(text),
+	);
+}
+
+async function generateEmbeddingWithinDeadline(
+	text: string,
+): Promise<number[]> {
 	initEmbeddingCache();
 	const hash = hashText(text);
 	const cached = diskCache.get(hash);
@@ -128,12 +143,14 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 	const provider = resolveEmbeddingProvider();
 
 	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+		currentOperationSignal()?.throwIfAborted();
 		const start = Date.now();
 		try {
 			const { embedding, inputTokens } =
 				provider === "openai"
 					? await embedWithOpenAI(text)
 					: await embedWithGemini(text);
+			currentOperationSignal()?.throwIfAborted();
 
 			await recordMemoryUsage({
 				operation: "embedding",
@@ -163,6 +180,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 				durationMs: Date.now() - start,
 			});
 			lastError = err;
+			currentOperationSignal()?.throwIfAborted();
 			const status =
 				err instanceof Error && "status" in err
 					? (err as { status: number }).status
@@ -172,7 +190,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 				log.debug(
 					`[embeddings] Rate limited (429), retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})`,
 				);
-				await new Promise((resolve) => setTimeout(resolve, delay));
+				await abortableDelay(delay);
 				continue;
 			}
 			throw err;

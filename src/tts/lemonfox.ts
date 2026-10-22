@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import type { TtsProvider } from "./types.ts";
 
 export class LemonFoxTtsProvider implements TtsProvider {
@@ -25,7 +27,7 @@ export class LemonFoxTtsProvider implements TtsProvider {
 				voice: "heart",
 				response_format: "mp3",
 			}),
-			signal: AbortSignal.timeout(15000),
+			signal: requestSignal(15000),
 		});
 
 		log.debug("[TTS:lemonfox] Response status:", response.status);
@@ -35,7 +37,7 @@ export class LemonFoxTtsProvider implements TtsProvider {
 			throw new Error(`LemonFox TTS failed: ${response.status} ${errorBody}`);
 		}
 
-		const filePath = `./audios/tts_${Date.now()}.mp3`;
+		const filePath = `./audios/tts_${Date.now()}_${randomUUID()}.mp3`;
 		const arrayBuffer = await response.arrayBuffer();
 		log.debug("[TTS:lemonfox] Received bytes:", arrayBuffer.byteLength);
 		await Bun.write(filePath, new Uint8Array(arrayBuffer));

@@ -23,9 +23,8 @@ ENV NODE_ENV=production
 
 USER bun
 
-# The bot touches /tmp/mgsbot-heartbeat every 30s while its event loop is
-# alive; consider it unhealthy if the file goes stale for >2 minutes.
+# Verify heartbeat freshness, successful polling, and bounded active turns.
 HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=1m \
-    CMD bun -e "const t = Number(await Bun.file('/tmp/mgsbot-heartbeat').text()); process.exit(Date.now() - t < 120_000 ? 0 : 1)"
+    CMD bun -e "import { isRuntimeHealthy, HEARTBEAT_FILE } from './src/runtime-health.ts'; process.exit(isRuntimeHealthy(JSON.parse(await Bun.file(HEARTBEAT_FILE).text())) ? 0 : 1)"
 
 CMD ["bun", "run", "index.ts"]

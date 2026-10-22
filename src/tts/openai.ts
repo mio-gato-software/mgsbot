@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { getOpenAIClient } from "../ai/openai-client.ts";
 import {
 	resolveOpenAITtsModel,
@@ -21,7 +22,7 @@ export class OpenAITtsProvider implements TtsProvider {
 			response_format: "mp3",
 		});
 
-		const filePath = `./audios/tts_${Date.now()}.mp3`;
+		const filePath = `./audios/tts_${Date.now()}_${randomUUID()}.mp3`;
 		const buffer = Buffer.from(await audio.arrayBuffer());
 		log.debug("[TTS:openai] Received bytes:", buffer.byteLength);
 		await Bun.write(filePath, buffer);

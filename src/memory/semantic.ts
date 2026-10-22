@@ -379,6 +379,7 @@ export async function getRelevantFacts(
 export async function getFactsForSubjects(
 	names: string[],
 	maxPerSubject = 10,
+	chatId?: number,
 ): Promise<SemanticFact[]> {
 	const store = await loadSemanticStore();
 
@@ -394,6 +395,8 @@ export async function getFactsForSubjects(
 	const matching = store.filter(
 		(f) =>
 			isFactActive(f) &&
+			(f.scope !== "chat" ||
+				(chatId !== undefined && f.sourceChatId === chatId)) &&
 			!f.permanent &&
 			!f.archivedAt &&
 			f.category === "person" &&

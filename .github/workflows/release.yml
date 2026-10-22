@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.1
+          bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
@@ -35,7 +35,7 @@ jobs:
         run: bun build index.ts --compile --target=bun-windows-x64 --outfile=mgsbot-windows.exe
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2.6.1
+        uses: softprops/action-gh-release@v2.6.2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}

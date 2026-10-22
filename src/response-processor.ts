@@ -11,6 +11,7 @@ import { log } from "./logger.ts";
 import { loadSensory, saveSensory, withChatLock } from "./memory/index.ts";
 import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
 import { buildReplyOptions, parseResponse } from "./response-plan.ts";
+import { withMarkdownFallback } from "./telegram-delivery.ts";
 import { textToSpeech } from "./tts/index.ts";
 import type { SensoryBuffer } from "./types.ts";
 
@@ -57,16 +58,6 @@ export const defaultResponseDependencies: ResponseDependencies = {
 	fullAccess: isFullAccessActive,
 };
 
-function isFormattingError(error: unknown): boolean {
-	if (!(error instanceof Error)) return false;
-	return (
-		/can't parse entities|cannot parse entities|unsupported start tag|can't find end of/i.test(
-			error.message,
-		) &&
-		(!("error_code" in error) || error.error_code === 400)
-	);
-}
-
 /** Only formatting errors warrant a plain-text fallback; transport failures propagate. */
 export async function sendTextReply(
 	ctx: Context,
@@ -78,12 +69,12 @@ export async function sendTextReply(
 		// Avoid cutting a UTF-16 surrogate pair across messages.
 		if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1] ?? "")) end--;
 		const chunk = text.slice(offset, end);
-		try {
-			await ctx.reply(chunk, { ...replyOptions, parse_mode: "Markdown" });
-		} catch (error) {
-			if (!isFormattingError(error)) throw error;
-			await ctx.reply(chunk, replyOptions);
-		}
+		await withMarkdownFallback((parseMode) =>
+			ctx.reply(chunk, {
+				...replyOptions,
+				...(parseMode ? { parse_mode: parseMode } : {}),
+			}),
+		);
 		offset = end;
 	}
 }

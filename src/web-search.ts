@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requestSignal } from "./operation-deadline.ts";
 
 export const webSourceSchema = z.object({
 	title: z.string().min(1).max(200),
@@ -53,7 +54,7 @@ export async function searchBrave(
 	}).toString();
 	const response = await (options.fetch ?? fetch)(url, {
 		headers: { Accept: "application/json", "X-Subscription-Token": apiKey },
-		signal: AbortSignal.timeout(10_000),
+		signal: requestSignal(10_000),
 		redirect: "error",
 	});
 	// Do not expose provider error bodies, request headers, or queries in logs.

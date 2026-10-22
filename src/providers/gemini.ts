@@ -1,9 +1,10 @@
-import {
-	type Content,
-	type GenerateContentResponse,
+import type {
+	Content,
+	GenerateContentResponse,
 	GoogleGenAI,
-	type Part,
+	Part,
 } from "@google/genai";
+import { createGoogleClient } from "../ai/google-client.ts";
 import { log } from "../logger.ts";
 import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
@@ -52,7 +53,7 @@ export class GeminiChatProvider implements ChatProvider {
 				"GOOGLE_API_KEY is required when CHAT_PROVIDER=gemini (or unset)",
 			);
 		}
-		this.ai = new GoogleGenAI({ apiKey });
+		this.ai = createGoogleClient(apiKey);
 		this.model = model ?? resolveChatModel("gemini");
 	}
 

@@ -16,6 +16,7 @@ import {
 	downloadTextByFileId,
 	MAX_TEXT_ATTACHMENT_BYTES,
 } from "../media-handlers.ts";
+import { isTimeoutError } from "../operation-deadline.ts";
 import { isSimpleAssistantMode } from "../prompt/modes.ts";
 import { isDev } from "../utils.ts";
 import { handlePhoto } from "./photo.ts";
@@ -173,6 +174,7 @@ export async function handleDocument(
 			isSleepingHour: isSleepingHour(),
 		});
 	} catch (error) {
+		if (isTimeoutError(error)) throw error;
 		log.error(`[${kind === "pdf" ? "PDF" : "text"} handler] Error:`, error);
 		const language = loadConfig().language ?? "es";
 		const errorMessage =

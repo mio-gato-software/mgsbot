@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { unlink } from "node:fs/promises";
 import type { Context } from "grammy";
 import { log } from "./logger.ts";
+import { requestSignal } from "./operation-deadline.ts";
 import { transcribeAudio } from "./stt/index.ts";
 import { safeMediaExtension } from "./utils.ts";
 
@@ -27,7 +28,7 @@ export async function downloadAndTranscribe(
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
 	log.debug("[downloadAndTranscribe] Downloading file:", file.file_path);
 
-	const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+	const response = await fetch(url, { signal: requestSignal(30_000) });
 	if (!response.ok) {
 		log.error(
 			"[downloadAndTranscribe] Download failed:",
@@ -38,7 +39,7 @@ export async function downloadAndTranscribe(
 	}
 
 	const buffer = Buffer.from(await response.arrayBuffer());
-	const filePath = `./audios/${prefix}_${ctx.message?.message_id}.${fileExtension}`;
+	const filePath = `./audios/${prefix}_${ctx.message?.message_id}_${randomUUID()}.${fileExtension}`;
 	await Bun.write(filePath, buffer);
 	log.debug(
 		"[downloadAndTranscribe] Saved to:",
@@ -74,7 +75,7 @@ export async function downloadAndTranscribeByFileId(
 		file.file_path,
 	);
 
-	const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+	const response = await fetch(url, { signal: requestSignal(30_000) });
 	if (!response.ok) {
 		log.error(
 			"[downloadAndTranscribeByFileId] Download failed:",
@@ -85,7 +86,7 @@ export async function downloadAndTranscribeByFileId(
 	}
 
 	const buffer = Buffer.from(await response.arrayBuffer());
-	const filePath = `./audios/${prefix}_${messageId}.${fileExtension}`;
+	const filePath = `./audios/${prefix}_${messageId}_${randomUUID()}.${fileExtension}`;
 	await Bun.write(filePath, buffer);
 	log.debug(
 		"[downloadAndTranscribeByFileId] Saved to:",
@@ -128,7 +129,7 @@ export async function downloadImageByFileId(
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
 	log.debug("[downloadImage] Downloading file:", file.file_path);
 
-	const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+	const response = await fetch(url, { signal: requestSignal(30_000) });
 	if (!response.ok) {
 		throw new Error(
 			`Download failed: ${response.status} ${response.statusText}`,
@@ -164,14 +165,14 @@ export async function downloadPdfByFileId(
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
 	log.debug("[downloadPdf] Downloading file:", file.file_path);
 
-	const response = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+	const response = await fetch(url, { signal: requestSignal(60_000) });
 	if (!response.ok) {
 		throw new Error(
 			`Download failed: ${response.status} ${response.statusText}`,
 		);
 	}
 
-	const filePath = `./audios/pdf_${messageId}.pdf`;
+	const filePath = `./audios/pdf_${messageId}_${randomUUID()}.pdf`;
 	const buffer = Buffer.from(await response.arrayBuffer());
 	await Bun.write(filePath, buffer);
 	log.debug("[downloadPdf] Saved to:", filePath, `(${buffer.length} bytes)`);
@@ -274,7 +275,7 @@ export async function downloadTextByFileId(
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
 	log.debug("[downloadText] Downloading file:", file.file_path);
 
-	const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+	const response = await fetch(url, { signal: requestSignal(30_000) });
 	if (!response.ok) {
 		throw new Error(
 			`Download failed: ${response.status} ${response.statusText}`,

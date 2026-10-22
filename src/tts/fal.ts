@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import type { TtsProvider } from "./types.ts";
 
 interface FalTtsResponse {
@@ -36,7 +38,7 @@ export class FalTtsProvider implements TtsProvider {
 					stability: 0.5,
 					language_code: "en",
 				}),
-				signal: AbortSignal.timeout(90_000),
+				signal: requestSignal(90_000),
 			},
 		);
 
@@ -55,7 +57,7 @@ export class FalTtsProvider implements TtsProvider {
 
 		// Download the audio file
 		const audioResponse = await fetch(audioUrl, {
-			signal: AbortSignal.timeout(60_000),
+			signal: requestSignal(60_000),
 		});
 		if (!audioResponse.ok) {
 			throw new Error(
@@ -63,7 +65,7 @@ export class FalTtsProvider implements TtsProvider {
 			);
 		}
 
-		const filePath = `./audios/tts_fal_${Date.now()}.mp3`;
+		const filePath = `./audios/tts_fal_${Date.now()}_${randomUUID()}.mp3`;
 		const buffer = Buffer.from(await audioResponse.arrayBuffer());
 		log.debug("[TTS:fal] Received bytes:", buffer.byteLength);
 		await Bun.write(filePath, buffer);

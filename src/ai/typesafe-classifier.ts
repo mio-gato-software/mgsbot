@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { log } from "../logger.ts";
+import { requestSignal } from "../operation-deadline.ts";
 import type { GroupSocialDecision } from "./classifiers.ts";
 import { resolveClassifierModel } from "./platform.ts";
 
@@ -42,7 +43,7 @@ async function evaluate(state: unknown, questions: unknown): Promise<unknown> {
 				questions,
 			}),
 			// Bound the extra wait before the existing classifier takes over.
-			signal: AbortSignal.timeout(2000),
+			signal: requestSignal(2000),
 		});
 		if (!response.ok) {
 			log.warn(
