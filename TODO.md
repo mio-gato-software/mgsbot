@@ -9,6 +9,12 @@ Living document. Rules:
 
 ## Pending
 
+### Isolate runtime health files for multiple bot instances on one host
+
+- **Why:** Brendy, gatobot, hellybot and pelusabot run as separate user services on cachyos. The shared `/tmp/mgsbot-heartbeat` path lets an older instance overwrite the new JSON health snapshot with a timestamp; shutdown can also remove another instance's heartbeat. Brendy's deployment was verified using its service PID, executable hash, journal and an observed fresh polling snapshot, not the shared file alone.
+- **What to do:** namespace health files by instance/runtime directory (or provide a configurable path), update the Docker health check consistently, and test two instances writing/stopping independently. Preserve existing service configuration during rollout.
+- **Size:** Small; discovered while deploying Brendy on 2026-10-22.
+
 ### Evaluate adaptive personality against actual conversation quality
 
 - **Why:** Inspection of Brendy on 2026-10-22 found six of eight traits at 1.0; recent growth included interactions between other people. The implementation now requires direct, verbatim user evidence, uses bounded smoothing with 30-day half-life toward neutral, and keeps configured identity/context above adaptive tendencies. Unit tests establish these mechanics, not whether responses feel noticeably better.
