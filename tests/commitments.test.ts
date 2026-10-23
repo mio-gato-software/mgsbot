@@ -33,7 +33,7 @@ const oldEnv = {
 const input: RequestIdentity = {
 	chatId: -99,
 	userId: 7,
-	userName: "Wispe",
+	userName: "Ejemplo",
 	messageId: 1,
 	text: "Todos los días a las 7am dinos el resultado de la pelota en bengaleses.com y a las 10pm los juegos de mañana.",
 };
@@ -78,7 +78,7 @@ afterEach(async () => {
 	}
 });
 
-test("Wispe's two times are persisted atomically, finite, source-complete and idempotent", async () => {
+test("two requested times are persisted atomically, finite, source-complete and idempotent", async () => {
 	const result = await store.apply(input, plan([action(), action("22:00")]));
 	const reloaded = new CommitmentStore(store.path, () => now);
 	const tasks = (await reloaded.read()).tasks;
@@ -316,7 +316,7 @@ test("editing a schedule preserves validated sources without making the user rep
 });
 
 const screenshotRequest =
-	"Brendy. Aparte de la página oficial de LIDOM, ¿puedes tener en cuenta lo que dijo Wispe? pelotainvernal.com y https://bengaleses.com. Todos los días a las 7 AM darnos el estado del juego?";
+	"DemoBot. Aparte de la página oficial de LIDOM, ¿puedes tener en cuenta lo que dijo Ejemplo? pelotainvernal.com y https://bengaleses.com. Todos los días a las 7 AM darnos el estado del juego?";
 
 test("written bare domains are accepted and the screenshot request bypasses page expansion", async () => {
 	expect(isDeferredWebRequest(screenshotRequest)).toBe(true);

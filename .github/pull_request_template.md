@@ -9,5 +9,7 @@ Steps to verify the change works correctly.
 ## Checklist
 
 - [ ] `bun run lint:fix` passes
+- [ ] `bun run typecheck` passes
+- [ ] `bun test --coverage` passes
 - [ ] Tested locally with a real Telegram bot
 - [ ] Updated README / `.env.sample` if adding new config

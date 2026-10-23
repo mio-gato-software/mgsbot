@@ -108,7 +108,7 @@ export function resolveCanonicalNameInStore(
 		}
 	}
 
-	// Prefix match: "eliaquin" should match identity with alias "eliaquin encarnacion"
+	// Prefix match: "lucia" should match identity with alias "lucia ejemplo"
 	for (const identity of Object.values(store)) {
 		for (const alias of identity.aliases) {
 			if (alias.startsWith(normalized) || normalized.startsWith(alias)) {

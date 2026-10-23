@@ -61,9 +61,9 @@ test("group classifiers send their configured model through fal", async () => {
 
 	const decision = await classifyGroupSocialIntent({
 		mode: "name",
-		botName: "Brendy",
-		currentSpeaker: "Eliaquín",
-		currentMessage: "Brendy, ¿qué opinas?",
+		botName: "DemoBot",
+		currentSpeaker: "Lucía",
+		currentMessage: "DemoBot, ¿qué opinas?",
 		recentMessages: [],
 	});
 

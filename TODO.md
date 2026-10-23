@@ -11,30 +11,16 @@ Living document. Rules:
 
 ### Isolate runtime health files for multiple bot instances on one host
 
-- **Why:** Brendy, gatobot, hellybot and pelusabot run as separate user services on cachyos. The shared `/tmp/mgsbot-heartbeat` path lets an older instance overwrite the new JSON health snapshot with a timestamp; shutdown can also remove another instance's heartbeat. Brendy's deployment was verified using its service PID, executable hash, journal and an observed fresh polling snapshot, not the shared file alone.
+- **Why:** multiple bot instances on one host share `/tmp/mgsbot-heartbeat`. An older instance can overwrite the JSON health snapshot with a timestamp; shutdown can also remove another instance's heartbeat. Health verification must correlate the intended service, executable and polling progress rather than rely on the shared file alone.
 - **What to do:** namespace health files by instance/runtime directory (or provide a configurable path), update the Docker health check consistently, and test two instances writing/stopping independently. Preserve existing service configuration during rollout.
-- **Size:** Small; discovered while deploying Brendy on 2026-10-22.
+- **Size:** Small.
 
 ### Evaluate adaptive personality against actual conversation quality
 
-- **Why:** Inspection of Brendy on 2026-10-22 found six of eight traits at 1.0; recent growth included interactions between other people. The implementation now requires direct, verbatim user evidence, uses bounded smoothing with 30-day half-life toward neutral, and keeps configured identity/context above adaptive tendencies. Unit tests establish these mechanics, not whether responses feel noticeably better.
+- **Why:** earlier adaptive updates could saturate traits and learn from interactions between other people. The implementation now requires direct, verbatim user evidence, uses bounded smoothing with 30-day half-life toward neutral, and keeps configured identity/context above adaptive tendencies. Unit tests establish these mechanics, not whether responses feel noticeably better. Keep any evaluation conversations and deployment-specific results private.
 - **What to do:** after deployment, compare matched serious, playful, repeated-question and explicit-boundary scenarios with adaptation enabled/disabled. Assess appropriateness and naturalness, not just trait movement. Monitor rejected/accepted evidence and repeated saturation; consider per-chat/person adaptation if global learning still transfers a relationship's tone to unrelated chats. Do not reset live personality history merely to demonstrate a difference.
 - **Size:** Medium; needs representative conversations and human evaluation. `ENABLE_ADAPTIVE_PERSONALITY=false` provides an operational comparison/disable switch.
 - Added 2026-10-22.
-
-### Release fal background and classifier support before updating Brendy
-
-- **Why:** Brendy runs a verified custom build based on v1.0.61 with background Luna through fal, OpenAI embeddings, and its group-message classifier routed through fal with `deepseek/deepseek-v4.1-flash`. Its release updater must not run until a published binary includes both `BACKGROUND_PROVIDER=fal` and `CLASSIFIER_PROVIDER=fal` support; older binaries would reject or ignore the custom configuration.
-- **What to do:** push/merge local branch `fix/fal-classifier-provider`, publish a release containing both fal support paths, then use the normal release updater. Keep the migrated embeddings paired with the OpenAI embedding configuration if rolling back only the binary.
-- **Size:** Small; creating a release is separate from merging and pushing the source changes.
-- Added 2026-09-16.
-
-### Update the deployment guide with the current bot location
-
-- **Why:** `.agents/skills/deploy/SKILL.md` targets `eliaquin@178.156.187.168:2299`, directory `~/gatobot`, but that directory no longer exists. The host has no running `mgsbot` process or identifiable MGS Bot container. The 2026-09-13 memory fixes and Dockerfile update are merged; deployment requires the correct target.
-- **What to do:** obtain the current host and application directory/container from the owner, update the deployment guide, deploy the merged code, and verify the process/health. Do not initialize an empty bot installation at the obsolete path or replace unrelated services.
-- **Size:** Small once the target is known.
-- Added 2026-09-13.
 
 ### Calibrate the promotion bars from recorded data
 

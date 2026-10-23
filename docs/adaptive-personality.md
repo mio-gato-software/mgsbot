@@ -1,6 +1,6 @@
 # Adaptive personality: observed failure and bounded correction
 
-Read-only inspection of Brendy on `cachyos` on 2026-10-22 found warmth, humor, curiosity, assertiveness, vulnerability and playfulness at 1.0; patience was 0.53 and energy 0.71. Thus six of eight traits had reached the ceiling. Recent growth records included affection and jokes between other people rather than treatment directed at the bot.
+Earlier adaptive updates could saturate multiple traits at the upper limit and could learn from interactions between other people instead of feedback directed at the bot. Production conversation excerpts, instance identities and personality snapshots are not included in this public explanation.
 
 Previously, each extracted delta was added directly to the trait value. Momentum was updated but did not affect the value or the prompt. The three prompt tiers meant that additional positive updates after 0.67 produced identical instructions; at 1.0 they did not even change the stored value. The configured identity and manually written style rules also remained in the prompt, so numerical updates alone could not establish a visible behavioral difference.
 
@@ -13,4 +13,4 @@ The implementation now:
 - Keeps configured identity, explicit boundaries, chat preferences and the current situation above adaptive tendencies. High humor does not require jokes in a serious exchange.
 - Supports `ENABLE_ADAPTIVE_PERSONALITY=false` to stop new adaptive signals, their application and their prompt section while retaining configured personality and existing history.
 
-These are behavioral steering instructions, not model fine-tuning or human emotional development. Unit tests validate convergence, decay, reversal, provenance and replay safety. They cannot demonstrate that users will perceive better or more natural conversations. A production comparison with adaptation on/off remains in `TODO.md`; global trait state still spans chats, so relationship-specific adaptation is a possible later improvement if real evaluation supports it. No live Brendy state was reset or replaced during development.
+These are behavioral steering instructions, not model fine-tuning or human emotional development. Unit tests validate convergence, decay, reversal, provenance and replay safety. They cannot demonstrate that users will perceive better or more natural conversations. A production comparison with adaptation on/off remains in `TODO.md`; global trait state still spans chats, so relationship-specific adaptation is a possible later improvement if real evaluation supports it. The correction preserves existing personality history instead of resetting it.

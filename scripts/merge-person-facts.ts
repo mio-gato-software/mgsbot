@@ -1,6 +1,6 @@
 /**
  * One-time migration script to:
- * 1. Unify variant subject names in semantic.json (e.g., "Eliaquín" -> "Eliaquín Encarnación")
+ * 1. Unify variant subject names in semantic.json (e.g., "Lucía" -> "Lucía Ejemplo")
  * 2. Deduplicate near-identical facts after unification
  * 3. Seed memory/identities.json with known identities
  *
@@ -36,7 +36,7 @@ async function main() {
 		normalizedGroups.set(normalized, existing);
 	}
 
-	// Find subjects that share a normalized prefix (e.g., "eliaquin" is prefix of "eliaquin encarnacion")
+	// Find subjects that share a normalized prefix (e.g., "lucia" is prefix of "lucia ejemplo")
 	const allNormalized = [...normalizedGroups.keys()];
 	const mergeMap = new Map<string, string>(); // normalized short -> normalized long (canonical)
 

@@ -37,6 +37,8 @@ Delivery uses the configured identity, adaptive personality and retrieved contex
 
 Standing preferences are matched by normalized topic aliases supplied during extraction. They are scoped user preferences subordinate to bot rules; they do not grant permission for unsolicited messages. A tone preference is not a schedule. Names, links and topic aliases should be checked in the natural confirmation; topic matching is deliberately bounded and does not infer every possible synonym.
 
+Scheduled research uses the web evidence path above. The [Open-Meteo weather tool](weather.md) is available during incoming conversational turns and is not invoked by this scheduler. Scheduling weather research does not automatically switch that task to structured Open-Meteo forecasts.
+
 ## Validation
 
 `tests/commitments.test.ts`, `tests/agenda-runner.test.ts` and `tests/commitment-integration.test.ts` cover scheduling boundaries, weekdays/DST, ownership, atomicity, restart deduplication, corruption, cancellation races, uncertain delivery, voice clarification, source searches, raw-text capture and long-page previews. Tests stub model and Telegram calls; they do not contact production or establish subjective message quality. Production observation should include confirmations and actual executions before increasing task limits.

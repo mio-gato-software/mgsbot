@@ -237,7 +237,7 @@ test("extraction rejects personality changes without direct user evidence", asyn
 					delta: -0.1,
 					reason: "User asked the bot to stop joking",
 					directToBot: true,
-					evidence: "Brendy, deja las bromas cuando te pregunto algo serio",
+					evidence: "DemoBot, deja las bromas cuando te pregunto algo serio",
 				},
 			],
 		},

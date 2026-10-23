@@ -6,7 +6,7 @@
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/eliaquin/mgsbot.git"
+		"url": "https://github.com/mio-gato-software/mgsbot.git"
 	},
 	"keywords": [
 		"telegram",

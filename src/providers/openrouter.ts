@@ -15,7 +15,7 @@ export class OpenRouterChatProvider extends OpenAiCompatibleChatProvider {
 			extraHeaders: {
 				"HTTP-Referer":
 					process.env.OPENROUTER_HTTP_REFERER ??
-					"https://github.com/eliaquin/mgsbot",
+					"https://github.com/mio-gato-software/mgsbot",
 				"X-Title": process.env.OPENROUTER_TITLE ?? "MGS Bot",
 			},
 		});
