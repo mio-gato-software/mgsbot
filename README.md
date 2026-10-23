@@ -17,7 +17,7 @@ Gemini and OpenAI receive the image with the conversation in a single chat reque
 For running from source, use **Bun 1.4.2** (the version pinned in CI and Docker). You also need a Telegram bot token from [@BotFather](https://t.me/BotFather), your numeric Telegram user ID, and an **OpenAI or Google AI API key**.
 
 ```bash
-git clone https://github.com/eliaquin/mgsbot.git
+git clone https://github.com/mio-gato-software/mgsbot.git
 cd mgsbot
 bun install --frozen-lockfile
 cp .env.sample .env
@@ -115,7 +115,9 @@ Shared-link previews use Fetch. During conversation and scheduled research, the 
 
 Set `BRAVE_API_KEY` and restart to enable public internet search with any chat provider. Missing or blank keys omit the entire feature, including news refreshes; normal conversation continues unchanged. `ENABLE_WEB_SEARCH=false` also disables it.
 
-The conversation model can decide to check an unfamiliar public event, recent news, or a question needing current information. It sends a short acknowledgement before searching, then replies using up to three Brave source excerpts with links. Vague references should prompt clarification; personal news and ordinary chat do not need a lookup. No extra classifier runs on each message. Each turn allows one lookup and at most one additional model response; unavailable search or empty results are reported honestly.
+The conversation model can decide to check an unfamiliar public event, recent news, or a question needing current information. It sends a short acknowledgement before searching, then replies using up to three Brave source excerpts with links. Vague references should prompt clarification; personal news and ordinary chat do not need a lookup. No extra classifier runs on each message. Incoming conversational turns allow up to four chained lookup batches shared across search, page reading and weather, with at most five model calls total. The model can use a search result to choose the next tool, for example finding a game's venue/time before checking its forecast. Only the first acknowledgement is sent; ordinary chat still needs one model call. Unavailable search, ambiguous events and missing evidence are reported honestly.
+
+The chain has a 150-second total deadline, with the last 30 seconds reserved for answering; a lookup batch has at most 45 seconds and each model decision at most 60 seconds within the remaining budget. Each result contributes at most 8,000 characters; omitted content is explicitly unknown. Repeated requests, invalid/mixed control blocks and obvious private parameters stop the chain. Existing public-address checks, caches and daily search/page budgets remain in force; one batch may make several network requests. See [execution limits and privacy](docs/weather.md#execution-and-caching). Chained lookups are available from [v1.1.0](https://github.com/mio-gato-software/mgsbot/releases/tag/v1.1.0); `v1.0.66` supports the earlier single-batch flow.
 
 Search replies keep the bot's configured personality and group-chat tone: a casual notice, usually two to four sentences with source links, and only the details relevant to the latest message. Follow-ups build on the exchange instead of repeating a report. Material uncertainty remains explicit; detailed comparisons are available when requested.
 
@@ -123,7 +125,7 @@ When asked for an opinion, the bot uses research to form a view consistent with 
 
 During active use, the bot also refreshes five ambient headlines in the background at most once per 24 hours (shared across chats). `NEWS_CONTEXT_QUERY` defaults to `noticias actualidad República Dominicana mundo`; set `ENABLE_NEWS_CONTEXT=false` for on-demand search only. Headlines are context for relevant conversations, never automatic bulletins. Simple assistant mode supports on-demand search but does not refresh ambient headlines.
 
-`memory/world-context/` holds the shared headlines, five recent lookups **per chat**, and a persistent request counter. Excerpts keep their source URLs and retrieval/publication labels. Context expires after 48 hours, is excluded immediately after expiry and pruned on access; recalling it never extends its lifetime. Identical queries with the same freshness filter reuse results for one hour. The prompt receives at most 6,000 characters of cached context. Raw search results are not appended to sensory memory or promoted into personal facts; extraction preserves personal interests/reactions rather than world news.
+`memory/world-context/` holds the shared headlines, five recent lookups **per chat**, and a persistent request counter. Excerpts keep their source URLs and retrieval/publication labels. Context expires after 48 hours, is excluded immediately after expiry and pruned on access; recalling it never extends its lifetime. Identical queries with the same freshness filter reuse results for one hour. The conversational loop uses at most 4,000 characters of cached excerpts, within its 32,000-character temporary lookup-context limit. Raw search results are not appended to sensory memory or promoted into personal facts; extraction preserves personal interests/reactions rather than world news.
 
 `WEB_SEARCH_DAILY_LIMIT` defaults to 30 attempts across the entire bot per UTC day, including headline refreshes and failures, and survives restarts. `0` stops new requests while allowing unexpired cached context. There are no automatic search retries. Search excerpts are treated as untrusted references, not full articles or proof that a reported event occurred. Browserbase is independent and is not required for Brave search.
 
@@ -171,7 +173,9 @@ Compose mounts `.env` read-only and persists `memory/`, `audios/`, and `logs/` o
 
 ### Standalone executable
 
-Build with `bun run build` (current platform) or `bun run build:linux` (Linux x64). Both produce `./mgsbot`. Prebuilt binaries are published through [GitHub Releases](https://github.com/eliaquin/mgsbot/releases).
+Build with `bun run build` (current platform) or `bun run build:linux` (Linux x64). Both produce `./mgsbot`. Prebuilt binaries are published through [GitHub Releases](https://github.com/mio-gato-software/mgsbot/releases): `mgsbot-linux` for Linux x64, `mgsbot-macos` for macOS ARM64, and `mgsbot-windows.exe` for Windows x64. Rename the downloaded asset to the executable name expected by your installation.
+
+A push to `main` runs CI but does not publish downloadable binaries. The `release:patch`, `release:minor` and `release:major` scripts bump the package version, create a `v*` tag and push `main` and tags. The release workflow runs lint, typecheck and tests, builds all three assets, and publishes the release as latest. Release-based updaters receive only published releases. Weather queries are included from [v1.0.66](https://github.com/mio-gato-software/mgsbot/releases/tag/v1.0.66).
 
 Run the executable from a directory containing `.env`; relative data paths are resolved from the working directory. Bun is not required on the target machine.
 
@@ -183,6 +187,8 @@ Run the executable from a directory containing `.env`; relative data paths are r
 ./mgsbot --help         # All configuration helpers
 ./mgsbot
 ```
+
+The [deployment guide](docs/deployment.md) covers service verification, release assets, backups and rollback using generic examples. Keep private installation details and operational records outside version control.
 
 ## Data and maintenance
 

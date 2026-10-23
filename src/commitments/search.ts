@@ -1,3 +1,4 @@
+import { currentOperationSignal } from "../operation-deadline.ts";
 import type { ConversationWebContext } from "../web-conversation.ts";
 import type { WebSearchRequest } from "../web-search.ts";
 import { commitmentsEnabled } from "./requests.ts";
@@ -32,9 +33,11 @@ async function readSources(
 	if (!web.read || !(web.isReadEnabled?.() ?? true)) return "";
 	const pages: string[] = [];
 	for (const url of [...new Set(urls)].slice(0, 3)) {
+		currentOperationSignal()?.throwIfAborted();
 		try {
 			pages.push(await web.read(chatId, url));
 		} catch {
+			currentOperationSignal()?.throwIfAborted();
 			pages.push(`Could not read ${url}; cause unknown.`);
 		}
 	}
@@ -87,6 +90,7 @@ export async function searchWithPreferences(
 	const results: string[] = [];
 	const urls: string[] = [];
 	for (const domain of domains) {
+		currentOperationSignal()?.throwIfAborted();
 		try {
 			const result = await web.search(chatId, {
 				...request,
@@ -123,6 +127,7 @@ export async function searchWithPreferences(
 			);
 			urls.push(sources[0]?.url ?? `https://${domain}/`);
 		} catch {
+			currentOperationSignal()?.throwIfAborted();
 			urls.push(`https://${domain}/`);
 			results.push(
 				JSON.stringify({
@@ -133,11 +138,13 @@ export async function searchWithPreferences(
 			);
 		}
 	}
+	currentOperationSignal()?.throwIfAborted();
 	try {
 		results.push(
 			`General search / fallback:\n${await web.search(chatId, { ...request, query })}`,
 		);
 	} catch {
+		currentOperationSignal()?.throwIfAborted();
 		results.push("General search unavailable. Do not invent missing results.");
 	}
 	return results.join("\n\n") + (await readSources(web, chatId, urls));
