@@ -3,9 +3,16 @@ import { log } from "./logger.ts";
 import { requestSignal } from "./operation-deadline.ts";
 import { memoryPath } from "./runtime-paths.ts";
 import { atomicWriteFile, withRetry } from "./utils.ts";
+import {
+	getWeatherConfig,
+	weatherDescription,
+	weatherService,
+} from "./weather.ts";
 
 interface DailyWeather {
-	date: string; // "2026-02-03" (Dominican timezone)
+	date: string; // Date in the bot timezone
+	locationKey: string;
+	city: string;
 	period: string; // "morning" | "afternoon" | "night"
 	description: string; // English: "clear and sunny"
 	temperature: number;
@@ -15,18 +22,6 @@ interface DailyWeather {
 }
 
 const WEATHER_FILE = memoryPath("daily-weather.json");
-
-function readEnvNumber(name: string, fallback: number): number {
-	const raw = process.env[name];
-	if (!raw) return fallback;
-	const value = Number(raw);
-	return Number.isFinite(value) ? value : fallback;
-}
-
-// Defaults: Santo Domingo
-const LATITUDE = readEnvNumber("WEATHER_LATITUDE", 18.4861);
-const LONGITUDE = readEnvNumber("WEATHER_LONGITUDE", -69.9312);
-const CITY = process.env.WEATHER_CITY || "Santo Domingo";
 
 let cachedWeather: DailyWeather | null = null;
 
@@ -40,37 +35,6 @@ function getCurrentPeriod(): "morning" | "afternoon" | "night" {
 	if (hour >= 12) return "afternoon";
 	return "morning";
 }
-
-const WMO_DESCRIPTIONS: Record<number, string> = {
-	0: "clear and sunny",
-	1: "mostly clear",
-	2: "partly cloudy",
-	3: "overcast",
-	45: "foggy",
-	48: "foggy with frost",
-	51: "light drizzle",
-	53: "moderate drizzle",
-	55: "heavy drizzle",
-	56: "light freezing drizzle",
-	57: "heavy freezing drizzle",
-	61: "light rain",
-	63: "moderate rain",
-	65: "heavy rain",
-	66: "light freezing rain",
-	67: "heavy freezing rain",
-	71: "light snow",
-	73: "moderate snow",
-	75: "heavy snow",
-	77: "fine hail",
-	80: "light showers",
-	81: "moderate showers",
-	82: "heavy showers",
-	85: "light snow showers",
-	86: "heavy snow showers",
-	95: "thunderstorm",
-	96: "thunderstorm with light hail",
-	99: "thunderstorm with heavy hail",
-};
 
 function temperatureContext(temp: number): string {
 	if (temp < 20) return "cool";
@@ -113,9 +77,17 @@ interface OpenMeteoResponse {
 	};
 }
 
-async function fetchWeather(): Promise<DailyWeather | null> {
+async function fetchWeather(locationKey: string): Promise<DailyWeather | null> {
 	try {
-		const url = `https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&timezone=${BOT_TZ}`;
+		const location = await weatherService.baseLocation();
+		const url = new URL("https://api.open-meteo.com/v1/forecast");
+		url.search = new URLSearchParams({
+			latitude: String(location.latitude),
+			longitude: String(location.longitude),
+			current:
+				"temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m",
+			timezone: BOT_TZ,
+		}).toString();
 
 		log.debug("[daily-weather] Fetching from Open-Meteo...");
 		const res = await withRetry(() =>
@@ -131,8 +103,10 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 
 		const weather: DailyWeather = {
 			date: getTodayDate(),
+			locationKey,
+			city: location.name,
 			period: getCurrentPeriod(),
-			description: WMO_DESCRIPTIONS[current.weather_code] ?? "unknown",
+			description: weatherDescription(current.weather_code),
 			temperature: current.temperature_2m,
 			humidity: current.relative_humidity_2m,
 			windSpeed: current.wind_speed_10m,
@@ -154,23 +128,34 @@ async function fetchWeather(): Promise<DailyWeather | null> {
 }
 
 async function getWeather(): Promise<DailyWeather | null> {
+	let locationKey: string;
+	try {
+		locationKey = JSON.stringify([getWeatherConfig(), BOT_TZ]);
+	} catch {
+		return null;
+	}
 	const today = getTodayDate();
 	const period = getCurrentPeriod();
 	const cached = await loadCachedWeather();
 
-	if (cached && cached.date === today && cached.period === period) {
+	if (
+		cached &&
+		cached.locationKey === locationKey &&
+		cached.date === today &&
+		cached.period === period
+	) {
 		log.debug("[daily-weather] Using cached weather:", today, period);
 		return cached;
 	}
 
-	return fetchWeather();
+	return fetchWeather(locationKey);
 }
 
 export async function getCurrentWeatherContext(): Promise<string | null> {
 	const weather = await getWeather();
 	if (!weather) return null;
 
-	return `Current weather in ${CITY}: ${weather.description}, ${Math.round(weather.temperature)}°C, ${Math.round(weather.humidity)}% humidity, wind ${Math.round(weather.windSpeed)} km/h`;
+	return `Current weather in ${weather.city}: ${weather.description}, ${Math.round(weather.temperature)}°C, ${Math.round(weather.humidity)}% humidity, wind ${Math.round(weather.windSpeed)} km/h`;
 }
 
 export async function getDailyWeatherForImage(): Promise<string | null> {

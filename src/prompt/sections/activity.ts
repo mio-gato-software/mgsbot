@@ -4,6 +4,7 @@ import {
 	getDailyWeatherForImage,
 } from "../../daily-weather.ts";
 import { isHoliday } from "../../holidays.ts";
+import { weatherService } from "../../weather.ts";
 import type { PromptSection } from "../types.ts";
 
 const DAY_NAMES = [
@@ -62,7 +63,10 @@ export const weatherCurrent: PromptSection = {
 	async render() {
 		const weatherContext = await getCurrentWeatherContext();
 		if (!weatherContext) return null;
-		return `## Current weather\n${weatherContext}\n(Use this information if the user asks about the weather or if it's relevant to the conversation.)`;
+		const guidance = weatherService.isEnabled()
+			? "Use WEATHER_LOOKUP for current weather questions or forecasts."
+			: "Live weather lookup is disabled; do not present cached conditions as a fresh verification or forecast.";
+		return `## Current weather\n${weatherContext}\n(Ambient context for this location only, cached by part of day. It does not establish any participant's location and is not a forecast. ${guidance} Never apply this city's conditions to another place.)`;
 	},
 };
 

@@ -149,6 +149,59 @@ test("a searched reply sends a notice first and keeps raw references out of sens
 	expect(refreshes).toBe(1);
 });
 
+test("weather replies persist the final answer and preserve the place through a follow-up", async () => {
+	const { ctx, spies } = makeMockContext({ chatId: ++chatId });
+	const services = dependencies();
+	services.web = {
+		isEnabled: () => false,
+		context: async () => "",
+		refreshHeadlines: async () => {},
+		search: async () => {
+			throw new Error("Unexpected search");
+		},
+	};
+	const offsets: number[] = [];
+	services.weather = {
+		isEnabled: () => true,
+		instructions: () => "Weather is available",
+		lookup: async (request) => {
+			expect(request.location).toBe("San Pedro de Macorís");
+			offsets.push(request.dayOffset ?? 0);
+			return "RAW WEATHER REFERENCE ONLY";
+		},
+	};
+	let calls = 0;
+	services.generate = async (_system, messages) => {
+		calls++;
+		if (calls % 2 === 1) {
+			if (calls === 3)
+				expect(JSON.stringify(messages)).toContain("En San Pedro");
+			return `[WEATHER_LOOKUP]{"location":"San Pedro de Macorís","dayOffset":${calls === 1 ? 0 : 1},"period":"night","notice":"Déjame mirar."}[/WEATHER_LOOKUP]`;
+		}
+		expect(messages.at(-1)?.content).toContain("RAW WEATHER REFERENCE ONLY");
+		return "En San Pedro hay probabilidad de lluvia esta noche.";
+	};
+	await processConversation(
+		ctx,
+		"¿Cómo estará esta noche en San Pedro de Macorís?",
+		"Ana",
+		{},
+		services,
+	);
+	await processConversation(ctx, "¿Y mañana?", "Ana", {}, services);
+	expect(offsets).toEqual([0, 1]);
+	expect(spies.replies).toHaveLength(4);
+	const saved = (await loadSensory(chatId)).messages;
+	expect(saved.map((message) => message.role)).toEqual([
+		"user",
+		"model",
+		"user",
+		"model",
+	]);
+	expect(JSON.stringify(saved)).not.toContain("RAW WEATHER");
+	expect(JSON.stringify(saved)).not.toContain("WEATHER_LOOKUP");
+});
+
 test("a follow-up recovers the original image after disk reload and text-history truncation", async () => {
 	const id = ++chatId;
 	const services = dependencies();

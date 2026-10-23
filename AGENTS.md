@@ -95,7 +95,8 @@ src/
   janitor.ts                 ← Daily semantic-memory janitor: reviews same-subject fact clusters via
                                the background model, soft-retires contradictions/duplicates
   holidays.ts                ← Holiday calendar (hardcoded per year, needs annual update)
-  daily-weather.ts           ← Fetches weather from Open-Meteo API, cached daily in memory/daily-weather.json
+  daily-weather.ts           ← Ambient Open-Meteo weather for the configured reference location, cached by part of day in memory/daily-weather.json
+  weather.ts                 ← Provider-independent current/hourly Open-Meteo queries, geocoding, reference-country preference and bounded caches
   chat-logger.ts             ← Daily conversation log to text files (logs/ folder), toggled via ENABLE_CHAT_LOG
   bot-time.ts                ← Centralized timezone utilities via dayjs (BOT_TIMEZONE env var, default: America/Santo_Domingo)
   chat-actions.ts            ← Sustained Telegram chat-action indicators: refresh loop (actions expire ~5s),
@@ -141,7 +142,7 @@ src/
     types.ts                 ← ChatProvider interface and ChatMessage type
     index.ts                 ← Provider factory: createChatProvider(), switchChatProvider(), getChatProviderInfo()
     openai-compatible.ts     ← Base class for OpenAI-wire-format providers: fetch, retry, errors, token logging
-    gemini.ts                ← Gemini provider implementation (with weather function calling)
+    gemini.ts                ← Gemini chat provider; conversational tools run in the shared application lookup flow
     openrouter.ts            ← OpenRouter provider (extends openai-compatible)
     azure.ts                 ← Azure OpenAI provider (extends openai-compatible)
     alibaba.ts               ← Alibaba DashScope provider (extends openai-compatible)
@@ -342,6 +343,9 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `PROMOTION_METRICS` / `PROMOTION_METRICS_RETENTION_MONTHS`: Promotion decision telemetry (default on, 6 months)
 - `ENABLE_MEMORY_JANITOR`: Set `false` to disable the daily semantic-memory janitor (default: `true`)
 - `BOT_TIMEZONE`: IANA timezone for the bot (default: `America/Santo_Domingo`). Affects sleep schedule, time awareness, follow-ups, and weather.
+- `WEATHER_CITY` / `WEATHER_LATITUDE` / `WEATHER_LONGITUDE`: Installation weather reference (default: Santo Domingo). A custom city alone is geocoded; exact coordinates require both values. This reference does not establish any participant's location.
+- `WEATHER_COUNTRY`: Optional ISO two-letter preference for bare city names; inferred from the resolved reference when omitted. Explicit conversational countries override it; no local match falls back to global search.
+- `ENABLE_WEATHER_LOOKUP`: Current conditions and hourly forecasts for today plus six destination-local days, enabled by default, independently of web search and chat provider. Uses the shared two-pass lookup flow; see `docs/weather.md`.
 - `SHOW_TRANSCRIPTION`: Set `true` to echo voice/audio transcriptions back as a `📝` reply (debug aid)
 - `NODE_ENV`: Set `development` for verbose logging
 

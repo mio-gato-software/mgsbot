@@ -44,6 +44,7 @@ import { type SendResponseResult, sendResponse } from "./response-processor.ts";
 import { timeoutReply } from "./telegram-delivery.ts";
 import { isTtsAvailable } from "./tts/index.ts";
 import type { ConversationMessage, MentionType } from "./types.ts";
+import { type ConversationWeatherContext, weatherService } from "./weather.ts";
 import {
 	type ConversationWebContext,
 	generateWithWebSearch,
@@ -93,6 +94,7 @@ export interface ConversationDependencies {
 	assemble: typeof assembleSystemPrompt;
 	prepareImage: typeof prepareImageContext;
 	web: ConversationWebContext;
+	weather: ConversationWeatherContext;
 	commitments: typeof handleCommitmentRequest;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
@@ -102,6 +104,7 @@ export const defaultConversationDependencies: ConversationDependencies = {
 	assemble: assembleSystemPrompt,
 	prepareImage: prepareImageContext,
 	web: worldContext,
+	weather: weatherService,
 	commitments: handleCommitmentRequest,
 };
 
@@ -313,6 +316,7 @@ export async function processConversation(
 			chatId,
 			generate: dependencies.generate,
 			web: dependencies.web,
+			weather: dependencies.weather,
 			useCachedContext: !skipHistoricalContext,
 			announce: async (notice) => {
 				await ctx.reply(notice);
