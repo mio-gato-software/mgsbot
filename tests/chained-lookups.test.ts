@@ -25,7 +25,7 @@ function fixture(replies: Reply[]) {
 				role: "user" as const,
 				content: "¿Va a llover para el juego de esta noche?",
 			},
-		],
+		] as ChatMessage[],
 		chatId: 1,
 		useCachedContext: false,
 		web: {
@@ -96,6 +96,64 @@ test("search results determine the next weather query and both sources reach one
 	expect(f.calls).toHaveLength(3);
 	expect(f.input.messages).toEqual(original);
 });
+
+for (const followUp of [false, true]) {
+	for (const forcedFinal of [false, true]) {
+		test(`half-hour event times remain distinct from hourly forecasts (${followUp ? "follow-up" : "search"}, ${forcedFinal ? "forced final" : "normal final"})`, async () => {
+			// The same instant crosses midnight when converted to the venue's zone.
+			const schedule =
+				"Start: 2026-10-24T00:30Z = 2026-10-23T20:30-04:00; venue: San Pedro de Macorís; timezone: America/Santo_Domingo. https://example.com/calendar";
+			const forecast = JSON.stringify({
+				status: "ok",
+				date: "2026-10-23",
+				timezone: "America/Santo_Domingo",
+				hours: [
+					{ time: "2026-10-23T20:00", rainProbability: 60 },
+					{ time: "2026-10-23T21:00", rainProbability: 40 },
+				],
+			});
+			const f = fixture([
+				...(!followUp ? [search("horario del juego")] : []),
+				weather({ date: "2026-10-23", period: "night", hour: undefined }),
+				...(forcedFinal
+					? [weather({ date: "2026-10-23", period: "night", hour: undefined })]
+					: []),
+				"Hay riesgo de lluvia alrededor del inicio, a las 20:30.",
+			]);
+			f.input.web.search = async () => schedule;
+			f.input.weather.lookup = async () => forecast;
+			if (followUp) {
+				f.input.messages = [
+					{ role: "user", content: "¿A qué hora es el juego?" },
+					{ role: "assistant", content: schedule },
+					{ role: "user", content: "¿Y va a llover justo al comenzar?" },
+				];
+			}
+			const original = structuredClone(f.input.messages);
+			await generateWithWebSearch(f.input);
+			const final = f.calls.at(-1);
+			expect(final?.messages.map((m) => m.content).join("\n")).toContain(
+				schedule,
+			);
+			expect(final?.messages.at(-1)?.content).toContain(forecast);
+			expect(final?.system).toContain(
+				"Preserve the event's exact verified start time, including minutes",
+			);
+			expect(final?.system).toContain(
+				"same instant and any calendar-date rollover",
+			);
+			expect(final?.system).toContain(
+				"never rename 19:00 as the start or invent a 19:30 probability",
+			);
+			expect(final?.system).toContain(
+				"Use a period covering the surrounding hours",
+			);
+			if (forcedFinal)
+				expect(final?.system).toContain("Do not emit WEB_SEARCH");
+			expect(f.input.messages).toEqual(original);
+		});
+	}
+}
 
 test("search, page reading and weather can depend on three successive results", async () => {
 	const f = fixture([

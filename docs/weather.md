@@ -46,6 +46,8 @@ Current conditions include temperature, humidity, wind and a weather description
 
 Rain probabilities remain per-hour probabilities; their maximum is not presented as the probability of rain over an entire period. Missing measurements remain unknown, not zero. Forecasts are not certainties, and a retrieval timestamp is not the model's issue time or the time of an observation.
 
+The model is instructed to preserve an event's verified start time, including minutes, date and timezone, in answers and follow-ups. Forecast timestamps do not change that schedule. For a 19:30 start, it should query a period covering the surrounding hours and describe the 19:00 and 20:00 data as nearby forecasts, without inventing a 19:30 probability or calling 19:00 the start. If only one nearby slot is available, it should state that slot's actual time and the coverage limit. Timezone conversions must preserve the same instant, including any change of calendar date. These are generation instructions, not a deterministic validator of the model's wording.
+
 ## Execution and caching
 
 `WEATHER_LOOKUP` shares a provider-independent conversational loop with `WEB_SEARCH` and `WEB_READ`. Up to four sequential lookup batches are allowed per incoming turn, with at most five model calls total. After each result the model can answer, ask a necessary clarification, or request the next tool using the earlier evidence. Ordinary conversation needs only one model call, with no extra classifier. Chained lookups are available from [v1.1.0](https://github.com/mio-gato-software/mgsbot/releases/tag/v1.1.0); `v1.0.66` supports the earlier single-batch flow.

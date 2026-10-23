@@ -9,6 +9,13 @@ Living document. Rules:
 
 ## Pending
 
+### Avoid inferring event delays from city weather alone
+
+- **Why:** a live model test correctly distinguished the event schedule from hourly forecasts, but separately described a delay as very likely based only on city rain forecasts. Weather evidence alone does not establish an operational decision or its probability.
+- **What to do:** tighten generation guidance and evaluate event-weather answers against unsupported delay/cancellation predictions. Require event-specific evidence for those claims; retain ordinary descriptions of forecast rain risk. Keep live evaluation traces private.
+- **Size:** Small.
+- Added 2026-10-23.
+
 ### Isolate runtime health files for multiple bot instances on one host
 
 - **Why:** multiple bot instances on one host share `/tmp/mgsbot-heartbeat`. An older instance can overwrite the JSON health snapshot with a timestamp; shutdown can also remove another instance's heartbeat. Health verification must correlate the intended service, executable and polling progress rather than rely on the shared file alone.
