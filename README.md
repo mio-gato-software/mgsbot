@@ -97,7 +97,9 @@ Adaptive tendencies are grounded in direct user feedback and fade toward the con
 
 Ask naturally for a reminder or recurring research task, including selected weekdays, a time and optional sources. Recurrences expire after at most one calendar month and require explicit renewal. Ambiguous requests and dictated links require clarification. See [agenda and standing preferences](docs/agenda-and-preferences.md) for examples, permissions, reliability limits and source handling.
 
-Weather context defaults to Santo Domingo. Set `WEATHER_LATITUDE`, `WEATHER_LONGITUDE`, and `WEATHER_CITY` for another location.
+Weather context defaults to Santo Domingo. For another installation, set `WEATHER_CITY` (for example `Santiago, Chile`); optionally set `WEATHER_COUNTRY=CL` to prefer that country for city names without a country. Exact coordinates remain supported when both `WEATHER_LATITUDE` and `WEATHER_LONGITUDE` are set. Set `BOT_TIMEZONE` separately for the bot's clock and schedules.
+
+Ask naturally about current weather or hourly forecasts for today and the next six days, such as “¿Cómo estará esta noche en San Pedro de Macorís?” and “¿Y mañana?”. Open-Meteo lookups work with every chat provider, independently of Brave or Browserbase. Explicit conversational places/countries override the installation reference; otherwise the reference country is preferred before a global search. The reference is not treated as every participant's location. `ENABLE_WEATHER_LOOKUP=false` disables these queries without removing ambient weather. See [weather queries and location configuration](docs/weather.md).
 
 ### Public web links and Browserbase
 

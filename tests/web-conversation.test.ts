@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import type { ConversationWeatherContext } from "../src/weather.ts";
 import {
 	type ConversationWebContext,
 	generateWithWebSearch,
@@ -218,4 +219,173 @@ test("too many pages and repeated read blocks cannot escape the lookup budget", 
 	});
 	expect(reads).toBe(0);
 	expect(result).not.toContain("WEB_READ");
+});
+
+test("weather uses the shared two-pass flow with web disabled, preserving personality and media", async () => {
+	const events: string[] = [];
+	const service = web();
+	service.isEnabled = () => false;
+	service.context = async () => {
+		throw new Error("Web context is disabled");
+	};
+	const weather: ConversationWeatherContext = {
+		isEnabled: () => true,
+		instructions: () =>
+			"WEATHER TOOL: use the conversation's city for follow-ups",
+		lookup: async (request) => {
+			expect(request).toMatchObject({
+				location: "San Pedro de Macorís",
+				period: "night",
+			});
+			events.push("lookup");
+			return '{"status":"ok","location":"San Pedro de Macorís","temperature":27}';
+		},
+	};
+	const messages = [
+		{
+			role: "user" as const,
+			content: "¿Cómo estará esta noche en San Pedro?",
+			mediaAttachment: { data: "image", mimeType: "image/jpeg" },
+		},
+	];
+	let calls = 0;
+	const result = await generateWithWebSearch({
+		systemPrompt: "Friendly Dominican character",
+		messages,
+		chatId: 7,
+		web: service,
+		weather,
+		announce: async (text) => {
+			expect(text).toBe("Déjame mirar.");
+			events.push("notice");
+		},
+		generate: async (system, input) => {
+			calls++;
+			expect(system).toContain("Friendly Dominican character");
+			expect(system).not.toContain("WEB AWARENESS");
+			expect(input[0]?.mediaAttachment).toEqual(messages[0]?.mediaAttachment);
+			if (calls === 1)
+				return '[WEATHER_LOOKUP]{"location":"San Pedro de Macorís","period":"night","notice":"Déjame mirar."}[/WEATHER_LOOKUP]';
+			expect(input.at(-1)?.content).toContain('"temperature":27');
+			expect(system).toContain("never substitute the ambient weather");
+			events.push("answer");
+			return "En San Pedro se esperan unos 27 °C esta noche.";
+		},
+	});
+	expect(result).toContain("En San Pedro");
+	expect(calls).toBe(2);
+	expect(events).toEqual(["notice", "lookup", "answer"]);
+	expect(messages[0]?.content).toBe("¿Cómo estará esta noche en San Pedro?");
+});
+
+test("invalid, mixed and disabled weather requests cannot run or leak repeated control blocks", async () => {
+	for (const [enabled, first] of [
+		[true, '[WEATHER_LOOKUP]{"hour":25,"notice":"Miro"}[/WEATHER_LOOKUP]'],
+		[
+			true,
+			'[WEATHER_LOOKUP]{"notice":"Miro"}[/WEATHER_LOOKUP][WEB_SEARCH]{"query":"weather","notice":"Miro"}[/WEB_SEARCH]',
+		],
+		[true, "[WEATHER_LOOKUP]{broken"],
+		[false, '[WEATHER_LOOKUP]{"notice":"Miro"}[/WEATHER_LOOKUP]'],
+	] as const) {
+		let calls = 0;
+		const result = await generateWithWebSearch({
+			systemPrompt: "Persona",
+			messages: [],
+			chatId: 1,
+			web: web(),
+			weather: {
+				isEnabled: () => enabled,
+				instructions: () => "Weather",
+				lookup: async () => {
+					throw new Error("Must not execute");
+				},
+			},
+			announce: async () => {
+				throw new Error("Must not announce");
+			},
+			generate: async (_system, messages) => {
+				calls++;
+				if (calls === 1) return first;
+				expect(messages.at(-1)?.content).toContain(
+					"No weather or page lookup was performed",
+				);
+				return '[WEATHER_LOOKUP]{"notice":"Again"}[/WEATHER_LOOKUP]';
+			},
+		});
+		expect(calls).toBe(2);
+		expect(result).not.toContain("WEATHER_LOOKUP");
+		expect(result).toBe("No pude verificar eso ahora mismo.");
+	}
+});
+
+test("weather outages reach final generation as missing evidence, and notice failure prevents lookup", async () => {
+	let lookups = 0;
+	const weather: ConversationWeatherContext = {
+		isEnabled: () => true,
+		instructions: () => "Weather",
+		lookup: async () => {
+			lookups++;
+			throw new Error("Network unavailable");
+		},
+	};
+	let calls = 0;
+	const input = {
+		systemPrompt: "Persona",
+		messages: [],
+		chatId: 1,
+		web: web(),
+		weather,
+		announce: async () => {},
+		generate: async (
+			_system: string,
+			messages: import("../src/providers/types.ts").ChatMessage[],
+		) => {
+			calls++;
+			if (calls === 1)
+				return '[WEATHER_LOOKUP]{"notice":"Miro"}[/WEATHER_LOOKUP]';
+			expect(messages.at(-1)?.content).toContain("No weather was verified");
+			return "No pude consultar el pronóstico ahora.";
+		},
+	};
+	expect(await generateWithWebSearch(input)).toContain("No pude consultar");
+	expect(lookups).toBe(1);
+	calls = 0;
+	await expect(
+		generateWithWebSearch({
+			...input,
+			announce: async () => {
+				throw new Error("Telegram offline");
+			},
+		}),
+	).rejects.toThrow("Telegram offline");
+	expect(lookups).toBe(1);
+});
+
+test("ordinary conversation with weather available still needs only one model call", async () => {
+	let calls = 0;
+	const service = web();
+	service.isEnabled = () => false;
+	const result = await generateWithWebSearch({
+		systemPrompt: "Persona",
+		messages: [{ role: "user", content: "Hola" }],
+		chatId: 1,
+		web: service,
+		weather: {
+			isEnabled: () => true,
+			instructions: () => "Weather",
+			lookup: async () => {
+				throw new Error("Unexpected lookup");
+			},
+		},
+		announce: async () => {
+			throw new Error("Unexpected notice");
+		},
+		generate: async () => {
+			calls++;
+			return "Hola";
+		},
+	});
+	expect(result).toBe("Hola");
+	expect(calls).toBe(1);
 });
