@@ -11,15 +11,15 @@ function makeStore(): IdentityStore {
 	return {
 		"100": {
 			userId: 100,
-			canonicalName: "Eliaquín Encarnación",
-			aliases: ["eliaquin encarnacion"],
-			username: "eliaquin",
+			canonicalName: "Lucía Ejemplo",
+			aliases: ["lucia ejemplo"],
+			username: "lucia",
 			lastSeen: 1,
 		},
 		"200": {
 			userId: 200,
-			canonicalName: "María José",
-			aliases: ["maria jose", "majo"],
+			canonicalName: "María Ejemplo",
+			aliases: ["maria ejemplo", "majo"],
 			lastSeen: 1,
 		},
 	};
@@ -28,27 +28,23 @@ function makeStore(): IdentityStore {
 describe("resolveCanonicalNameInStore", () => {
 	test("exact alias match (accent-insensitive)", () => {
 		const store = makeStore();
-		expect(resolveCanonicalNameInStore(store, "Eliaquín Encarnación")).toBe(
-			"Eliaquín Encarnación",
+		expect(resolveCanonicalNameInStore(store, "Lucía Ejemplo")).toBe(
+			"Lucía Ejemplo",
 		);
-		expect(resolveCanonicalNameInStore(store, "MAJO")).toBe("María José");
+		expect(resolveCanonicalNameInStore(store, "MAJO")).toBe("María Ejemplo");
 	});
 
 	test("prefix match: short name resolves to full identity", () => {
 		const store = makeStore();
-		expect(resolveCanonicalNameInStore(store, "Eliaquín")).toBe(
-			"Eliaquín Encarnación",
-		);
-		expect(resolveCanonicalNameInStore(store, "eliaquin")).toBe(
-			"Eliaquín Encarnación",
-		);
+		expect(resolveCanonicalNameInStore(store, "Lucía")).toBe("Lucía Ejemplo");
+		expect(resolveCanonicalNameInStore(store, "lucia")).toBe("Lucía Ejemplo");
 	});
 
 	test("prefix match works in both directions", () => {
 		const store = makeStore();
 		// Query longer than the stored alias
 		expect(resolveCanonicalNameInStore(store, "Majo la vecina")).toBe(
-			"María José",
+			"María Ejemplo",
 		);
 	});
 
@@ -67,12 +63,12 @@ describe("resolveCanonicalNameInStore", () => {
 describe("applyIdentityUpdate", () => {
 	test("registers a new identity with normalized alias", () => {
 		const store: IdentityStore = {};
-		const canonical = applyIdentityUpdate(store, 300, "José Pérez", "jp", 50);
-		expect(canonical).toBe("José Pérez");
+		const canonical = applyIdentityUpdate(store, 300, "José Ejemplo", "jp", 50);
+		expect(canonical).toBe("José Ejemplo");
 		expect(store["300"]).toEqual({
 			userId: 300,
-			canonicalName: "José Pérez",
-			aliases: ["jose perez"],
+			canonicalName: "José Ejemplo",
+			aliases: ["jose ejemplo"],
 			username: "jp",
 			lastSeen: 50,
 		});
@@ -80,33 +76,33 @@ describe("applyIdentityUpdate", () => {
 
 	test("name change keeps old name as alias", () => {
 		const store = makeStore();
-		applyIdentityUpdate(store, 100, "Elia Encarnación", undefined, 99);
+		applyIdentityUpdate(store, 100, "Luz Ejemplo", undefined, 99);
 		const identity = store["100"];
-		expect(identity?.canonicalName).toBe("Elia Encarnación");
-		expect(identity?.aliases).toContain("eliaquin encarnacion");
-		expect(identity?.aliases).toContain("elia encarnacion");
+		expect(identity?.canonicalName).toBe("Luz Ejemplo");
+		expect(identity?.aliases).toContain("lucia ejemplo");
+		expect(identity?.aliases).toContain("luz ejemplo");
 		expect(identity?.lastSeen).toBe(99);
 	});
 
 	test("repeated update with the same name does not duplicate aliases", () => {
 		const store = makeStore();
-		applyIdentityUpdate(store, 100, "Eliaquín Encarnación");
-		applyIdentityUpdate(store, 100, "Eliaquín Encarnación");
-		expect(store["100"]?.aliases).toEqual(["eliaquin encarnacion"]);
+		applyIdentityUpdate(store, 100, "Lucía Ejemplo");
+		applyIdentityUpdate(store, 100, "Lucía Ejemplo");
+		expect(store["100"]?.aliases).toEqual(["lucia ejemplo"]);
 	});
 
 	test("update without username preserves the existing one", () => {
 		const store = makeStore();
-		applyIdentityUpdate(store, 100, "Eliaquín Encarnación", undefined);
-		expect(store["100"]?.username).toBe("eliaquin");
+		applyIdentityUpdate(store, 100, "Lucía Ejemplo", undefined);
+		expect(store["100"]?.username).toBe("lucia");
 	});
 });
 
 describe("getAliasesForCanonicalInStore", () => {
 	test("returns all aliases for a known canonical name", () => {
 		const store = makeStore();
-		expect(getAliasesForCanonicalInStore(store, "María José")).toEqual([
-			"maria jose",
+		expect(getAliasesForCanonicalInStore(store, "María Ejemplo")).toEqual([
+			"maria ejemplo",
 			"majo",
 		]);
 	});
@@ -114,15 +110,15 @@ describe("getAliasesForCanonicalInStore", () => {
 	test("matches via alias too", () => {
 		const store = makeStore();
 		expect(getAliasesForCanonicalInStore(store, "majo")).toEqual([
-			"maria jose",
+			"maria ejemplo",
 			"majo",
 		]);
 	});
 
 	test("unknown name returns its own normalized form", () => {
 		const store = makeStore();
-		expect(getAliasesForCanonicalInStore(store, "Pedro Gómez")).toEqual([
-			"pedro gomez",
+		expect(getAliasesForCanonicalInStore(store, "Pedro Ejemplo")).toEqual([
+			"pedro ejemplo",
 		]);
 	});
 });
@@ -134,16 +130,16 @@ describe("findMentionedCanonicalNamesInStore", () => {
 			store,
 			"ayer salí con Majo al cine",
 		);
-		expect(mentioned).toEqual(["María José"]);
+		expect(mentioned).toEqual(["María Ejemplo"]);
 	});
 
 	test("finds mentions by username with @", () => {
 		const store = makeStore();
 		const mentioned = findMentionedCanonicalNamesInStore(
 			store,
-			"pregúntale a @eliaquin",
+			"pregúntale a @lucia",
 		);
-		expect(mentioned).toEqual(["Eliaquín Encarnación"]);
+		expect(mentioned).toEqual(["Lucía Ejemplo"]);
 	});
 
 	test("does not match substrings inside other words", () => {
@@ -160,8 +156,8 @@ describe("findMentionedCanonicalNamesInStore", () => {
 		const store = makeStore();
 		const mentioned = findMentionedCanonicalNamesInStore(
 			store,
-			"majo y maria jose son la misma persona",
+			"majo y maria ejemplo son la misma persona",
 		);
-		expect(mentioned).toEqual(["María José"]);
+		expect(mentioned).toEqual(["María Ejemplo"]);
 	});
 });

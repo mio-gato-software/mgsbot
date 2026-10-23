@@ -290,7 +290,7 @@ describe("provider options", () => {
 		});
 		expect(message).toContain("Configured CHAT_PROVIDER: deepseek");
 		expect(message).toContain("DEEPSEEK_API_KEY");
-		expect(message).toContain("sudo journalctl -u hellybot");
+		expect(message).toContain("sudo journalctl -u mgsbot.service");
 	});
 
 	test("/provider status says chat switching is independent", () => {

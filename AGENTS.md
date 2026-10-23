@@ -6,7 +6,7 @@ This file provides guidance to AI coding agents working with this repository.
 
 ## Project Overview
 
-MGS Bot is a conversational Telegram bot built with **grammY** + pluggable AI providers (**OpenAI** or **Google Gemini**), running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, `.txt` attachments, voice notes, audio files, photos/images, PDFs, and YouTube links. It can also generate images of its character and respond with TTS voice notes. OpenAI alone (`OPENAI_API_KEY`, default chat model `gpt-5.6-luna`) covers most functionality; Gemini remains optional.
+MGS Bot is a conversational Telegram bot built with **grammY** + pluggable chat and support providers, running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, `.txt` attachments, voice notes, audio files, photos/images, PDFs, and YouTube links. It can also generate images of its character, respond with TTS voice notes, and query public information and weather through a shared provider-independent lookup flow. OpenAI alone (`OPENAI_API_KEY`, default chat model `gpt-5.6-luna`) covers most AI functionality; Gemini remains optional.
 
 ## Commands
 
@@ -32,7 +32,13 @@ bun run promote:stats  # Promotion bar calibration + extraction-quality report
 bun run memory:stats   # Background usage, embedding cache hits, memory prompt size
 ```
 
-Releases: `bun run release:patch|minor|major` bumps the version, tags, and pushes (CI builds the binaries).
+Releases: `bun run release:patch|minor|major` bumps the version, tags, and pushes. The tag workflow validates and builds `mgsbot-linux` (Linux x64), `mgsbot-macos` (macOS ARM64) and `mgsbot-windows.exe` (Windows x64), then publishes them as latest on `mio-gato-software/mgsbot`. Pushing `main` alone does not publish release assets. `v1.0.66` includes the weather queries; generic upgrade guidance is in [docs/deployment.md](docs/deployment.md).
+
+## Public repository privacy
+
+Documentation, comments, test fixtures and metadata are public. Use fictional names and synthetic conversations, reserved example domains and documentation-only addresses. Do not include an operator's real names, personal account URLs, emails, Telegram identifiers, IP addresses, host aliases, private filesystem paths, instance names, production logs or backup inventories. Product defaults such as the configurable weather reference are application settings, not evidence about a user's location.
+
+Keep instance-specific operational records and deployment snapshots outside version control; root `deploy-notes/` and `deploy-backups/` are ignored. Review the complete files and final diff for personal information and secrets before public commits or PRs. Removing a value from the current tree does not remove it from published history; report earlier exposure separately instead of claiming it has been erased or rewriting history without authorization.
 
 TypeScript is executed directly by Bun (no emit) — which means type errors do NOT fail at runtime. CI runs `bun run typecheck`; run it locally before committing.
 
@@ -55,14 +61,19 @@ index.ts                     ← Entry point: env loading, CLI flags (--setup, -
                                handler registration, periodic jobs (follow-ups/check-ins), graceful shutdown
 src/
   types.ts                   ← TypeScript interfaces for all memory/data structures (incl. TRAIT_NAMES)
-  handlers.ts                ← grammY handlers: voice, audio, photo, text (catch-all), YouTube detection,
-                               group routing (mention/continuation/spontaneous), security middleware
-                               (ALLOWED_GROUP_ID + OWNER_USER_ID guard)
+  handlers.ts                ← Handler registration, security middleware (ALLOWED_GROUP_ID + OWNER_USER_ID),
+                               text catch-all, YouTube/public-link handling
+  handlers/                  ← voice.ts (voice/audio), photo.ts (images), document.ts (PDF/.txt),
+                               routing.ts (shared group mentions/continuations/reply context)
   group-state.ts             ← In-memory group rate limits: spontaneous-reply cooldowns, continuation windows
   web-content.ts             ← Public URL reading: optional Browserbase Fetch when BROWSERBASE_API_KEY is set,
                                direct-reader fallback, public-address/redirect validation, bounded extraction
   browser-reader.ts          ← Bounded Browserbase CDP sessions for JavaScript-rendered public page text;
                                pinned resource fetching, explicit cleanup, labeled static fallback
+  web-conversation.ts        ← Shared WEB_SEARCH / WEB_READ / WEATHER_LOOKUP loop; up to four chained
+                               batches and five model calls per turn, independent of the chat provider
+  web-search.ts              ← Bounded Brave search transport and source validation
+  world-context.ts           ← Search/page caches, ambient headlines, and persisted daily lookup budgets
   conversation.ts            ← Main turn pipeline (named options and injectable generation/retrieval/delivery): sensory append, memory retrieval, prompt assembly,
                                provider call, response send, episode promotion, background evaluation
   response-plan.ts           ← Pure marker parsing into a structured delivery plan
@@ -104,7 +115,7 @@ src/
   utils.ts                   ← atomicWriteFile(), withRetry(), env file parsing, misc helpers
   ai/
     typesafe-classifier.ts    ← Optional typed group/image-edit classifier; bounded requests and confidence gates, with legacy fallback
-    core.ts                  ← generateResponse() + background work (Gemini or OpenAI)
+    core.ts                  ← generateResponse() + background work (Gemini, OpenAI or fal)
     google-client.ts         ← Gemini SDK client with operation cancellation and application-owned retries
     platform.ts              ← AI_PLATFORM + independent support-axis model/provider resolution
     classifiers.ts           ← Lightweight LLM classifiers (routing decisions)
@@ -113,7 +124,7 @@ src/
     documents.ts             ← PDF analysis via Gemini or OpenAI
   prompt/
     pipeline.ts              ← Section pipeline: ordered, mode-aware prompt assembly
-    assemble.ts              ← buildSystemPrompt() entry point
+    assemble.ts              ← assembleSystemPrompt() entry point
     context.ts               ← PromptContext construction from memory/state
     retrieval.ts             ← Shared context retrieval for conversation and proactive messages
     history.ts               ← buildMessages(): sensory buffer → ChatMessage[] with time-gap markers
@@ -167,9 +178,11 @@ memory/                      ← Runtime data (gitignored)
   personality.json           ← Evolving personality traits and growth events
   follow-ups.json            ← Pending/sent proactive follow-ups
   check-ins.json             ← Proactive check-in weekly slots and state per DM chat
+  commitments.json           ← Versioned reminders/research, standing preferences, clarification drafts and receipts
   embedding-cache.json       ← LRU cache of vector embeddings (max 5000, SHA256-keyed)
   embedding-config.json      ← Last embedding provider/model/dim used; startup re-embeds if this changes
-  daily-weather.json         ← Cached daily weather data
+  daily-weather.json         ← Ambient weather cached by bot-local date/period and reference-location configuration
+  world-context/             ← Temporary shared headlines, per-chat search/page evidence and lookup budgets
   episodes/<chat_id>.json    ← Per-chat episode summaries with embeddings (max 20)
   sensory/<chat_id>.json     ← Per-chat recent messages (max 10) + image scheduling
   promotion-spool/<chat_id>.json ← Per-chat unpromoted chunks awaiting promotion retry
@@ -184,13 +197,13 @@ logs/
 
 ### Chat Provider System
 
-`generateResponse()` delegates to a pluggable chat provider selected by `CHAT_PROVIDER` env var. The provider is a cached singleton implementing the `ChatProvider` interface. Available chat providers: `gemini` (default), `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, and `fal`. The provider can be switched at runtime via the `/provider` Telegram command (DM only, owner only).
+`generateResponse()` delegates to a pluggable chat provider selected by `CHAT_PROVIDER` env var, defaulting through `AI_PLATFORM`. The provider is a cached singleton implementing the `ChatProvider` interface. Available chat providers: `gemini`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `openai`, `deepseek`, and `fal`. The provider can be switched at runtime via the `/provider` Telegram command (DM only, owner only).
 
 There are four independent provider axes:
 
 | Axis | Env var | Controls | Default / fallback |
 | --- | --- | --- | --- |
-| Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | `gemini` if Google is set, else `openai` |
+| Chat | `CHAT_PROVIDER` | Main conversation replies and `/provider` runtime switching | From `AI_PLATFORM`; auto-selects Gemini with a Google key, otherwise OpenAI |
 | Speech-to-text | `STT_PROVIDER` | Voice/audio transcription | platform key -> `fal` -> `lemonfox` |
 | Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` -> `openai`; Cartesia and fal only when explicit |
 | Images | `IMAGE_PROVIDER` + model env | Character image generation/editing | `openai` or `gemini` from `AI_PLATFORM`; fal defaults to `nano-banana-pro` |
@@ -218,7 +231,7 @@ Per-chat writes are serialized with `withChatLock()` (`src/memory/locks.ts`); st
 
 **Embeddings** (`src/embeddings.ts`): Uses `EMBEDDING_PROVIDER` (`gemini-embedding-2` or `text-embedding-3-small`, both default 768-d). Disk-persisted LRU cache (max 5000 entries) at `memory/embedding-cache.json`, persisted every 60 seconds by the application lifecycle; importing the module starts no timer. Cache keys include model+dim so switching providers does not mix vectors. Startup compares `memory/embedding-config.json` to the current provider/model/dim and rewrites stale fact/episode vectors (`src/memory/reembed.ts`; disable with `AUTO_REEMBED=false`). Used for semantic fact dedup, episode relevance ranking, and memory retrieval.
 
-**Identities** (`src/identities.ts`): Maps Telegram user IDs to canonical names with alias tracking. Handles name changes by adding old names as aliases. Prefix matching (e.g., "Eliaquín" matches "Eliaquín Encarnación"). Used to link facts across name variations.
+**Identities** (`src/identities.ts`): Maps Telegram user IDs to canonical names with alias tracking. Handles name changes by adding old names as aliases. Prefix matching (e.g., the fictional "Lucía" matches "Lucía Ejemplo"). Used to link facts across name variations.
 
 ### Personality System
 
@@ -243,7 +256,7 @@ State lives in validated, versioned `memory/commitments.json` and is covered by 
 Proactive follow-up feature (`src/follow-ups.ts`), enabled via `ENABLE_FOLLOW_UPS=true`:
 
 - Detects planned events/activities from conversations and schedules follow-up questions.
-- DR timezone-aware scheduling (8am–9:30pm reasonable hours).
+- Scheduling in `BOT_TIMEZONE` (default America/Santo_Domingo), within 8am–9:30pm reasonable hours.
 - Rate limited: max 2 sends/day, 2-hour cooldown between sends (based on recorded `sentAt`).
 - Expiration after 3 days. Cancelled only by later user mentions of the topic; the source planning turn and bot replies do not resolve it.
 - Topic dedup: a newly detected event similar to any follow-up tracked in the last 14 days (any status) is skipped, so the same topic can't resurface week after week.
@@ -283,7 +296,7 @@ Three setup paths:
 3. Load sensory buffer for the chat; register/update user identity
 4. In groups: detect mention type (reply/tag/name/none). Text generally responds when directly addressed, but the group router may allow natural continuations/spontaneous replies.
 5. Assemble prompt via the section pipeline (`src/prompt/`): bot identity/personality + relevant semantic facts + relevant episodes + relationship memory + sensory messages + activity/time context
-6. Call chat provider, save exchange, reply (with Markdown, falling back to plain text)
+6. Call the chat provider through the shared lookup flow. If it requests `WEB_SEARCH`, `WEB_READ` or `WEATHER_LOOKUP`, validate and execute up to four chained lookup batches, send only the first notice, and retain transient evidence for subsequent decisions and the final answer. The loop has a 150-second deadline (30 seconds reserved for the final answer), 45-second batch deadlines, and a 32,000-character temporary-context ceiling; duplicates, malformed/private parameters and exhausted budgets close further lookups. Deliver with Markdown/plain-text fallback; only a successfully delivered bot reply is saved to the exchange.
 7. Special response markers: `[SILENCE]` (no response), `[REACT:emoji]` (emoji reaction), `[IMAGE: prompt]` (generate character image), `[TTS]text[/TTS]` (voice reply via TTS provider)
 8. Voice messages in DMs or direct group mentions are transcribed and processed normally. Passive group voice notes are transcribed only when `ENABLE_GROUP_VOICE_CONTEXT` is not `false` and duration is within `GROUP_PASSIVE_VOICE_MAX_SECONDS`; transcripts stored in sensory memory are capped by `GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS`. The bot only routes passive group voice for a response when the transcript addresses the bot by name or continues an open bot conversation.
 9. When receiving a voice message, the bot may respond with a voice note via `[TTS]` behavior and voice prompt guidance; it is not required to respond with voice every time.
@@ -291,11 +304,11 @@ Three setup paths:
 
 ### Image Generation
 
-Once weekly (random day and time between 8am–11pm DR time), the bot includes an `[IMAGE: ...]` marker. The prompt is sent to the configured image provider (`GEMINI_IMAGE_MODEL`, `OPENAI_IMAGE_MODEL`, or fal) along with the base character image. Weekly schedule tracked per-chat via `lastImageDate`, `imageTargetDate`, and `imageTargetTime` in sensory buffer. Photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command).
+Once weekly (random day and time between 8am–11pm in `BOT_TIMEZONE`), the bot includes an `[IMAGE: ...]` marker. The prompt is sent to the configured image provider (`GEMINI_IMAGE_MODEL`, `OPENAI_IMAGE_MODEL`, or fal) along with the base character image. Weekly schedule tracked per-chat via `lastImageDate`, `imageTargetDate`, and `imageTargetTime` in sensory buffer. Photo requests gated by `allowPhotoRequest` flag (toggled via `/allowphotorequest` command).
 
 ### Sleep Schedule
 
-Bot sleeps 11:30 PM – 6:00 AM DR time by default. Controlled by `ENABLE_SLEEP_SCHEDULE` (default: `true`).
+Bot sleeps 11:30 PM – 6:00 AM in `BOT_TIMEZONE` (default America/Santo_Domingo). Controlled by `ENABLE_SLEEP_SCHEDULE` (default: `true`).
 
 ## Environment
 
@@ -345,7 +358,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `BOT_TIMEZONE`: IANA timezone for the bot (default: `America/Santo_Domingo`). Affects sleep schedule, time awareness, follow-ups, and weather.
 - `WEATHER_CITY` / `WEATHER_LATITUDE` / `WEATHER_LONGITUDE`: Installation weather reference (default: Santo Domingo). A custom city alone is geocoded; exact coordinates require both values. This reference does not establish any participant's location.
 - `WEATHER_COUNTRY`: Optional ISO two-letter preference for bare city names; inferred from the resolved reference when omitted. Explicit conversational countries override it; no local match falls back to global search.
-- `ENABLE_WEATHER_LOOKUP`: Current conditions and hourly forecasts for today plus six destination-local days, enabled by default, independently of web search and chat provider. Uses the shared two-pass lookup flow; see `docs/weather.md`.
+- `ENABLE_WEATHER_LOOKUP`: Current conditions and hourly forecasts for today plus six destination-local days, enabled by default, independently of web search and chat provider. Uses the shared bounded lookup loop; see `docs/weather.md`.
 - `SHOW_TRANSCRIPTION`: Set `true` to echo voice/audio transcriptions back as a `📝` reply (debug aid)
 - `NODE_ENV`: Set `development` for verbose logging
 
@@ -358,5 +371,5 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - **Source code language:** English (variables, functions, comments, file names)
 - **Linter/Formatter:** Biome (`@biomejs/biome` 2.5.15, config in `biome.json`)
 - **Tests:** `bun test` (tests/ folder)
-- **CI:** GitHub Actions (`ci.yml`: lint + typecheck + test on every push/PR; `release.yml`: cross-platform binaries on `v*` tags)
+- **CI:** GitHub Actions (`ci.yml`: lint, typecheck, coverage tests and Docker build for `main` pushes/PRs; `release.yml`: lint, typecheck, tests and cross-platform binaries on `v*` tags)
 - **Bot conversational language:** Adapts to user (default Spanish, configured during setup)

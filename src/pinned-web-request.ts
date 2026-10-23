@@ -16,7 +16,7 @@ export const WEB_REQUEST_HEADERS = {
 	Accept: "text/html,application/xhtml+xml,text/plain;q=0.9",
 	"Accept-Encoding": "identity",
 	"User-Agent":
-		"Mozilla/5.0 (compatible; MGSBot/1.0; +https://github.com/eliaquin/mgsbot)",
+		"Mozilla/5.0 (compatible; MGSBot/1.0; +https://github.com/mio-gato-software/mgsbot)",
 };
 
 type Request = (

@@ -40,7 +40,7 @@ const messages: ConversationMessage[] = [
 		role: "user",
 		name: "Ana",
 		content:
-			"I will move next month. Brendy, thank you for being so supportive.",
+			"I will move next month. DemoBot, thank you for being so supportive.",
 		timestamp: stamp,
 	},
 ];
@@ -72,7 +72,7 @@ beforeEach(async () => {
 							delta: 0.1,
 							reason: "support",
 							directToBot: true,
-							evidence: "Brendy, thank you for being so supportive.",
+							evidence: "DemoBot, thank you for being so supportive.",
 						},
 					],
 				},

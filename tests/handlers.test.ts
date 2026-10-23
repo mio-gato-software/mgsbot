@@ -24,30 +24,30 @@ describe("detectMentionType", () => {
 describe("buildReplyAwareTextContent", () => {
 	test("preserves Telegram reply target context", () => {
 		const replyContext: TelegramReplyContext = {
-			senderName: "Juan Wispe",
-			content: "Estoy con Brendy. Ella sabe más que ustedes dos.",
+			senderName: "Juan Ejemplo",
+			content: "El documento ya está listo.",
 			isBot: false,
 		};
 
 		expect(
-			buildReplyAwareTextContent("Deja de darle alas.", replyContext),
-		).toBe(`[Replying to Juan Wispe: "Estoy con Brendy. Ella sabe más que ustedes dos."]
+			buildReplyAwareTextContent("¿Puedes revisarlo?", replyContext),
+		).toBe(`[Replying to Juan Ejemplo: "El documento ya está listo."]
 
-Deja de darle alas.`);
+¿Puedes revisarlo?`);
 	});
 
 	test("marks replies to the bot explicitly", () => {
 		const replyContext: TelegramReplyContext = {
-			senderName: "Brendy",
-			content: "Yo no le doy alas, él vuela solito.",
+			senderName: "DemoBot",
+			content: "El archivo tiene tres páginas.",
 			isBot: true,
 		};
 
 		expect(
-			buildReplyAwareTextContent("Definitivamente", replyContext),
-		).toBe(`[Replying to Brendy (bot): "Yo no le doy alas, él vuela solito."]
+			buildReplyAwareTextContent("Gracias", replyContext),
+		).toBe(`[Replying to DemoBot (bot): "El archivo tiene tres páginas."]
 
-Definitivamente`);
+Gracias`);
 	});
 });
 

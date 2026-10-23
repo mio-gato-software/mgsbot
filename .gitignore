@@ -48,3 +48,7 @@ mgsbot
 mgsbot.exe
 
 update.sh
+
+# Private operator records and deployment snapshots
+/deploy-notes/
+/deploy-backups/

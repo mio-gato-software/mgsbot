@@ -33,7 +33,7 @@ test("Cartesia synthesizes MP3 audio with the configured voice", async () => {
 			now: () => 1234,
 		});
 
-		const audioPath = await provider.synthesize("Hola, Eliaquín.");
+		const audioPath = await provider.synthesize("Hola, Lucía.");
 
 		expect(requestUrl).toBe("https://api.cartesia.ai/tts/bytes");
 		expect(requestInit?.method).toBe("POST");
@@ -44,7 +44,7 @@ test("Cartesia synthesizes MP3 audio with the configured voice", async () => {
 		});
 		expect(JSON.parse(String(requestInit?.body))).toEqual({
 			model_id: "sonic-3.6",
-			transcript: "Hola, Eliaquín.",
+			transcript: "Hola, Lucía.",
 			voice: "9626c31c-bec5-4cca-baa8-f8ba9e84c8bc",
 			output_format: {
 				container: "mp3",

@@ -101,7 +101,7 @@ test("the acknowledgement arrives before search; evidence feeds the final answer
 				return '[WEB_SEARCH]{"query":"noticia identificada","notice":"Déjame buscar","freshness":"pw"}[/WEB_SEARCH]';
 			}
 			events.push("answer");
-			expect(system).toContain("Do not emit WEB_SEARCH");
+			expect(system).toContain("Lookup batches remaining: 3");
 			expect(input.at(-1)?.content).toContain("UNTRUSTED SNIPPET");
 			return "Encontré este reporte: https://example.com/report";
 		},
@@ -128,10 +128,9 @@ test("malformed tool output never leaks or triggers search, and repeated request
 		announce: async () => {
 			throw new Error("must not announce");
 		},
-		generate: async (_system, messages) => {
+		generate: async (system) => {
 			calls++;
-			if (calls === 2)
-				expect(messages.at(-1)?.content).toContain("No search was performed");
+			if (calls === 2) expect(system).toContain("No search was performed");
 			return "[WEB_SEARCH]{invalid";
 		},
 	});
@@ -221,7 +220,7 @@ test("too many pages and repeated read blocks cannot escape the lookup budget", 
 	expect(result).not.toContain("WEB_READ");
 });
 
-test("weather uses the shared two-pass flow with web disabled, preserving personality and media", async () => {
+test("weather uses the shared lookup flow with web disabled, preserving personality and media", async () => {
 	const events: string[] = [];
 	const service = web();
 	service.isEnabled = () => false;
@@ -304,12 +303,10 @@ test("invalid, mixed and disabled weather requests cannot run or leak repeated c
 			announce: async () => {
 				throw new Error("Must not announce");
 			},
-			generate: async (_system, messages) => {
+			generate: async (system) => {
 				calls++;
 				if (calls === 1) return first;
-				expect(messages.at(-1)?.content).toContain(
-					"No weather or page lookup was performed",
-				);
+				expect(system).toContain("No weather or page lookup was performed");
 				return '[WEATHER_LOOKUP]{"notice":"Again"}[/WEATHER_LOOKUP]';
 			},
 		});

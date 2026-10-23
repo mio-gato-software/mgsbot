@@ -833,8 +833,8 @@ export function formatProviderConfigurationFailure(
 		"- Add the missing key(s) to .env or the systemd EnvironmentFile.",
 		"- If CHAT_PROVIDER=openrouter and you want to use fal.ai, set OPENROUTER_TRANSPORT=fal and FAL_API_KEY.",
 		"- If CHAT_PROVIDER=deepseek, set DEEPSEEK_API_KEY and optionally DEEPSEEK_MODEL=deepseek-v4-pro.",
-		"- Restart the service after editing env: sudo systemctl restart hellybot",
-		"- Full startup logs: sudo journalctl -u hellybot -n 80 --no-pager",
+		"- Restart the service after editing env: sudo systemctl restart mgsbot.service",
+		"- Full startup logs: sudo journalctl -u mgsbot.service -n 80 --no-pager",
 	];
 
 	return lines.join("\n");

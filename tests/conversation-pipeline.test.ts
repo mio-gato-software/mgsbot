@@ -149,6 +149,63 @@ test("a searched reply sends a notice first and keeps raw references out of sens
 	expect(refreshes).toBe(1);
 });
 
+test("chained search and weather persist only the delivered answer, with a single notice", async () => {
+	const { ctx, spies } = makeMockContext({ chatId: ++chatId });
+	const services = dependencies();
+	services.web = {
+		isEnabled: () => true,
+		context: async () => "",
+		refreshHeadlines: async () => {},
+		search: async () =>
+			"RAW SCHEDULE: San Pedro de Macorís, DO, 20:00. https://example.com/schedule",
+	};
+	services.weather = {
+		isEnabled: () => true,
+		instructions: () => "Weather tool available",
+		lookup: async (request) => {
+			expect(request).toMatchObject({
+				location: "San Pedro de Macorís",
+				countryCode: "DO",
+				hour: 20,
+			});
+			return "RAW FORECAST: rain probability 60% at 20:00. https://open-meteo.com/";
+		},
+	};
+	let calls = 0;
+	services.generate = async (_system, messages) => {
+		calls++;
+		if (calls === 1)
+			return '[WEB_SEARCH]{"query":"horario y sede del juego","notice":"Voy a verificar."}[/WEB_SEARCH]';
+		if (calls === 2) {
+			expect(messages.at(-1)?.content).toContain("RAW SCHEDULE");
+			return '[WEATHER_LOOKUP]{"location":"San Pedro de Macorís","countryCode":"DO","hour":20,"notice":"Reviso el clima."}[/WEATHER_LOOKUP]';
+		}
+		expect(messages.map((message) => message.content).join("\n")).toContain(
+			"RAW SCHEDULE",
+		);
+		expect(messages.at(-1)?.content).toContain("RAW FORECAST");
+		return "El juego es en San Pedro a las 20:00 y hay un 60% de probabilidad de lluvia a esa hora. https://example.com/schedule https://open-meteo.com/";
+	};
+	expect(
+		await processConversation(
+			ctx,
+			"¿Lloverá para el juego?",
+			"Ana",
+			{},
+			services,
+		),
+	).toBe(true);
+	expect(calls).toBe(3);
+	expect(spies.replies).toHaveLength(2);
+	expect(spies.replies[0]?.text).toBe("Voy a verificar.");
+	const messages = (await loadSensory(chatId)).messages;
+	expect(messages.map((message) => message.role)).toEqual(["user", "model"]);
+	expect(messages[1]?.content).toContain("60%");
+	expect(JSON.stringify(messages)).not.toMatch(
+		/RAW SCHEDULE|RAW FORECAST|WEB_SEARCH|WEATHER_LOOKUP|Voy a verificar/,
+	);
+});
+
 test("weather replies persist the final answer and preserve the place through a follow-up", async () => {
 	const { ctx, spies } = makeMockContext({ chatId: ++chatId });
 	const services = dependencies();

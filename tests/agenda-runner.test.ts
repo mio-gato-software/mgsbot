@@ -24,7 +24,7 @@ beforeEach(async () => {
 		{
 			chatId: -99,
 			userId: 7,
-			userName: "Wispe",
+			userName: "Ejemplo",
 			messageId: 1,
 			text: "todos los días a las 7",
 		},
@@ -121,7 +121,7 @@ test("cancelling during generation prevents sending", async () => {
 				{
 					chatId: -99,
 					userId: 7,
-					userName: "Wispe",
+					userName: "Ejemplo",
 					messageId: 2,
 					text: "cancela",
 				},
@@ -183,7 +183,7 @@ test("scheduled research uses fresh public terms and task sources, then renders 
 	const task = (await store.read()).tasks[0];
 	if (!task) throw new Error("Expected task");
 	task.instruction =
-		"Dile a Wispe los resultados de ayer, como acordaron en privado";
+		"Dile a Ejemplo los resultados de ayer, como acordaron en privado";
 	task.domains = ["bengaleses.com"];
 	const queries: string[] = [];
 	const web = new WorldContextService({
@@ -215,7 +215,7 @@ test("scheduled research uses fresh public terms and task sources, then renders 
 			activeNames: [],
 			mentionedNames: [],
 		}),
-		assemble: async () => "Brendy has her own warm Dominican personality.",
+		assemble: async () => "DemoBot has her own warm Dominican personality.",
 		generate: async (system, messages) => {
 			expect(system).toContain("warm Dominican personality");
 			expect(system).toContain("not a request to create or renew");
@@ -227,7 +227,7 @@ test("scheduled research uses fresh public terms and task sources, then renders 
 	expect(queries).toHaveLength(2);
 	expect(queries[0]).toContain("site:bengaleses.com");
 	expect(
-		queries.every((q) => !q.includes("Wispe") && !q.includes("privado")),
+		queries.every((q) => !q.includes("Ejemplo") && !q.includes("privado")),
 	).toBe(true);
 });
 

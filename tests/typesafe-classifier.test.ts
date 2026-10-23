@@ -34,9 +34,9 @@ afterEach(() => {
 
 const input = {
 	mode: "name" as const,
-	botName: "Brendy",
+	botName: "DemoBot",
 	currentSpeaker: "Ana",
-	currentMessage: "Brendy, ¿qué opinas?",
+	currentMessage: "DemoBot, ¿qué opinas?",
 	recentMessages: [],
 };
 function groupAnswer(

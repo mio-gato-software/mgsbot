@@ -149,12 +149,12 @@ describe("getTelegramReplyContext", () => {
 		const { ctx } = makeMockContext({
 			text: "respuesta",
 			replyToMessage: {
-				from: { id: 9, first_name: "Juan", last_name: "Wispe" },
+				from: { id: 9, first_name: "Juan", last_name: "Ejemplo" },
 				text: "  hola mundo  ",
 			},
 		});
 		expect(getTelegramReplyContext(ctx, BOT.id)).toEqual({
-			senderName: "Juan Wispe",
+			senderName: "Juan Ejemplo",
 			content: "hola mundo",
 			isBot: false,
 		});

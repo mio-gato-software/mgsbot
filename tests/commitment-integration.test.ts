@@ -75,7 +75,7 @@ test("history previews retain original instructions and both domains after a lon
 			{
 				role: "user",
 				userText: own,
-				content: `[Public web page shared by Wispe]\n${"page body ".repeat(1000)}`,
+				content: `[Public web page shared by Ejemplo]\n${"page body ".repeat(1000)}`,
 				timestamp: 1,
 			},
 			{ role: "model", content: "Gracias", timestamp: 2 },

@@ -1,12 +1,12 @@
 {
 	"name": "mgsbot",
 	"description": "Conversational Telegram bot with long-term memory, emergent personality, and multi-modal capabilities",
-	"version": "1.0.66",
+	"version": "1.1.0",
 	"author": "Mio Gato Software",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/eliaquin/mgsbot.git"
+		"url": "https://github.com/mio-gato-software/mgsbot.git"
 	},
 	"keywords": [
 		"telegram",
