@@ -62,6 +62,7 @@ export const actionSchema = z.discriminatedUnion("type", [
 ]);
 export const interpretationSchema = z.object({
 	actions: z.array(actionSchema).max(8),
+	run: z.object({ taskId: id, evidence: text }).optional(),
 	clarification: z.string().max(400).optional(),
 	discardPending: z.boolean().default(false),
 	needsWrittenConfirmation: z.boolean().default(false),

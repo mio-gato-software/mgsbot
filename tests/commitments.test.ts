@@ -774,3 +774,191 @@ test("Juan's request reaches interpretation without trigger words and confirmati
 		else process.env.ALLOW_GROUP_TASK_EDITS = previous;
 	}
 });
+
+test("manual execution uses a saved task once without advancing its schedule or changing its state", async () => {
+	await store.apply(input, plan([action()]));
+	const before = structuredClone((await store.read()).tasks);
+	const task = before[0];
+	if (!task) throw new Error("Missing task");
+	const request = {
+		...input,
+		messageId: 2,
+		text: "Brendy, intenta el reporte de nuevo.",
+	};
+	let runs = 0;
+	const replies: string[] = [];
+	const services = {
+		store,
+		now: () => now,
+		interpret: async () =>
+			plan([], { run: { taskId: task.id, evidence: request.text } }),
+	};
+	const execution = {
+		run: async (selected: typeof task) => {
+			runs++;
+			expect(selected.id).toBe(task.id);
+			expect(selected.lastOccurrence).toBeUndefined();
+		},
+		reply: (text: string) => {
+			replies.push(text);
+		},
+	};
+	await handleCommitmentRequest(request, services, execution);
+	await handleCommitmentRequest(request, services, execution);
+	expect(runs).toBe(1);
+	expect(replies[0]).toContain("ya se procesó");
+	expect((await store.read()).tasks).toEqual(before);
+});
+
+test("manual execution rejects wrong-chat, inactive and fabricated targets and forged evidence", async () => {
+	await store.apply(input, plan([action()]));
+	const task = (await store.read()).tasks[0];
+	if (!task) throw new Error("Missing task");
+	for (const variant of ["wrong-chat", "inactive", "missing", "evidence"]) {
+		await store.transaction((s) => {
+			const t = s.tasks[0];
+			if (t) {
+				t.chatId = variant === "wrong-chat" ? -100 : input.chatId;
+				t.status = variant === "inactive" ? "cancelled" : "active";
+			}
+		});
+		let runs = 0;
+		const replies: string[] = [];
+		await handleCommitmentRequest(
+			{ ...input, messageId: 2, text: "Corre el reporte." },
+			{
+				store,
+				now: () => now,
+				interpret: async () =>
+					plan([], {
+						run: {
+							taskId: variant === "missing" ? "unknown" : task.id,
+							evidence:
+								variant === "evidence" ? "invented" : "Corre el reporte.",
+						},
+					}),
+			},
+			{
+				run: async () => {
+					runs++;
+				},
+				reply: (t) => {
+					replies.push(t);
+				},
+			},
+		);
+		expect(runs).toBe(0);
+		expect(replies).toHaveLength(1);
+	}
+});
+
+test("chat conversation delivers the scheduled generator output directly and resumes ordinary chat", async () => {
+	const { processConversation, defaultConversationDependencies } = await import(
+		"../src/conversation.ts"
+	);
+	const { makeMockContext } = await import("./helpers/telegram-mock.ts");
+	const { backgroundTasks } = await import("../src/background-tasks.ts");
+	const { loadSensory } = await import("../src/memory/sensory.ts");
+	await store.apply(input, plan([action()]));
+	const before = structuredClone((await store.read()).tasks);
+	const task = before[0];
+	if (!task) throw new Error("Missing task");
+	const report =
+		"Resultados: 8-3 y 9-5. Tabla: Licey y Gigantes 4-2. Juegos: 16:00, 18:00, 19:30. Lluvia: 60%, 28%, 34%/27%.";
+	let runCalls = 0;
+	let chatCalls = 0;
+	const turns = [
+		"Muy bien.",
+		"Brendy, intenta el reporte de nuevo. Te levanté algunas restricciones. Veamos qué tal funciona ahora.",
+		"Gracias.",
+	];
+	const services = {
+		...defaultConversationDependencies,
+		retrieve: async () => ({
+			relevantEpisodes: [],
+			relevantFacts: [],
+			permanentFacts: [],
+			relationshipMemory: null,
+			recentChapters: [],
+			activeNames: [],
+			mentionedNames: [],
+		}),
+		assemble: async () => "Persona",
+		commitments: ((request, _defaults, execution) =>
+			handleCommitmentRequest(
+				request,
+				{
+					store,
+					now: () => now,
+					interpret: async () =>
+						request.messageId === 102
+							? plan([], { run: { taskId: task.id, evidence: request.text } })
+							: plan([]),
+				},
+				execution,
+			)) as typeof handleCommitmentRequest,
+		scheduled: async () => {
+			runCalls++;
+			return report;
+		},
+		generate: async () => {
+			chatCalls++;
+			return "De acuerdo.";
+		},
+	};
+	for (let i = 0; i < turns.length; i++) {
+		const text = turns[i] ?? "";
+		const { ctx, spies } = makeMockContext({
+			chatId: input.chatId,
+			chatType: "group",
+			from: { id: input.userId, first_name: "Ejemplo" },
+			messageId: 101 + i,
+			text,
+		});
+		expect(await processConversation(ctx, text, "Ejemplo", {}, services)).toBe(
+			true,
+		);
+		expect(spies.replies.map((r) => r.text)).toEqual([
+			i === 1 ? report : "De acuerdo.",
+		]);
+	}
+	expect(runCalls).toBe(1);
+	expect(chatCalls).toBe(2);
+	expect((await store.read()).tasks).toEqual(before);
+	expect(
+		(await loadSensory(input.chatId)).messages.some(
+			(m) => m.role === "model" && m.content === report,
+		),
+	).toBe(true);
+	await backgroundTasks.drain();
+});
+
+test("manual run permission is enforced when shared group management is disabled", async () => {
+	const previous = process.env.ALLOW_GROUP_TASK_EDITS;
+	process.env.ALLOW_GROUP_TASK_EDITS = "false";
+	try {
+		await store.apply(input, plan([action()]));
+		const task = (await store.read()).tasks[0];
+		if (!task) throw new Error("Missing task");
+		let runs = 0;
+		await handleCommitmentRequest(
+			{ ...input, userId: 8, messageId: 2, text: "Corre el reporte." },
+			{
+				store,
+				now: () => now,
+				interpret: async () =>
+					plan([], { run: { taskId: task.id, evidence: "Corre el reporte." } }),
+			},
+			{
+				run: async () => {
+					runs++;
+				},
+				reply: () => {},
+			},
+		);
+		expect(runs).toBe(0);
+	} finally {
+		if (previous === undefined) delete process.env.ALLOW_GROUP_TASK_EDITS;
+		else process.env.ALLOW_GROUP_TASK_EDITS = previous;
+	}
+});
