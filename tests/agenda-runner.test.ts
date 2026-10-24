@@ -356,7 +356,7 @@ test("scheduled research chains three venue forecasts without leaking controls o
 			expect(system).toContain("SCHEDULED DELIVERY OVERRIDE");
 			if (calls < 3) {
 				const i = calls++;
-				return `[WEATHER_LOOKUP]${JSON.stringify({ location: cities[i], countryCode: "DO", date: "2026-10-22", ...(i === 2 ? { period: "evening" } : { hour: hours[i] }), notice: "Reviso el clima." })}[/WEATHER_LOOKUP]`;
+				return `[WEATHER_LOOKUP]${JSON.stringify({ location: cities[i], countryCode: "DO", date: "2026-10-22", ...(i === 2 ? { period: "evening" } : { hour: hours[i] }) })}[/WEATHER_LOOKUP]`;
 			}
 			expect(messages.map((m) => m.content).join("\n")).toContain(
 				"San Pedro de Macorís: hora 19:00",
