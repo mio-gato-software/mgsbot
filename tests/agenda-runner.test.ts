@@ -286,3 +286,20 @@ test("editing during generation discards the old response and next run uses the 
 	});
 	expect(delivered).toEqual(["Updated report"]);
 });
+
+test("recurring tasks with no remaining occurrences retain their renewal window until expiry", async () => {
+	const expiresAt = localTime("2026-11-22", "11:33");
+	await store.transaction((state) => {
+		const task = state.tasks[0];
+		if (!task) throw new Error("Missing task");
+		task.nextRunAt = undefined;
+		task.expiresAt = expiresAt;
+		task.renewalReminderDays = 2;
+	});
+	now = localTime("2026-11-20", "07:00");
+	await runScheduledTasks(services);
+	expect((await store.read()).tasks[0]?.status).toBe("active");
+	now = expiresAt + 1;
+	await runScheduledTasks(services);
+	expect((await store.read()).tasks[0]?.status).toBe("expired");
+});

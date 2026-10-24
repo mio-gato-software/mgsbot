@@ -8,6 +8,7 @@ import { analyzeYouTube } from "./ai/vision.ts";
 import { isBotOff, isSleepingHour } from "./bot-state.ts";
 import { withChatAction } from "./chat-actions.ts";
 import { registerCommands } from "./commands.ts";
+import { registerRenewalCallbacks } from "./commitments/renewal.ts";
 import {
 	commitmentsEnabled,
 	isDeferredWebRequest,
@@ -136,6 +137,7 @@ export function registerHandlers(bot: Bot): void {
 	const botToken = bot.token;
 
 	bot.use(securityMiddleware);
+	registerRenewalCallbacks(bot);
 
 	// Slash commands
 	registerCommands(bot);
