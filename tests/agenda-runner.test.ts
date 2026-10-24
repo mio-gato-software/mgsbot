@@ -203,6 +203,7 @@ test("scheduled research uses fresh public terms and task sources, then renders 
 	});
 	const message = await generateScheduledMessage(task, {
 		...scheduledGenerationServices,
+		review: async () => undefined,
 		store,
 		web,
 		now: () => now,
@@ -331,6 +332,7 @@ test("scheduled research chains three venue forecasts without leaking controls o
 	});
 	const result = await generateScheduledMessage(task, {
 		...scheduledGenerationServices,
+		review: async () => undefined,
 		store,
 		web,
 		now: () => now,
@@ -379,6 +381,7 @@ test("scheduled forecasts reject implicit installation location and recover from
 	let lookups = 0;
 	const result = await generateScheduledMessage(task, {
 		...scheduledGenerationServices,
+		review: async () => undefined,
 		store,
 		web: new (await import("../src/world-context.ts")).WorldContextService({
 			directory: join(root, "disabled"),
@@ -428,6 +431,7 @@ test("personal reminders never invoke research or weather tools", async () => {
 	let calls = 0;
 	const result = await generateScheduledMessage(task, {
 		...scheduledGenerationServices,
+		review: async () => undefined,
 		store,
 		retrieve: async () => ({
 			relevantEpisodes: [],

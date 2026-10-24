@@ -244,6 +244,10 @@ export async function generateWithWebSearch(
 		announce: (text: string) => Promise<void>;
 		useCachedContext?: boolean;
 		maxLookups?: number;
+		reviewFinal?: (
+			draft: string,
+			messages: ChatMessage[],
+		) => Promise<string | undefined>;
 		delivery?: "scheduled";
 	},
 	timing = {
@@ -277,6 +281,7 @@ export async function generateWithWebSearch(
 		const messages = input.messages.map((message) => ({ ...message }));
 		let evidenceChars = 0;
 		let lookups = 0;
+		let reviews = 0;
 		let announced = false;
 		let stopReason = `Lookup budget exhausted; no more than ${maxLookups} batches are allowed.`;
 		const seen = new Set<string>();
@@ -361,8 +366,32 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 					"Further planning failed or timed out. Finish using only available evidence; explain what remains unverified.";
 				break;
 			}
-			if (!CONTROL_MARKER.test(output))
+			if (!CONTROL_MARKER.test(output)) {
+				if (input.reviewFinal && reviews < 2 && planningTime() > 1000) {
+					reviews++;
+					let missing: string | undefined;
+					try {
+						missing = await withDeadline(
+							"scheduled completeness review",
+							Math.min(30_000, planningTime()),
+							() =>
+								input.reviewFinal?.(output, messages) ??
+								Promise.resolve(undefined),
+						);
+					} catch {
+						currentOperationSignal()?.throwIfAborted();
+					}
+					if (missing) {
+						messages.push({ role: "assistant", content: output });
+						messages.push({
+							role: "user",
+							content: `Internal completeness review, not a new user request. Complete the original task within the remaining lookup budget; use tools to verify missing facts, never invent them. ${missing.slice(0, 2000)}`,
+						});
+						continue;
+					}
+				}
 				return lookups ? finalAnswer(output) : output;
+			}
 			const lookup = parseLookup(output, input.delivery === "scheduled");
 			if (
 				!lookup ||
