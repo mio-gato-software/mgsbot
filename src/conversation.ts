@@ -13,6 +13,7 @@ import { generateResponse } from "./ai/core.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { handleCommitmentRequest } from "./commitments/requests.ts";
+import { generateScheduledMessage } from "./commitments/runner.ts";
 import { loadConfig } from "./config.ts";
 import {
 	checkAndCancelResolvedFollowUps,
@@ -34,7 +35,10 @@ import {
 	reinforceRecalledFacts,
 	withChatLock,
 } from "./memory/index.ts";
-import { isTimeoutError } from "./operation-deadline.ts";
+import {
+	currentOperationSignal,
+	isTimeoutError,
+} from "./operation-deadline.ts";
 import { assembleSystemPrompt } from "./prompt/assemble.ts";
 import { buildPromptContext } from "./prompt/context.ts";
 import { buildMessages } from "./prompt/history.ts";
@@ -96,6 +100,7 @@ export interface ConversationDependencies {
 	web: ConversationWebContext;
 	weather: ConversationWeatherContext;
 	commitments: typeof handleCommitmentRequest;
+	scheduled: typeof generateScheduledMessage;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
 	generate: generateResponse,
@@ -106,6 +111,7 @@ export const defaultConversationDependencies: ConversationDependencies = {
 	web: worldContext,
 	weather: weatherService,
 	commitments: handleCommitmentRequest,
+	scheduled: generateScheduledMessage,
 };
 
 export async function processConversation(
@@ -287,28 +293,46 @@ export async function processConversation(
 			});
 		}
 
+		let taskResponse: string | undefined;
 		const commitmentContext =
 			userId &&
 			ctx.message &&
 			!ctx.message.forward_origin &&
 			!options.groupAutoReply
-				? await dependencies.commitments({
-						chatId,
-						userId,
-						userName,
-						messageId: ctx.message.message_id,
-						text: directUserText ?? "",
-						recentConversation: buffer.messages.slice(-7, -1).map((m) => ({
-							role: m.role,
-							name: m.name,
-							userId: m.userId,
-							text: (m.role === "user" ? (m.userText ?? "") : m.content).slice(
-								0,
-								600,
-							),
-						})),
-						voice: !!options.directUserText && isVoiceMessage === true,
-					})
+				? await dependencies.commitments(
+						{
+							chatId,
+							userId,
+							userName,
+							messageId: ctx.message.message_id,
+							text: directUserText ?? "",
+							recentConversation: buffer.messages.slice(-7, -1).map((m) => ({
+								role: m.role,
+								name: m.name,
+								userId: m.userId,
+								text: (m.role === "user"
+									? (m.userText ?? "")
+									: m.content
+								).slice(0, 600),
+							})),
+							voice: !!options.directUserText && isVoiceMessage === true,
+						},
+						undefined,
+						{
+							reply: (text) => {
+								taskResponse = text;
+							},
+							run: async (task) => {
+								try {
+									taskResponse = await dependencies.scheduled(task);
+								} catch {
+									currentOperationSignal()?.throwIfAborted();
+									taskResponse =
+										"No pude completar el reporte ahora. La tarea conserva su horario; puedes pedirme que lo intente de nuevo.";
+								}
+							},
+						},
+					)
 				: "";
 		const systemPrompt =
 			(await dependencies.assemble(promptCtx)) + commitmentContext;
@@ -319,22 +343,25 @@ export async function processConversation(
 		}
 
 		// Generate response
-		const responseText = await generateWithWebSearch({
-			systemPrompt,
-			messages,
-			chatId,
-			generate: dependencies.generate,
-			web: dependencies.web,
-			weather: dependencies.weather,
-			useCachedContext: !skipHistoricalContext,
-			announce: async (notice) => {
-				await ctx.reply(notice);
-				trackBackground("chat-log", logBotMessage(notice));
-			},
-		});
+		const responseText =
+			taskResponse ??
+			(await generateWithWebSearch({
+				systemPrompt,
+				messages,
+				chatId,
+				generate: dependencies.generate,
+				web: dependencies.web,
+				weather: dependencies.weather,
+				useCachedContext: !skipHistoricalContext,
+				announce: async (notice) => {
+					await ctx.reply(notice);
+					trackBackground("chat-log", logBotMessage(notice));
+				},
+			}));
 		// Refresh ambient news only during active use, without delaying this reply or
 		// sending a bulletin. The shared service limits this to one attempt per day.
 		if (
+			taskResponse === undefined &&
 			dependencies.web.isEnabled() &&
 			!isSimpleAssistantMode &&
 			!skipHistoricalContext
@@ -346,7 +373,7 @@ export async function processConversation(
 		result = await dependencies.send({
 			ctx,
 			responseText,
-			shouldGenImage,
+			shouldGenImage: taskResponse === undefined && shouldGenImage,
 			allowPhotoRequest,
 			buffer,
 			isGroup: isGroupChat(ctx),
