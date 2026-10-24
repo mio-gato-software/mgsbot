@@ -549,3 +549,25 @@ test("report budget can complete research and three forecasts beyond four batche
 	expect(f.calls).toHaveLength(8);
 	expect(answer).toBe("Resultados, posiciones y tres pronósticos verificados.");
 });
+
+test("long scheduled research leaves evidence room for all three weather locations", async () => {
+	const f = fixture([
+		search("resultados oficiales"),
+		search("tabla oficial"),
+		search("sedes verificadas"),
+		search("horarios confirmados"),
+		weather({ location: "Santo Domingo", hour: 16 }),
+		weather({ location: "Santiago", hour: 18 }),
+		weather({ location: "San Pedro de Macorís", hour: 19 }),
+		"Reporte completo con tres pronósticos.",
+	]);
+	f.input.web.search = async () => "Public evidence. ".repeat(1200);
+	const answer = await generateWithWebSearch({
+		...f.input,
+		delivery: "scheduled",
+		maxLookups: 12,
+	});
+	expect(f.weatherRequests).toHaveLength(3);
+	expect(f.calls).toHaveLength(8);
+	expect(answer).toBe("Reporte completo con tres pronósticos.");
+});
