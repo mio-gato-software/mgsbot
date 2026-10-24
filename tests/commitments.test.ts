@@ -10,8 +10,6 @@ import {
 } from "../src/commitments/calendar.ts";
 import {
 	handleCommitmentRequest,
-	hasCommitmentIntent,
-	isDeferredWebRequest,
 	writtenDomains,
 } from "../src/commitments/requests.ts";
 import { interpretationSchema } from "../src/commitments/schema.ts";
@@ -251,13 +249,14 @@ test("voice web sources require written links, a yes is not confirmation, then c
 	expect((await store.read()).pending).toHaveLength(0);
 });
 
-test("ambiguous requests never mutate; ordinary chat avoids classifier calls", async () => {
+test("ambiguous requests never mutate; ordinary chat is interpreted without mutating", async () => {
 	let calls = 0;
 	const services = {
 		store,
 		now: () => now,
-		interpret: async () => {
+		interpret: async (request: RequestIdentity) => {
 			calls++;
+			if (request.text === "Hola, qué tal") return plan([]);
 			return plan([], {
 				clarification: "¿A las siete de la mañana o de la noche?",
 			});
@@ -268,13 +267,12 @@ test("ambiguous requests never mutate; ordinary chat avoids classifier calls", a
 			{ ...input, text: "Hola, qué tal" },
 			services,
 		),
-	).not.toContain("COMMITMENT RESULT");
-	expect(calls).toBe(0);
+	).toContain("does not request a task change");
+	expect(calls).toBe(1);
 	expect(await handleCommitmentRequest(input, services)).toContain(
 		"Nothing saved",
 	);
 	expect((await store.read()).tasks).toHaveLength(0);
-	expect(hasCommitmentIntent("Recuérdame mañana a las 7")).toBe(true);
 });
 
 test("a one-time reminder beyond a month has one finite occurrence and cannot renew", async () => {
@@ -319,7 +317,6 @@ const screenshotRequest =
 	"DemoBot. Aparte de la página oficial de LIDOM, ¿puedes tener en cuenta lo que dijo Ejemplo? pelotainvernal.com y https://bengaleses.com. Todos los días a las 7 AM darnos el estado del juego?";
 
 test("written bare domains are accepted and the screenshot request bypasses page expansion", async () => {
-	expect(isDeferredWebRequest(screenshotRequest)).toBe(true);
 	expect(writtenDomains(screenshotRequest)).toEqual([
 		"pelotainvernal.com",
 		"bengaleses.com",
@@ -447,22 +444,24 @@ test("pending details are isolated from other participants and expire", async ()
 	const services = {
 		store,
 		now: () => now,
-		interpret: async () => {
+		interpret: async (request: RequestIdentity, context: string) => {
 			calls++;
-			return plan([action()]);
+			expect(request.text).toBe("sí");
+			expect(JSON.parse(context).pendingRequest).toBeUndefined();
+			return plan([]);
 		},
 	};
 	await handleCommitmentRequest(
 		{ ...input, userId: 8, text: "sí", messageId: 2 },
 		services,
 	);
-	expect(calls).toBe(0);
+	expect(calls).toBe(1);
 	now += 16 * 60000;
 	await handleCommitmentRequest(
 		{ ...input, text: "sí", messageId: 3 },
 		services,
 	);
-	expect(calls).toBe(0);
+	expect(calls).toBe(2);
 	expect((await store.read()).tasks).toHaveLength(0);
 });
 
@@ -473,7 +472,7 @@ test("a report correction persists in place across reloads and a later deletion 
 	const correction =
 		"En tu reporte puedes omitir las fuentes consultadas, solo danos los datos relevantes";
 	const instruction = `${before.instruction}. Consulta las fuentes guardadas pero omite nombres, enlaces y comentarios sobre la búsqueda.`;
-	expect(hasCommitmentIntent(correction)).toBe(true);
+
 	const result = await handleCommitmentRequest(
 		{ ...input, messageId: 2, text: correction },
 		{
@@ -617,7 +616,7 @@ test("extension conversation keeps the draft across restart and adds a day to th
 	if (!original) throw new Error("Missing fixture");
 	now = localTime("2026-10-24", "08:44");
 	const opening = "Perfecto. ¿Podemos probar extenderla ahora?";
-	expect(hasCommitmentIntent(opening)).toBe(true);
+
 	const first = await handleCommitmentRequest(
 		{ ...input, messageId: 2, text: opening },
 		{
@@ -713,5 +712,65 @@ test("withdrawing a clarification clears only that user's draft, not the task", 
 			},
 		},
 	);
-	expect(called).toBe(false);
+	expect(called).toBe(true);
+});
+
+test("Juan's request reaches interpretation without trigger words and confirmation does not duplicate tasks", async () => {
+	await store.apply(input, plan([action()]));
+	const before = (await store.read()).tasks[0];
+	if (!before) throw new Error("Missing fixture");
+	const previous = process.env.ALLOW_GROUP_TASK_EDITS;
+	process.env.ALLOW_GROUP_TASK_EDITS = "true";
+	try {
+		const text =
+			"Incluye las posibilidades de lluvia a la hora de los juegos en el reporte de las 7am";
+		let calls = 0;
+		const services = {
+			store,
+			now: () => now,
+			interpret: async (request: RequestIdentity, context: string) => {
+				calls++;
+				if (request.text === text) {
+					expect(JSON.parse(context).sharedTaskManagement).toBe(true);
+					return plan([
+						{
+							type: "update",
+							id: before.id,
+							instruction:
+								before.instruction +
+								". Incluye probabilidades de lluvia por ciudad y hora de cada juego.",
+							evidence: text,
+						},
+					]);
+				}
+				expect(JSON.parse(context).recentConversation[0].text).toBe(text);
+				return plan([], { list: true });
+			},
+		};
+		const result = await handleCommitmentRequest(
+			{ ...input, userId: 8, messageId: 2, text },
+			services,
+		);
+		expect(result).toContain("saved successfully");
+		const after = (await store.read()).tasks[0];
+		expect(after?.instruction).toContain("lluvia");
+		expect(after?.expiresAt).toBe(before.expiresAt);
+		expect(after?.schedule).toEqual(before.schedule);
+		await handleCommitmentRequest(
+			{
+				...input,
+				userId: 8,
+				messageId: 3,
+				text: "Sí, a eso me refería.",
+				recentConversation: [{ role: "user", userId: 8, text }],
+			},
+			services,
+		);
+		expect(calls).toBe(2);
+		expect((await store.read()).tasks).toHaveLength(1);
+		expect((await store.read()).tasks[0]).toEqual(after);
+	} finally {
+		if (previous === undefined) delete process.env.ALLOW_GROUP_TASK_EDITS;
+		else process.env.ALLOW_GROUP_TASK_EDITS = previous;
+	}
 });

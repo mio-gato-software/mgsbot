@@ -79,7 +79,7 @@ export const CHAT_PROVIDERS = [
 		modelEnv: "OPENAI_MODEL",
 		defaultModel: DEFAULT_OPENAI_CHAT_MODEL,
 		description:
-			"Chat through OpenAI (default gpt-5.6-luna). With only OPENAI_API_KEY, the same key can also cover embeddings, STT, TTS, images, PDFs, and background work.",
+			"Chat through OpenAI (default gpt-6-luna). With only OPENAI_API_KEY, the same key can also cover embeddings, STT, TTS, images, PDFs, and background work.",
 	},
 	{
 		name: "deepseek",

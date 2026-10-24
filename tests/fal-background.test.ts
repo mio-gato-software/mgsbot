@@ -24,7 +24,7 @@ function mockFetch(
 }
 function configure() {
 	process.env.BACKGROUND_PROVIDER = "fal";
-	process.env.BACKGROUND_MODEL = "openai/gpt-5.6-luna";
+	process.env.BACKGROUND_MODEL = "openai/gpt-6-luna";
 	process.env.BACKGROUND_FALLBACK_TO_CHAT = "false";
 	process.env.FAL_API_KEY = "test-fal-key";
 	process.env.CHAT_PROVIDER = "fal";
@@ -38,7 +38,7 @@ test("fal background resolves independently and requires its own key", () => {
 		FAL_MODEL: "openai/gpt-6-astra",
 	};
 	expect(resolveBackgroundProvider(env)).toBe("fal");
-	expect(resolveBackgroundModel(env)).toBe("openai/gpt-5.6-luna");
+	expect(resolveBackgroundModel(env)).toBe("openai/gpt-6-luna");
 	expect(validateProviderConfiguration(env).errors).toContain(
 		"Background work require FAL_API_KEY when BACKGROUND_PROVIDER=fal.",
 	);
@@ -62,9 +62,9 @@ test("background requests use Luna through fal without changing Astra chat", asy
 	]);
 	expect(result).toEqual({
 		text: '{"importance":2}',
-		model: "fal:openai/gpt-5.6-luna",
+		model: "fal:openai/gpt-6-luna",
 	});
-	expect(request.model).toBe("openai/gpt-5.6-luna");
+	expect(request.model).toBe("openai/gpt-6-luna");
 	expect(request.reasoning).toBe(false);
 	expect(process.env.FAL_MODEL).toBe("openai/gpt-6-astra");
 });
@@ -80,7 +80,7 @@ test("failed background response never falls back to Astra when disabled", async
 			{ role: "user", content: "Test" },
 		]),
 	).rejects.toThrow("injected failure");
-	expect(models).toEqual(["openai/gpt-5.6-luna"]);
+	expect(models).toEqual(["openai/gpt-6-luna"]);
 });
 test("missing background key does not invoke chat when fallback is disabled", async () => {
 	configure();

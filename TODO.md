@@ -9,11 +9,18 @@ Living document. Rules:
 
 ## Pending
 
-### Replace heuristic request decisions with contextual model interpretation
+### Add structured weather lookup to scheduled reports
 
-- **Why:** `hasCommitmentIntent()` in `src/commitments/requests.ts` filters requests using regex before the interpretation model runs. Valid edits such as “incluye las posibilidades de lluvia en el reporte” can be ignored, leaving no pending context for a subsequent confirmation. This violates the mandatory model-based decision rule in `AGENTS.md`.
-- **What to do:** remove lexical intent gates and use Jev where supported, or Luna for richer contextual interpretation. Audit equivalent conversational decision paths, preserve deterministic authorization and schema validation, and test paraphrases, implicit references, multi-turn confirmations, withdrawal, and untrusted quoted content. Do not repair this by adding keywords. Separately, scheduled reports requesting game-time rain probabilities need the structured weather lookup path; merely saving the instruction does not provide that capability.
-- **Size:** Medium; implementation and production verification remain pending.
+- **Why:** conversational task edits can save a request for game-time rain probabilities, but the scheduled runner currently only uses web research, not the structured weather lookup available during chat turns.
+- **What to do:** resolve fixture venue cities and start times from current evidence, query hourly forecasts for those locations/times, and report uncertainty without inferring game cancellations. Test missing venues, postponed games and unavailable forecasts.
+- **Size:** Medium; separate from model-based request interpretation.
+- Added 2026-10-24.
+
+### Audit remaining conversational heuristics
+
+- **Why:** task request interpretation and deferred-link routing now use the background model, but other legacy conversational routing paths may still use lexical heuristics contrary to the mandatory rule in AGENTS.md.
+- **What to do:** audit group routing, image requests and other semantic decisions; replace remaining heuristic gates with Jev or Luna while preserving deterministic permission and format validation.
+- **Size:** Medium; outside the task-detection fix.
 - Added 2026-10-24.
 
 ### Avoid inferring event delays from city weather alone

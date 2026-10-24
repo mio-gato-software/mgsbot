@@ -25,6 +25,13 @@ export interface RequestIdentity {
 	messageId: number;
 	text: string;
 	voice?: boolean;
+	/** Bounded same-chat reference context, never authorization or evidence. */
+	recentConversation?: Array<{
+		role: string;
+		name?: string;
+		userId?: number;
+		text: string;
+	}>;
 	/** Written clarification, required after a dictated/uncertain source. */
 	domainEvidenceText?: string;
 }

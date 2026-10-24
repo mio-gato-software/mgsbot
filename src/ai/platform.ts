@@ -16,11 +16,11 @@ export const DEFAULT_GEMINI_IMAGE_SIZE = "1K";
 export const DEFAULT_GEMINI_EMBEDDING_MODEL = "gemini-embedding-2";
 export const DEFAULT_GEMINI_EMBEDDING_DIM = 768;
 
-export const DEFAULT_OPENAI_CHAT_MODEL = "gpt-5.6-luna";
-export const DEFAULT_OPENAI_BACKGROUND_MODEL = "gpt-5.6-luna";
-export const DEFAULT_OPENAI_CLASSIFIER_MODEL = "gpt-5.6-luna";
-export const DEFAULT_OPENAI_VISION_MODEL = "gpt-5.6-luna";
-export const DEFAULT_OPENAI_DOCUMENT_MODEL = "gpt-5.6-luna";
+export const DEFAULT_OPENAI_CHAT_MODEL = "gpt-6-luna";
+export const DEFAULT_OPENAI_BACKGROUND_MODEL = "gpt-6-luna";
+export const DEFAULT_OPENAI_CLASSIFIER_MODEL = "gpt-6-luna";
+export const DEFAULT_OPENAI_VISION_MODEL = "gpt-6-luna";
+export const DEFAULT_OPENAI_DOCUMENT_MODEL = "gpt-6-luna";
 export const DEFAULT_OPENAI_STT_MODEL = "gpt-4o-mini-transcribe";
 export const DEFAULT_OPENAI_TTS_MODEL = "gpt-4o-mini-tts";
 export const DEFAULT_OPENAI_TTS_VOICE = "coral";
@@ -188,7 +188,7 @@ export function resolveEmbeddingDim(env: EnvMap = process.env): number {
 export function resolveBackgroundModel(env: EnvMap = process.env): string {
 	const explicit = envString(env, "BACKGROUND_MODEL");
 	if (explicit) return explicit;
-	if (resolveBackgroundProvider(env) === "fal") return "openai/gpt-5.6-luna";
+	if (resolveBackgroundProvider(env) === "fal") return "openai/gpt-6-luna";
 	return resolveBackgroundProvider(env) === "openai"
 		? DEFAULT_OPENAI_BACKGROUND_MODEL
 		: DEFAULT_GEMINI_BACKGROUND_MODEL;

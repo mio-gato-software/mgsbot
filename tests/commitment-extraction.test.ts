@@ -74,3 +74,25 @@ test("schema repair is bounded and never invents a task on repeated failure", as
 	await expect(interpretRequest(request, "{}", Date.now())).rejects.toThrow();
 	expect(generate).toHaveBeenCalledTimes(2);
 });
+
+test("deferred links use the model rather than command words and fail without prefetching", async () => {
+	const { isDeferredWebRequest } = await import(
+		"../src/commitments/requests.ts"
+	);
+	generate = spyOn(core, "generateBackgroundResponse")
+		.mockResolvedValueOnce('{"defer":true}')
+		.mockResolvedValueOnce('{"defer":false}')
+		.mockResolvedValueOnce("invalid");
+	expect(
+		await isDeferredWebRequest(
+			"Este sitio también para lo de siempre: https://example.com",
+		),
+	).toBe(true);
+	expect(
+		await isDeferredWebRequest(
+			"Lee este artículo sobre tareas: https://example.com",
+		),
+	).toBe(false);
+	expect(await isDeferredWebRequest("https://example.com")).toBe(true);
+	expect(generate).toHaveBeenCalledTimes(3);
+});

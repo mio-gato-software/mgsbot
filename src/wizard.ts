@@ -362,7 +362,7 @@ function buildWizardHtml(
       ${e("googleApiKey")}
 
       <label style="margin-top: 20px;" data-i18n="modelLabel">Default OpenAI model</label>
-      <input type="text" id="openaiModel" name="openaiModel" placeholder="gpt-5.6-luna" value="${v("openaiModel") || "gpt-5.6-luna"}" autocomplete="off" spellcheck="false">
+      <input type="text" id="openaiModel" name="openaiModel" placeholder="gpt-6-luna" value="${v("openaiModel") || "gpt-6-luna"}" autocomplete="off" spellcheck="false">
 
       <label style="margin-top: 20px;" data-i18n="geminiModelLabel">Gemini model (if using Google)</label>
       <div class="model-options">
@@ -668,7 +668,7 @@ export async function runSetupWizard(): Promise<void> {
 		googleApiKey: "",
 		openaiApiKey: "",
 		geminiModel: existing.GEMINI_MODEL ?? "gemini-3.6-flash",
-		openaiModel: existing.OPENAI_MODEL ?? "gpt-5.6-luna",
+		openaiModel: existing.OPENAI_MODEL ?? "gpt-6-luna",
 		ownerUserId: existing.OWNER_USER_ID ?? "",
 		allowedGroupId: existing.ALLOWED_GROUP_ID ?? "",
 		language: existingConfig.language ?? "es",
@@ -745,7 +745,7 @@ export async function runSetupWizard(): Promise<void> {
 						googleApiKey: submittedApiKey || (existing.GOOGLE_API_KEY ?? ""),
 						openaiApiKey: submittedOpenAiKey || (existing.OPENAI_API_KEY ?? ""),
 						geminiModel: fields.geminiModel ?? "gemini-3.6-flash",
-						openaiModel: fields.openaiModel ?? "gpt-5.6-luna",
+						openaiModel: fields.openaiModel ?? "gpt-6-luna",
 						ownerUserId: fields.ownerUserId ?? "",
 						allowedGroupId: fields.allowedGroupId ?? "",
 						language: (fields.language === "en" ? "en" : "es") as BotLanguage,

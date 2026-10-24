@@ -105,7 +105,7 @@ describe("AI platform", () => {
 	test("uses Luna and text-embedding-3-small on OpenAI", () => {
 		const env = { OPENAI_API_KEY: "sk-test" };
 		expect(resolveOpenAIChatModel(env)).toBe(DEFAULT_OPENAI_CHAT_MODEL);
-		expect(resolveOpenAIChatModel(env)).toBe("gpt-5.6-luna");
+		expect(resolveOpenAIChatModel(env)).toBe("gpt-6-luna");
 		expect(resolveEmbeddingProvider(env)).toBe("openai");
 		expect(resolveEmbeddingModel(env)).toBe(DEFAULT_OPENAI_EMBEDDING_MODEL);
 		expect(resolveBackgroundModel(env)).toBe(DEFAULT_OPENAI_BACKGROUND_MODEL);
@@ -218,9 +218,9 @@ describe("model fallbacks", () => {
 		expect(
 			resolveOpenAIVisionModel({
 				OPENAI_MODEL: "gpt-5.6-terra",
-				OPENAI_VISION_MODEL: "gpt-5.6-luna",
+				OPENAI_VISION_MODEL: "gpt-6-luna",
 			}),
-		).toBe("gpt-5.6-luna");
+		).toBe("gpt-6-luna");
 	});
 
 	test("Gemini vision, documents, and STT fall back to GEMINI_MODEL", () => {
@@ -343,7 +343,7 @@ describe("OpenAI reasoning effort", () => {
 	});
 
 	test("assumes reasoning unless the model is a known pre-reasoning family", () => {
-		expect(openAIModelSupportsReasoning("gpt-5.6-luna")).toBe(true);
+		expect(openAIModelSupportsReasoning("gpt-6-luna")).toBe(true);
 		expect(openAIModelSupportsReasoning("gpt-6")).toBe(true);
 		expect(openAIModelSupportsReasoning("o3-mini")).toBe(true);
 		expect(openAIModelSupportsReasoning("gpt-4o")).toBe(false);
