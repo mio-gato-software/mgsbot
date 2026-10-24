@@ -86,6 +86,32 @@ describe("Browserbase web reader", () => {
 		}
 	});
 
+	test("local rendering bypasses billed Fetch even when a key is retained", async () => {
+		const provider = process.env.BROWSER_PROVIDER;
+		const key = process.env.BROWSERBASE_API_KEY;
+		process.env.BROWSER_PROVIDER = "local";
+		process.env.BROWSERBASE_API_KEY = "retained-secret";
+		try {
+			expect(isBrowserbaseEnabled()).toBe(false);
+			const request = mock(async (_input: unknown, _init?: RequestInit) =>
+				direct(),
+			);
+			await fetchPublicWebPage(url, {
+				fetch: request as unknown as typeof fetch,
+			});
+			expect(request).toHaveBeenCalledTimes(1);
+			expect(String(request.mock.calls[0]?.[0])).toBe(url);
+			expect(
+				new Headers(request.mock.calls[0]?.[1]?.headers).has("X-BB-API-Key"),
+			).toBe(false);
+		} finally {
+			if (provider === undefined) delete process.env.BROWSER_PROVIDER;
+			else process.env.BROWSER_PROVIDER = provider;
+			if (key === undefined) delete process.env.BROWSERBASE_API_KEY;
+			else process.env.BROWSERBASE_API_KEY = key;
+		}
+	});
+
 	test.each([undefined, "", "   "])(
 		"uses only the direct reader with key %p",
 		async (key) => {

@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+	browserProvider,
+	localBrowserEndpoint,
+	localBrowserSocket,
+} from "./browser-config.ts";
 import { abortableDelay, requestSignal } from "./operation-deadline.ts";
 import { requestPinnedWebPage } from "./pinned-web-request.ts";
 import {
@@ -94,13 +99,12 @@ export function connectBrowser(
 }
 
 export function browserReadingEnabled(): boolean {
-	return (
-		process.env.ENABLE_BROWSER_READING !== "false" &&
-		!!process.env.BROWSERBASE_API_KEY?.trim()
-	);
+	return browserProvider() !== "none";
 }
+let activeLocalReads = 0;
 export const browserReaderServices = {
 	fetch: fetch as typeof fetch,
+	staticRead: fetchPublicWebPage,
 	connect: connectBrowser,
 	validate: (url: URL) => assertPublicUrl(url),
 	request: requestPinnedWebPage,
@@ -116,8 +120,14 @@ export async function renderPublicPage(
 ) {
 	const url = new URL(rawUrl);
 	await services.validate(url);
-	const apiKey = process.env.BROWSERBASE_API_KEY?.trim();
-	if (!apiKey) throw new Error("Browser reading is not configured");
+	const provider = browserProvider();
+	const local = provider === "local";
+	const apiKey = process.env.BROWSERBASE_API_KEY?.trim() ?? "";
+	if (provider === "none" || (!local && !apiKey))
+		throw new Error("Browser reading is not configured");
+	if (local && activeLocalReads >= 2) throw new Error("Local browser is busy");
+	if (local) activeLocalReads++;
+	let contextId: string | undefined;
 	let protocol: BrowserProtocol | undefined;
 	let sessionId: string | undefined;
 	const signal = requestSignal(45000);
@@ -126,31 +136,51 @@ export async function renderPublicPage(
 		"X-BB-API-Key": apiKey,
 	};
 	try {
-		await reserveWebQuota("browserbase-session", apiKey);
-		const response = await services.fetch(SESSION_URL, {
-			method: "POST",
-			headers,
-			redirect: "error",
-			signal,
-			body: JSON.stringify({
-				timeout: 60,
-				keepAlive: false,
-				browserSettings: { recordSession: false, logSession: false },
-			}),
-		});
-		if (!response.ok) throw new Error("Browser session unavailable");
-		const session = sessionSchema.parse(await response.json());
-		sessionId = session.id;
-		const endpoint = new URL(session.connectUrl);
-		if (
-			endpoint.protocol !== "wss:" ||
-			!(
-				endpoint.hostname === "browserbase.com" ||
-				endpoint.hostname.endsWith(".browserbase.com")
+		let socketUrl: string;
+		if (local) {
+			const endpoint = localBrowserEndpoint(
+				process.env.LOCAL_BROWSER_CDP_URL ?? "",
+			);
+			const response = await services.fetch(
+				new URL("/json/version", endpoint),
+				{
+					signal,
+					redirect: "error",
+				},
+			);
+			if (!response.ok) throw new Error("Local browser unavailable");
+			const info = z
+				.object({ webSocketDebuggerUrl: z.string() })
+				.parse(JSON.parse(await readLimitedBody(response)));
+			socketUrl = localBrowserSocket(info.webSocketDebuggerUrl, endpoint);
+		} else {
+			await reserveWebQuota("browserbase-session", apiKey);
+			const response = await services.fetch(SESSION_URL, {
+				method: "POST",
+				headers,
+				redirect: "error",
+				signal,
+				body: JSON.stringify({
+					timeout: 60,
+					keepAlive: false,
+					browserSettings: { recordSession: false, logSession: false },
+				}),
+			});
+			if (!response.ok) throw new Error("Browser session unavailable");
+			const session = sessionSchema.parse(await response.json());
+			sessionId = session.id;
+			const endpoint = new URL(session.connectUrl);
+			if (
+				endpoint.protocol !== "wss:" ||
+				!(
+					endpoint.hostname === "browserbase.com" ||
+					endpoint.hostname.endsWith(".browserbase.com")
+				)
 			)
-		)
-			throw new Error("Unexpected browser endpoint");
-		const cdp = await services.connect(session.connectUrl, signal);
+				throw new Error("Unexpected browser endpoint");
+			socketUrl = session.connectUrl;
+		}
+		const cdp = await services.connect(socketUrl, signal);
 		protocol = cdp;
 		const frames = new Set<string>();
 		let requests = 0;
@@ -235,7 +265,12 @@ export async function renderPublicPage(
 		};
 		const context = await cdp.send("Target.createBrowserContext", {
 			disposeOnDetach: true,
+			// Fail closed for traffic outside intercepted HTTP requests (workers, sockets, etc.).
+			...(local
+				? { proxyServer: "http://127.0.0.1:9", proxyBypassList: "<-loopback>" }
+				: {}),
 		});
+		contextId = context.browserContextId;
 		await cdp.send("Browser.setDownloadBehavior", {
 			behavior: "deny",
 			browserContextId: context.browserContextId,
@@ -292,7 +327,20 @@ export async function renderPublicPage(
 				"Bounded snapshot after JavaScript loading; no logins, clicks or forms. Some widgets may be incomplete. Missing data does not establish why it is unavailable.",
 		};
 	} finally {
+		if (protocol && contextId) {
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			await Promise.race([
+				protocol
+					.send("Target.disposeBrowserContext", { browserContextId: contextId })
+					.catch(() => {}),
+				new Promise<void>((resolve) => {
+					timer = setTimeout(resolve, 2000);
+				}),
+			]);
+			clearTimeout(timer);
+		}
 		protocol?.close();
+		if (local) activeLocalReads--;
 		if (sessionId)
 			await services
 				.fetch(`${SESSION_URL}/${sessionId}`, {
@@ -307,15 +355,18 @@ export async function renderPublicPage(
 	}
 }
 
-export async function readPublicPage(url: string) {
+export async function readPublicPage(
+	url: string,
+	services = browserReaderServices,
+) {
 	if (browserReadingEnabled()) {
 		try {
-			return await renderPublicPage(url);
+			return await renderPublicPage(url, services);
 		} catch {
 			/* Static fallback must not masquerade as rendered evidence. */
 		}
 	}
-	const page = await fetchPublicWebPage(url);
+	const page = await services.staticRead(url);
 	return {
 		...page,
 		method: "static page text" as const,

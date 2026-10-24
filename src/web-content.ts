@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import type { Context } from "grammy";
 import { z } from "zod";
+import { useBrowserbaseFetch } from "./browser-config.ts";
 import { log } from "./logger.ts";
 import { abortable, requestSignal } from "./operation-deadline.ts";
 import {
@@ -26,7 +27,9 @@ const browserbasePageSchema = z.object({
 });
 
 export function isBrowserbaseEnabled(): boolean {
-	return Boolean(process.env.BROWSERBASE_API_KEY?.trim());
+	return (
+		useBrowserbaseFetch() && Boolean(process.env.BROWSERBASE_API_KEY?.trim())
+	);
 }
 
 export interface PublicWebLink {
@@ -382,7 +385,8 @@ export async function fetchPublicWebPage(
 	if (!url) throw new Error("Invalid public web URL");
 	const fetchImpl = options.fetch ?? fetch;
 	let apiKey = (
-		options.browserbaseApiKey ?? process.env.BROWSERBASE_API_KEY
+		options.browserbaseApiKey ??
+		(useBrowserbaseFetch() ? process.env.BROWSERBASE_API_KEY : undefined)
 	)?.trim();
 
 	for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
