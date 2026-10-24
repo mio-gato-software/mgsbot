@@ -298,6 +298,15 @@ export async function processConversation(
 						userName,
 						messageId: ctx.message.message_id,
 						text: directUserText ?? "",
+						recentConversation: buffer.messages.slice(-7, -1).map((m) => ({
+							role: m.role,
+							name: m.name,
+							userId: m.userId,
+							text: (m.role === "user" ? (m.userText ?? "") : m.content).slice(
+								0,
+								600,
+							),
+						})),
 						voice: !!options.directUserText && isVoiceMessage === true,
 					})
 				: "";

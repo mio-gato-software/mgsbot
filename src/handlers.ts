@@ -170,7 +170,8 @@ export function registerHandlers(bot: Bot): void {
 		if (
 			commitmentsEnabled() &&
 			(!isGroupChat(ctx) || mentionType !== "none") &&
-			isDeferredWebRequest(text)
+			(extractYouTubeUrl(ctx) !== null || extractPublicWebUrl(ctx) !== null) &&
+			(await isDeferredWebRequest(text))
 		) {
 			await processConversationAndTrackGroupContinuation(
 				ctx,

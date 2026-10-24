@@ -4,9 +4,17 @@ This file provides guidance to AI coding agents working with this repository.
 
 **Pending work:** [TODO.md](./TODO.md) tracks known pending tasks with their context and prerequisites. Check it before starting maintenance work; when you finish an item, delete it; when you discover follow-up work you aren't doing now, add it there.
 
+## Mandatory rule: model-based decisions
+
+**Regular expressions are strictly prohibited for making decisions about user intent or conversational behavior.** Do not use regex, keyword lists, substring matching, or equivalent lexical heuristics to decide whether a user is making a request, which action they want, whether to invoke a model/tool, or whether to create, edit, cancel, extend, or renew a task. This prohibition includes preliminary gates and fallback decision paths: a request must not be discarded before reaching the model because it lacks a particular word or phrasing.
+
+Use an inexpensive model with the relevant conversation context and existing task state. **Prefer Jev** for supported classification tasks; use **Luna** when richer interpretation is needed or Jev cannot handle the task. Validate structured model outputs and enforce permissions, persistence, scheduling limits, and other deterministic business constraints in code. Mechanical format parsing/validation is distinct from deciding the meaning of a user's request and must never be repurposed as an intent gate.
+
+When touching an existing heuristic decision path, replace it with model-based interpretation and test paraphrases and multi-turn clarifications rather than adding more trigger words. Do not introduce new heuristic decision gates to save model calls.
+
 ## Project Overview
 
-MGS Bot is a conversational Telegram bot built with **grammY** + pluggable chat and support providers, running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, `.txt` attachments, voice notes, audio files, photos/images, PDFs, and YouTube links. It can also generate images of its character, respond with TTS voice notes, and query public information and weather through a shared provider-independent lookup flow. OpenAI alone (`OPENAI_API_KEY`, default chat model `gpt-5.6-luna`) covers most AI functionality; Gemini remains optional.
+MGS Bot is a conversational Telegram bot built with **grammY** + pluggable chat and support providers, running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, `.txt` attachments, voice notes, audio files, photos/images, PDFs, and YouTube links. It can also generate images of its character, respond with TTS voice notes, and query public information and weather through a shared provider-independent lookup flow. OpenAI alone (`OPENAI_API_KEY`, default chat model `gpt-6-luna`) covers most AI functionality; Gemini remains optional.
 
 ## Commands
 
@@ -208,7 +216,7 @@ There are four independent provider axes:
 | Text-to-speech | `TTS_PROVIDER` | `[TTS]...[/TTS]` and random voice replies | `elevenlabs` -> `inworld` -> `lemonfox` -> `openai`; Cartesia and fal only when explicit |
 | Images | `IMAGE_PROVIDER` + model env | Character image generation/editing | `openai` or `gemini` from `AI_PLATFORM`; fal defaults to `nano-banana-pro` |
 
-`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work is pinned to `BACKGROUND_MODEL` on `BACKGROUND_PROVIDER` (defaults to `AI_PLATFORM`; also accepts `fal`, defaulting to `openai/gpt-5.6-luna` through `FAL_API_KEY`). Set `BACKGROUND_FALLBACK_TO_CHAT=false` to prevent failures from invoking the chat model so the chat model choice doesn't multiply background costs.
+`/provider` only changes the chat axis. It does not change transcription, voice replies, image generation, embeddings, YouTube analysis, or fallback image analysis. Background memory work is pinned to `BACKGROUND_MODEL` on `BACKGROUND_PROVIDER` (defaults to `AI_PLATFORM`; also accepts `fal`, defaulting to `openai/gpt-6-luna` through `FAL_API_KEY`). Set `BACKGROUND_FALLBACK_TO_CHAT=false` to prevent failures from invoking the chat model so the chat model choice doesn't multiply background costs.
 
 ### Memory System
 
@@ -317,10 +325,10 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `BOT_TOKEN` (required): Telegram bot token
 - `CHAT_PROVIDER`: `gemini` or `openai` by available key, plus `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `deepseek`, or `fal`
 - `AI_PLATFORM`: Default for chat + support axes (`gemini` or `openai`). Auto-selects `openai` when only `OPENAI_API_KEY` is set.
-- `OPENAI_API_KEY`: Enough on its own for most features. Default chat model is `gpt-5.6-luna`.
+- `OPENAI_API_KEY`: Enough on its own for most features. Default chat model is `gpt-6-luna`.
 - `GOOGLE_API_KEY`: Optional if OpenAI is set. Still required for Gemini chat/support and YouTube analysis.
 - `GEMINI_MODEL`: Gemini chat model (default: `gemini-3.6-flash`)
-- `BACKGROUND_MODEL`: Pinned model for background memory work — fact extraction, narrative updates, janitor (defaults to `gpt-5.6-luna` or `gemini-3.6-flash` from `BACKGROUND_PROVIDER`)
+- `BACKGROUND_MODEL`: Pinned model for background memory work — fact extraction, narrative updates, janitor (defaults to `gpt-6-luna` or `gemini-3.6-flash` from `BACKGROUND_PROVIDER`)
 - `TYPESAFE_API_KEY` / `TYPESAFE_MODEL`: Optional routing/image-edit classification (default `jev-1.13.0`). Auto-selected if `CLASSIFIER_PROVIDER` is unset; explicit `typesafe` also selects it, while explicit openai/gemini/fal overrides it. Missing key, unavailable/invalid/uncertain results fall back to the existing AI-platform classifier and its `CLASSIFIER_MODEL`. Background memory generation is unchanged.
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/claude-3.5-sonnet`)
 - `OPENROUTER_HTTP_REFERER` / `OPENROUTER_TITLE`: Optional attribution headers for OpenRouter requests
@@ -328,7 +336,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `AZURE_API_KEY` / `AZURE_ENDPOINT` / `AZURE_MODEL`: Required if using Azure (default model: `Kimi-K2.5`)
 - `DASHSCOPE_API_KEY` / `DASHSCOPE_MODEL`: Required if using Alibaba (default model: `qwen3.5-plus`)
 - `FIREWORKS_API_KEY` / `FIREWORKS_MODEL`: Required if using Fireworks (default model: `accounts/fireworks/models/glm-5`)
-- `OPENAI_MODEL`: OpenAI chat model (default: `gpt-5.6-luna`)
+- `OPENAI_MODEL`: OpenAI chat model (default: `gpt-6-luna`)
 - `OPENAI_IMAGE_MODEL` / `GEMINI_IMAGE_MODEL`: Independent image-generation models
 - `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL`: Required if using DeepSeek (default model: `deepseek-v4-pro`)
 - `FAL_API_KEY` / `FAL_MODEL`: Required if using fal.ai chat (default model: `google/gemini-2.5-pro`)
@@ -366,7 +374,7 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 
 - **Runtime:** Bun v1.4.2 (pinned in CI)
 - **Bot framework:** grammY (`grammy` ^1.46.0)
-- **AI:** OpenAI (`openai` ^7.30.0, default chat `gpt-5.6-luna`) and/or Google GenAI (`@google/genai` 2.27.0)
+- **AI:** OpenAI (`openai` ^7.30.0, default chat `gpt-6-luna`) and/or Google GenAI (`@google/genai` 2.27.0)
 - **Language:** TypeScript (strict mode incl. `noUncheckedIndexedAccess`, ESNext target, bundler module resolution; checked via `bun run typecheck`)
 - **Source code language:** English (variables, functions, comments, file names)
 - **Linter/Formatter:** Biome (`@biomejs/biome` 2.5.15, config in `biome.json`)
