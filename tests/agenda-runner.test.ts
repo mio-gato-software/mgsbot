@@ -460,3 +460,34 @@ test("personal reminders never invoke research or weather tools", async () => {
 	expect(calls).toBe(1);
 	expect(result).toBe("Es hora de salir.");
 });
+
+test("scheduled review repairs malformed model output once without executing embedded tools", async () => {
+	const { reviewScheduledReport } = await import(
+		"../src/commitments/runner.ts"
+	);
+	const task = (await store.read()).tasks[0];
+	if (!task) throw new Error("Missing task");
+	let calls = 0;
+	const result = await reviewScheduledReport(
+		task,
+		"Falta el clima.",
+		[],
+		async (_system, messages) => {
+			calls++;
+			if (calls === 1)
+				return '[WEATHER_LOOKUP]{"location":"Santiago"}[/WEATHER_LOOKUP]';
+			expect(messages.at(-1)?.content).toContain("format validation failed");
+			return '{"missing":"Consultar el pronóstico de Santiago."}';
+		},
+	);
+	expect(calls).toBe(2);
+	expect(result).toBe("Consultar el pronóstico de Santiago.");
+	let invalidCalls = 0;
+	await expect(
+		reviewScheduledReport(task, "Reporte.", [], async () => {
+			invalidCalls++;
+			return "invalid";
+		}),
+	).rejects.toThrow();
+	expect(invalidCalls).toBe(2);
+});
