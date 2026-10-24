@@ -82,7 +82,7 @@ type Lookup =
 	| { tool: "WEB_READ"; request: z.infer<typeof readRequestSchema> }
 	| { tool: "WEATHER_LOOKUP"; request: z.infer<typeof weatherRequestSchema> };
 
-function parseLookup(text: string): Lookup | undefined {
+function parseLookup(text: string, scheduled = false): Lookup | undefined {
 	if (text.length > MAX_CONTROL_CHARS) return;
 	const match = text
 		.trim()
@@ -90,6 +90,16 @@ function parseLookup(text: string): Lookup | undefined {
 	if (!match) return;
 	try {
 		const value = JSON.parse(match[2] ?? "");
+		// Scheduled execution never sends lookup notices. Default only this presentation
+		// field; all substantive tool parameters still pass the unchanged schemas.
+		if (
+			scheduled &&
+			value &&
+			typeof value === "object" &&
+			!Array.isArray(value) &&
+			value.notice === undefined
+		)
+			value.notice = "Consultando.";
 		switch (match[1]?.toUpperCase()) {
 			case "WEB_SEARCH":
 				return { tool: "WEB_SEARCH", request: requestSchema.parse(value) };
@@ -349,7 +359,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 			}
 			if (!CONTROL_MARKER.test(output))
 				return lookups ? finalAnswer(output) : output;
-			const lookup = parseLookup(output);
+			const lookup = parseLookup(output, input.delivery === "scheduled");
 			if (
 				!lookup ||
 				(lookup.tool === "WEB_SEARCH" && !canSearch) ||
