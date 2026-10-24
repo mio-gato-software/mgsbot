@@ -5,6 +5,7 @@ import { readStore, writeStore } from "../memory/storage.ts";
 import { memoryPath } from "../runtime-paths.ts";
 import {
 	displayTime,
+	extensionDeadline,
 	nextOccurrence,
 	renewalDeadline,
 	scheduleDeadline,
@@ -308,11 +309,17 @@ export class CommitmentStore {
 								throw new Error(
 									"Solo se renuevan tareas recurrentes. Para un aviso puntual, pide una nueva fecha.",
 								);
-							entry.expiresAt = renewalDeadline(
-								now,
-								entry.timezone,
-								action.days,
-							);
+							if (action.type === "extend" && entry.status !== "active")
+								throw new Error("Solo se puede extender una tarea activa.");
+							entry.expiresAt =
+								action.type === "extend"
+									? extensionDeadline(
+											entry.expiresAt,
+											now,
+											entry.timezone,
+											action.days,
+										)
+									: renewalDeadline(now, entry.timezone, action.days);
 							entry.renewalNotice = undefined;
 							entry.renewalTermStartedAt = now;
 							entry.schedule.endDate = undefined;

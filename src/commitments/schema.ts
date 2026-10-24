@@ -19,6 +19,12 @@ export const taskInputSchema = z.object({
 });
 export const actionSchema = z.discriminatedUnion("type", [
 	z.object({
+		type: z.literal("extend"),
+		ids: z.array(id).min(1).max(10),
+		days: z.number().int().min(1).max(31),
+		evidence: text,
+	}),
+	z.object({
 		type: z.literal("renewal_reminder"),
 		id,
 		days: z.number().int().min(1).max(2).nullable(),
@@ -57,6 +63,7 @@ export const actionSchema = z.discriminatedUnion("type", [
 export const interpretationSchema = z.object({
 	actions: z.array(actionSchema).max(8),
 	clarification: z.string().max(400).optional(),
+	discardPending: z.boolean().default(false),
 	needsWrittenConfirmation: z.boolean().default(false),
 	list: z.boolean().default(false),
 });

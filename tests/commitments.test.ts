@@ -610,3 +610,108 @@ test("content edits reject expired tasks and unverified evidence without writing
 	).rejects.toThrow("activa");
 	expect(await readFile(store.path, "utf8")).toBe(before);
 });
+
+test("extension conversation keeps the draft across restart and adds a day to the existing deadline", async () => {
+	await store.apply(input, plan([action()]));
+	const original = (await store.read()).tasks[0];
+	if (!original) throw new Error("Missing fixture");
+	now = localTime("2026-10-24", "08:44");
+	const opening = "Perfecto. ¿Podemos probar extenderla ahora?";
+	expect(hasCommitmentIntent(opening)).toBe(true);
+	const first = await handleCommitmentRequest(
+		{ ...input, messageId: 2, text: opening },
+		{
+			store,
+			now: () => now,
+			interpret: async () =>
+				plan([], {
+					clarification: "¿Cuántos días más quieres añadir al reporte?",
+				}),
+		},
+	);
+	expect(first).toContain("Nothing saved");
+	expect((await store.read()).pending[0]?.text).toBe(opening);
+	const reloaded = new CommitmentStore(store.path, () => now);
+	const followup = "Digamos 1 día más";
+	const second = await handleCommitmentRequest(
+		{ ...input, messageId: 3, text: followup },
+		{
+			store: reloaded,
+			now: () => now,
+			interpret: async (request, context) => {
+				expect(request.text).toContain(opening);
+				expect(request.text).toContain(followup);
+				expect(JSON.parse(context).pendingRequest).toBe(opening);
+				return plan([
+					{ type: "extend", ids: [original.id], days: 1, evidence: followup },
+				]);
+			},
+		},
+	);
+	expect(second).toContain("saved successfully");
+	expect((await reloaded.read()).tasks[0]?.expiresAt).toBe(
+		localTime("2026-11-23", "21:02"),
+	);
+	expect((await reloaded.read()).pending).toHaveLength(0);
+	const after = await readFile(store.path, "utf8");
+	await reloaded.apply(
+		{ ...input, messageId: 3, text: followup },
+		plan([{ type: "extend", ids: [original.id], days: 1, evidence: followup }]),
+	);
+	expect(await readFile(store.path, "utf8")).toBe(after);
+});
+
+test("extensions respect the rolling month cap and cannot revive cancelled or expired tasks", async () => {
+	await store.apply(input, plan([action()]));
+	const original = (await store.read()).tasks[0];
+	if (!original) throw new Error("Missing fixture");
+	const extend = plan([
+		{ type: "extend", ids: [original.id], days: 1, evidence: "un día más" },
+	]);
+	const before = await readFile(store.path, "utf8");
+	await expect(
+		store.apply({ ...input, messageId: 2, text: "un día más" }, extend),
+	).rejects.toThrow("mes calendario");
+	expect(await readFile(store.path, "utf8")).toBe(before);
+	now = original.expiresAt + 1;
+	await expect(
+		store.apply({ ...input, messageId: 2, text: "un día más" }, extend),
+	).rejects.toThrow("venció");
+});
+
+test("withdrawing a clarification clears only that user's draft, not the task", async () => {
+	await store.apply(input, plan([action()]));
+	await handleCommitmentRequest(
+		{ ...input, messageId: 2, text: "¿Podemos extenderla?" },
+		{
+			store,
+			now: () => now,
+			interpret: async () => plan([], { clarification: "¿Cuántos días?" }),
+		},
+	);
+	const before = (await store.read()).tasks;
+	const result = await handleCommitmentRequest(
+		{ ...input, messageId: 3, text: "Deja seguir trabajando" },
+		{
+			store,
+			now: () => now,
+			interpret: async () => plan([], { discardPending: true }),
+		},
+	);
+	expect(result).toContain("withdrawn");
+	expect((await store.read()).pending).toHaveLength(0);
+	expect((await store.read()).tasks).toEqual(before);
+	let called = false;
+	await handleCommitmentRequest(
+		{ ...input, messageId: 4, text: "1 día más" },
+		{
+			store,
+			now: () => now,
+			interpret: async () => {
+				called = true;
+				return plan([]);
+			},
+		},
+	);
+	expect(called).toBe(false);
+});
