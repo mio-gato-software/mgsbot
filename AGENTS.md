@@ -4,6 +4,14 @@ This file provides guidance to AI coding agents working with this repository.
 
 **Pending work:** [TODO.md](./TODO.md) tracks known pending tasks with their context and prerequisites. Check it before starting maintenance work; when you finish an item, delete it; when you discover follow-up work you aren't doing now, add it there.
 
+## Mandatory rule: model-based decisions
+
+**Regular expressions are strictly prohibited for making decisions about user intent or conversational behavior.** Do not use regex, keyword lists, substring matching, or equivalent lexical heuristics to decide whether a user is making a request, which action they want, whether to invoke a model/tool, or whether to create, edit, cancel, extend, or renew a task. This prohibition includes preliminary gates and fallback decision paths: a request must not be discarded before reaching the model because it lacks a particular word or phrasing.
+
+Use an inexpensive model with the relevant conversation context and existing task state. **Prefer Jev** for supported classification tasks; use **Luna** when richer interpretation is needed or Jev cannot handle the task. Validate structured model outputs and enforce permissions, persistence, scheduling limits, and other deterministic business constraints in code. Mechanical format parsing/validation is distinct from deciding the meaning of a user's request and must never be repurposed as an intent gate.
+
+When touching an existing heuristic decision path, replace it with model-based interpretation and test paraphrases and multi-turn clarifications rather than adding more trigger words. Do not introduce new heuristic decision gates to save model calls.
+
 ## Project Overview
 
 MGS Bot is a conversational Telegram bot built with **grammY** + pluggable chat and support providers, running on **Bun**. It features a multi-tier memory system (semantic facts, episodes, sensory buffer, relationships, monthly chapters), vector embeddings for semantic search, an emergent personality system, proactive follow-ups and check-ins, and responds naturally to text, `.txt` attachments, voice notes, audio files, photos/images, PDFs, and YouTube links. It can also generate images of its character, respond with TTS voice notes, and query public information and weather through a shared provider-independent lookup flow. OpenAI alone (`OPENAI_API_KEY`, default chat model `gpt-5.6-luna`) covers most AI functionality; Gemini remains optional.
