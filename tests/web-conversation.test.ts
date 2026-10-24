@@ -101,7 +101,7 @@ test("the acknowledgement arrives before search; evidence feeds the final answer
 				return '[WEB_SEARCH]{"query":"noticia identificada","notice":"Déjame buscar","freshness":"pw"}[/WEB_SEARCH]';
 			}
 			events.push("answer");
-			expect(system).toContain("Lookup batches remaining: 3");
+			expect(system).toContain("Lookup batches remaining: 7");
 			expect(input.at(-1)?.content).toContain("UNTRUSTED SNIPPET");
 			return "Encontré este reporte: https://example.com/report";
 		},

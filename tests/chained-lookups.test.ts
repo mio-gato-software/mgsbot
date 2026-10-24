@@ -28,6 +28,7 @@ function fixture(replies: Reply[]) {
 		] as ChatMessage[],
 		chatId: 1,
 		useCachedContext: false,
+		maxLookups: 4,
 		web: {
 			isEnabled: () => true,
 			isReadEnabled: () => true,
@@ -209,7 +210,7 @@ test("four mixed batches allow at most five model calls and a fifth tool request
 		const answer = await generateWithWebSearch(f.input);
 		expect(f.calls).toHaveLength(5);
 		expect(f.calls[4]?.system).toContain("Do not emit WEB_SEARCH");
-		expect(f.calls[4]?.system).toContain("no more than four batches");
+		expect(f.calls[4]?.system).toContain("no more than 4 batches");
 		expect(
 			f.calls[4]?.messages.filter((m) => m.content.startsWith("[Lookup ")),
 		).toHaveLength(4);
@@ -529,4 +530,22 @@ test("a planning timeout preserves prior evidence and uses the reserved final ge
 	expect(answer).toContain("me falta verificar el clima");
 	expect(f.calls).toHaveLength(3);
 	expect(f.weatherRequests).toHaveLength(0);
+});
+
+test("report budget can complete research and three forecasts beyond four batches", async () => {
+	const f = fixture([
+		search("resultados"),
+		read(["https://example.com/scores"]),
+		search("posiciones"),
+		search("sedes"),
+		weather({ location: "Santo Domingo", hour: 16 }),
+		weather({ location: "Santiago", hour: 18 }),
+		weather({ location: "San Pedro de Macorís", hour: 19 }),
+		"Resultados, posiciones y tres pronósticos verificados.",
+	]);
+	f.input.maxLookups = 12;
+	const answer = await generateWithWebSearch(f.input);
+	expect(f.weatherRequests).toHaveLength(3);
+	expect(f.calls).toHaveLength(8);
+	expect(answer).toBe("Resultados, posiciones y tres pronósticos verificados.");
 });

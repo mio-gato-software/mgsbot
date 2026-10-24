@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requestSignal } from "./operation-deadline.ts";
+import { reserveWebQuota } from "./web-quota.ts";
 
 export const webSourceSchema = z.object({
 	title: z.string().min(1).max(200),
@@ -52,6 +53,7 @@ export async function searchBrave(
 		...(request.freshness ? { freshness: request.freshness } : {}),
 		...(request.news ? { search_lang: "es" } : {}),
 	}).toString();
+	await reserveWebQuota("brave", apiKey);
 	const response = await (options.fetch ?? fetch)(url, {
 		headers: { Accept: "application/json", "X-Subscription-Token": apiKey },
 		signal: requestSignal(10_000),
