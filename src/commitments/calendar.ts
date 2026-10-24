@@ -117,3 +117,20 @@ export function renewalReminderAt(
 	const due = localTime(date, time, timezone);
 	return Number.isFinite(due) ? due : localTime(date, "12:00", timezone);
 }
+
+/** Add days to the current deadline, without exceeding the rolling one-month horizon. */
+export function extensionDeadline(
+	expiresAt: number,
+	now: number,
+	timezone: string,
+	days: number,
+): number {
+	if (expiresAt <= now)
+		throw new Error("La tarea ya venció; pide renovarla desde hoy.");
+	const result = renewalDeadline(expiresAt, timezone, days);
+	if (result > monthDeadline(now, timezone))
+		throw new Error(
+			"La extensión supera un mes calendario desde hoy; elige menos días o espera a estar más cerca del vencimiento.",
+		);
+	return result;
+}
