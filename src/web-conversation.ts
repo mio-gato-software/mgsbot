@@ -82,7 +82,7 @@ type Lookup =
 	| { tool: "WEB_READ"; request: z.infer<typeof readRequestSchema> }
 	| { tool: "WEATHER_LOOKUP"; request: z.infer<typeof weatherRequestSchema> };
 
-function parseLookup(text: string): Lookup | undefined {
+function parseLookup(text: string, scheduled = false): Lookup | undefined {
 	if (text.length > MAX_CONTROL_CHARS) return;
 	const match = text
 		.trim()
@@ -90,6 +90,16 @@ function parseLookup(text: string): Lookup | undefined {
 	if (!match) return;
 	try {
 		const value = JSON.parse(match[2] ?? "");
+		// Scheduled execution never sends lookup notices. Default only this presentation
+		// field; all substantive tool parameters still pass the unchanged schemas.
+		if (
+			scheduled &&
+			value &&
+			typeof value === "object" &&
+			!Array.isArray(value) &&
+			value.notice === undefined
+		)
+			value.notice = "Consultando.";
 		switch (match[1]?.toUpperCase()) {
 			case "WEB_SEARCH":
 				return { tool: "WEB_SEARCH", request: requestSchema.parse(value) };
@@ -234,6 +244,7 @@ export async function generateWithWebSearch(
 		weather?: ConversationWeatherContext;
 		announce: (text: string) => Promise<void>;
 		useCachedContext?: boolean;
+		delivery?: "scheduled";
 	},
 	timing = {
 		now: () => performance.now(),
@@ -242,6 +253,10 @@ export async function generateWithWebSearch(
 		stepTimeoutMs: 45_000,
 	},
 ): Promise<string> {
+	const deliveryInstructions =
+		input.delivery === "scheduled"
+			? "\nSCHEDULED DELIVERY OVERRIDE: Produce only the requested report, without lookup announcements or offers to continue. Follow the saved task and style preferences about source attribution: when sources are omitted, omit all source names and URLs even for weather, despite the general citation instructions above. Still disclose material missing evidence. Tool blocks are internal only.\n"
+			: "";
 	const weather = input.weather ?? weatherService;
 	const canWeather = weather.isEnabled();
 	const canSearch = input.web.isEnabled();
@@ -315,7 +330,8 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 			(!canSearch && canRead
 				? "Web search is disabled; WEB_READ is available.\n"
 				: "") +
-			LOOKUP_INSTRUCTIONS;
+			LOOKUP_INSTRUCTIONS +
+			deliveryInstructions;
 
 		while (lookups < MAX_LOOKUPS) {
 			if (planningTime() <= 0) {
@@ -343,7 +359,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 			}
 			if (!CONTROL_MARKER.test(output))
 				return lookups ? finalAnswer(output) : output;
-			const lookup = parseLookup(output);
+			const lookup = parseLookup(output, input.delivery === "scheduled");
 			if (
 				!lookup ||
 				(lookup.tool === "WEB_SEARCH" && !canSearch) ||
@@ -468,7 +484,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 				Math.min(CHAT_TIMEOUT_MS, remaining()),
 				() =>
 					input.generate(
-						`${prompt}\n${FINAL_INSTRUCTIONS}\n${stopReason}`,
+						`${prompt}\n${FINAL_INSTRUCTIONS}\n${stopReason}\n${deliveryInstructions}`,
 						messages,
 					),
 			);

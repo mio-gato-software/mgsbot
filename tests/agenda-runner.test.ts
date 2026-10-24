@@ -303,3 +303,156 @@ test("recurring tasks with no remaining occurrences retain their renewal window 
 	await runScheduledTasks(services);
 	expect((await store.read()).tasks[0]?.status).toBe("expired");
 });
+
+test("scheduled research chains three venue forecasts without leaking controls or changing the task", async () => {
+	const { generateScheduledMessage, scheduledGenerationServices } =
+		await import("../src/commitments/runner.ts");
+	const { WorldContextService } = await import("../src/world-context.ts");
+	const task = (await store.read()).tasks[0];
+	if (!task) throw new Error("Missing task");
+	task.instruction =
+		"Reporta los juegos y lluvia a la hora de cada juego, sin fuentes.";
+	const before = structuredClone(task);
+	const cities = ["Santo Domingo", "Santiago", "San Pedro de Macorís"];
+	const hours = [16, 18, 19];
+	const requests: unknown[] = [];
+	let calls = 0;
+	const web = new WorldContextService({
+		directory: join(root, "weather-web"),
+		enabled: () => true,
+		now: () => now,
+		search: async () => [
+			{
+				title: "Cartelera",
+				url: "https://example.com/fixtures",
+				text: "Hoy: Santo Domingo 16:00; Santiago 18:00; San Pedro de Macorís 19:30, zona America/Santo_Domingo.",
+			},
+		],
+	});
+	const result = await generateScheduledMessage(task, {
+		...scheduledGenerationServices,
+		store,
+		web,
+		now: () => now,
+		retrieve: async () => ({
+			relevantEpisodes: [],
+			relevantFacts: [],
+			permanentFacts: [],
+			relationshipMemory: null,
+			recentChapters: [],
+			activeNames: [],
+			mentionedNames: [],
+		}),
+		assemble: async () => "Responde en español.",
+		weather: {
+			isEnabled: () => true,
+			instructions: () => "Weather lookup available.",
+			lookup: async (request) => {
+				requests.push(request);
+				return `${request.location}: hora ${request.hour ?? 19}:00, lluvia 40%; hora ${(request.hour ?? 19) + 1}:00, lluvia 50%.`;
+			},
+		},
+		generate: async (system, messages) => {
+			expect(system).toContain("SCHEDULED DELIVERY OVERRIDE");
+			if (calls < 3) {
+				const i = calls++;
+				return `[WEATHER_LOOKUP]${JSON.stringify({ location: cities[i], countryCode: "DO", date: "2026-10-22", ...(i === 2 ? { period: "evening" } : { hour: hours[i] }) })}[/WEATHER_LOOKUP]`;
+			}
+			expect(messages.map((m) => m.content).join("\n")).toContain(
+				"San Pedro de Macorís: hora 19:00",
+			);
+			return "Santo Domingo 16:00: 40%; Santiago 18:00: 40%. San Pedro 19:30: 40% a las 19:00 y 50% a las 20:00. Es pronóstico de lluvia, sin suspensión confirmada.";
+		},
+	});
+	expect(requests).toHaveLength(3);
+	expect(result).toContain("19:30");
+	expect(result).not.toContain("WEATHER_LOOKUP");
+	expect(task).toEqual(before);
+});
+
+test("scheduled forecasts reject implicit installation location and recover from unavailable weather", async () => {
+	const { generateScheduledMessage, scheduledGenerationServices } =
+		await import("../src/commitments/runner.ts");
+	const task = (await store.read()).tasks[0];
+	if (!task) throw new Error("Missing task");
+	let calls = 0;
+	let lookups = 0;
+	const result = await generateScheduledMessage(task, {
+		...scheduledGenerationServices,
+		store,
+		web: new (await import("../src/world-context.ts")).WorldContextService({
+			directory: join(root, "disabled"),
+			enabled: () => false,
+		}),
+		retrieve: async () => ({
+			relevantEpisodes: [],
+			relevantFacts: [],
+			permanentFacts: [],
+			relationshipMemory: null,
+			recentChapters: [],
+			activeNames: [],
+			mentionedNames: [],
+		}),
+		assemble: async () => "Español.",
+		weather: {
+			isEnabled: () => true,
+			instructions: () => "Weather tool.",
+			lookup: async () => {
+				lookups++;
+				throw new Error("Forecast unavailable");
+			},
+		},
+		generate: async (_system, messages) => {
+			calls++;
+			if (calls === 1)
+				return '[WEATHER_LOOKUP]{"hour":19,"notice":"Reviso."}[/WEATHER_LOOKUP]';
+			if (calls === 2) {
+				expect(messages.at(-1)?.content).toContain(
+					"explicit verified location",
+				);
+				return '[WEATHER_LOOKUP]{"location":"Santiago","countryCode":"DO","hour":19,"notice":"Reviso."}[/WEATHER_LOOKUP]';
+			}
+			return "No pude confirmar el pronóstico para la hora del juego.";
+		},
+	});
+	expect(lookups).toBe(1);
+	expect(result).toContain("No pude confirmar");
+});
+
+test("personal reminders never invoke research or weather tools", async () => {
+	const { generateScheduledMessage, scheduledGenerationServices } =
+		await import("../src/commitments/runner.ts");
+	const task = (await store.read()).tasks[0];
+	if (!task) throw new Error("Missing task");
+	task.kind = "reminder";
+	let calls = 0;
+	const result = await generateScheduledMessage(task, {
+		...scheduledGenerationServices,
+		store,
+		retrieve: async () => ({
+			relevantEpisodes: [],
+			relevantFacts: [],
+			permanentFacts: [],
+			relationshipMemory: null,
+			recentChapters: [],
+			activeNames: [],
+			mentionedNames: [],
+		}),
+		assemble: async () => "Español.",
+		weather: {
+			isEnabled: () => {
+				throw new Error("Unexpected weather access");
+			},
+			instructions: () => "",
+			lookup: async () => {
+				throw new Error("Unexpected lookup");
+			},
+		},
+		generate: async () => {
+			calls++;
+			return "Es hora de salir.";
+		},
+	});
+	expect(calls).toBe(1);
+	expect(result).toBe("Es hora de salir.");
+});

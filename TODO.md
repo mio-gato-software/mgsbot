@@ -9,13 +9,6 @@ Living document. Rules:
 
 ## Pending
 
-### Add structured weather lookup to scheduled reports
-
-- **Why:** conversational task edits can save a request for game-time rain probabilities, but the scheduled runner currently only uses web research, not the structured weather lookup available during chat turns.
-- **What to do:** resolve fixture venue cities and start times from current evidence, query hourly forecasts for those locations/times, and report uncertainty without inferring game cancellations. Test missing venues, postponed games and unavailable forecasts.
-- **Size:** Medium; separate from model-based request interpretation.
-- Added 2026-10-24.
-
 ### Audit remaining conversational heuristics
 
 - **Why:** task request interpretation and deferred-link routing now use the background model, but other legacy conversational routing paths may still use lexical heuristics contrary to the mandatory rule in AGENTS.md.
