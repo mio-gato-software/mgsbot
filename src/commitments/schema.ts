@@ -18,6 +18,12 @@ export const taskInputSchema = z.object({
 });
 export const actionSchema = z.discriminatedUnion("type", [
 	z.object({
+		type: z.literal("update"),
+		id,
+		instruction: text,
+		evidence: text,
+	}),
+	z.object({
 		type: z.literal("schedule"),
 		task: taskInputSchema,
 		replaceId: id.optional(),
