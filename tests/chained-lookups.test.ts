@@ -549,3 +549,80 @@ test("report budget can complete research and three forecasts beyond four batche
 	expect(f.calls).toHaveLength(8);
 	expect(answer).toBe("Resultados, posiciones y tres pronósticos verificados.");
 });
+
+test("long scheduled research leaves evidence room for all three weather locations", async () => {
+	const f = fixture([
+		search("resultados oficiales"),
+		search("tabla oficial"),
+		search("sedes verificadas"),
+		search("horarios confirmados"),
+		weather({ location: "Santo Domingo", hour: 16 }),
+		weather({ location: "Santiago", hour: 18 }),
+		weather({ location: "San Pedro de Macorís", hour: 19 }),
+		"Reporte completo con tres pronósticos.",
+	]);
+	f.input.web.search = async () => "Public evidence. ".repeat(1200);
+	const answer = await generateWithWebSearch({
+		...f.input,
+		delivery: "scheduled",
+		maxLookups: 12,
+	});
+	expect(f.weatherRequests).toHaveLength(3);
+	expect(f.calls).toHaveLength(8);
+	expect(answer).toBe("Reporte completo con tres pronósticos.");
+});
+
+test("scheduled completeness review resumes missing lookups within the same budget", async () => {
+	const f = fixture([
+		weather({ location: "Santo Domingo", hour: 16 }),
+		"Falta Santiago.",
+		weather({ location: "Santiago", hour: 18 }),
+		"Ambos pronósticos confirmados.",
+	]);
+	let reviews = 0;
+	const result = await generateWithWebSearch({
+		...f.input,
+		delivery: "scheduled",
+		reviewFinal: async (draft) => {
+			reviews++;
+			return draft === "Falta Santiago."
+				? "Consulta el pronóstico horario de Santiago a las 18:00."
+				: undefined;
+		},
+	});
+	expect(f.weatherRequests).toHaveLength(2);
+	expect(reviews).toBe(2);
+	expect(result).toBe("Ambos pronósticos confirmados.");
+});
+
+test("completeness review cannot loop indefinitely or add a new provider call after quota exhaustion", async () => {
+	const f = fixture([
+		"Datos no disponibles.",
+		"Datos no disponibles.",
+		"Datos no disponibles.",
+	]);
+	let reviews = 0;
+	expect(
+		await generateWithWebSearch({
+			...f.input,
+			reviewFinal: async () => {
+				reviews++;
+				return "Vuelve a verificar.";
+			},
+		}),
+	).toBe("Datos no disponibles.");
+	expect(reviews).toBe(2);
+	expect(f.calls).toHaveLength(3);
+	const exhausted = fixture([weather(), "Falta otra sede."]);
+	let budgetReviews = 0;
+	await generateWithWebSearch({
+		...exhausted.input,
+		maxLookups: 1,
+		reviewFinal: async () => {
+			budgetReviews++;
+			return "Otra sede";
+		},
+	});
+	expect(budgetReviews).toBe(0);
+	expect(exhausted.weatherRequests).toHaveLength(1);
+});

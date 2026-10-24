@@ -203,6 +203,7 @@ test("scheduled research uses fresh public terms and task sources, then renders 
 	});
 	const message = await generateScheduledMessage(task, {
 		...scheduledGenerationServices,
+		review: async () => undefined,
 		store,
 		web,
 		now: () => now,
@@ -331,6 +332,7 @@ test("scheduled research chains three venue forecasts without leaking controls o
 	});
 	const result = await generateScheduledMessage(task, {
 		...scheduledGenerationServices,
+		review: async () => undefined,
 		store,
 		web,
 		now: () => now,
@@ -379,6 +381,7 @@ test("scheduled forecasts reject implicit installation location and recover from
 	let lookups = 0;
 	const result = await generateScheduledMessage(task, {
 		...scheduledGenerationServices,
+		review: async () => undefined,
 		store,
 		web: new (await import("../src/world-context.ts")).WorldContextService({
 			directory: join(root, "disabled"),
@@ -428,6 +431,7 @@ test("personal reminders never invoke research or weather tools", async () => {
 	let calls = 0;
 	const result = await generateScheduledMessage(task, {
 		...scheduledGenerationServices,
+		review: async () => undefined,
 		store,
 		retrieve: async () => ({
 			relevantEpisodes: [],
@@ -455,4 +459,35 @@ test("personal reminders never invoke research or weather tools", async () => {
 	});
 	expect(calls).toBe(1);
 	expect(result).toBe("Es hora de salir.");
+});
+
+test("scheduled review repairs malformed model output once without executing embedded tools", async () => {
+	const { reviewScheduledReport } = await import(
+		"../src/commitments/runner.ts"
+	);
+	const task = (await store.read()).tasks[0];
+	if (!task) throw new Error("Missing task");
+	let calls = 0;
+	const result = await reviewScheduledReport(
+		task,
+		"Falta el clima.",
+		[],
+		async (_system, messages) => {
+			calls++;
+			if (calls === 1)
+				return '[WEATHER_LOOKUP]{"location":"Santiago"}[/WEATHER_LOOKUP]';
+			expect(messages.at(-1)?.content).toContain("format validation failed");
+			return '{"missing":"Consultar el pronóstico de Santiago."}';
+		},
+	);
+	expect(calls).toBe(2);
+	expect(result).toBe("Consultar el pronóstico de Santiago.");
+	let invalidCalls = 0;
+	await expect(
+		reviewScheduledReport(task, "Reporte.", [], async () => {
+			invalidCalls++;
+			return "invalid";
+		}),
+	).rejects.toThrow();
+	expect(invalidCalls).toBe(2);
 });
