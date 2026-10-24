@@ -99,11 +99,11 @@ export class WorldContextService {
 					budget.day = day;
 					budget.attempts = 0;
 				}
-				const configured = Number(process.env.WEB_READ_DAILY_LIMIT ?? 20);
+				const configured = Number(process.env.WEB_READ_DAILY_LIMIT ?? 60);
 				const limit =
 					Number.isFinite(configured) && configured >= 0
 						? Math.floor(configured)
-						: 20;
+						: 60;
 				if (budget.attempts >= limit)
 					return "Daily page-reading limit reached. No new page was opened.";
 				budget.attempts++;
@@ -156,11 +156,11 @@ export class WorldContextService {
 		}
 		const configured =
 			this.options.dailyLimit?.() ??
-			Number(process.env.WEB_SEARCH_DAILY_LIMIT ?? 30);
+			Number(process.env.WEB_SEARCH_DAILY_LIMIT ?? 60);
 		const limit =
 			Number.isFinite(configured) && configured >= 0
 				? Math.floor(configured)
-				: 30;
+				: 60;
 		if (budget.attempts >= limit)
 			throw new Error("Daily web search limit reached");
 		// Count attempts before calling: timeouts/restarts must not bypass the limit.

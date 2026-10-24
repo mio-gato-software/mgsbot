@@ -6,6 +6,7 @@ import {
 	fetchPublicWebPage,
 	readLimitedBody,
 } from "./web-content.ts";
+import { reserveWebQuota } from "./web-quota.ts";
 
 const SESSION_URL = "https://api.browserbase.com/v1/sessions";
 const sessionSchema = z.object({
@@ -125,6 +126,7 @@ export async function renderPublicPage(
 		"X-BB-API-Key": apiKey,
 	};
 	try {
+		await reserveWebQuota("browserbase-session", apiKey);
 		const response = await services.fetch(SESSION_URL, {
 			method: "POST",
 			headers,

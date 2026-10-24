@@ -100,6 +100,7 @@ export async function generateScheduledMessage(
 						announce: async () => {},
 						useCachedContext: false,
 						delivery: "scheduled",
+						maxLookups: 12,
 					})
 			: services.generate;
 	const response = await generate(

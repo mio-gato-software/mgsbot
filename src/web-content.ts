@@ -9,6 +9,7 @@ import {
 	requestPinnedWebPage,
 	WEB_REQUEST_HEADERS,
 } from "./pinned-web-request.ts";
+import { reserveWebQuota } from "./web-quota.ts";
 
 const MAX_REDIRECTS = 5;
 const MAX_RESPONSE_BYTES = 2_000_000;
@@ -321,6 +322,7 @@ async function fetchBrowserbasePage(
 	apiKey: string,
 	fetchImpl: typeof fetch,
 ): Promise<Response> {
+	await reserveWebQuota("browserbase-fetch", apiKey);
 	const response = await fetchImpl(BROWSERBASE_FETCH_URL, {
 		method: "POST",
 		headers: {
