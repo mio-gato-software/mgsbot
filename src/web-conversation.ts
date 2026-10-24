@@ -243,6 +243,10 @@ export async function generateWithWebSearch(
 		stepTimeoutMs: 45_000,
 	},
 ): Promise<string> {
+	const deliveryInstructions =
+		input.delivery === "scheduled"
+			? "\nSCHEDULED DELIVERY OVERRIDE: Produce only the requested report, without lookup announcements or offers to continue. Follow the saved task and style preferences about source attribution: when sources are omitted, omit all source names and URLs even for weather, despite the general citation instructions above. Still disclose material missing evidence. Tool blocks are internal only.\n"
+			: "";
 	const weather = input.weather ?? weatherService;
 	const canWeather = weather.isEnabled();
 	const canSearch = input.web.isEnabled();
@@ -317,9 +321,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 				? "Web search is disabled; WEB_READ is available.\n"
 				: "") +
 			LOOKUP_INSTRUCTIONS +
-			(input.delivery === "scheduled"
-				? "\nSCHEDULED DELIVERY OVERRIDE: Produce only the requested report, without lookup announcements or offers to continue. Follow the saved task and style preferences about source attribution: when sources are omitted, omit all source names and URLs even for weather, despite the general citation instructions above. Still disclose material missing evidence. Tool blocks are internal only.\n"
-				: "");
+			deliveryInstructions;
 
 		while (lookups < MAX_LOOKUPS) {
 			if (planningTime() <= 0) {
@@ -472,7 +474,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 				Math.min(CHAT_TIMEOUT_MS, remaining()),
 				() =>
 					input.generate(
-						`${prompt}\n${FINAL_INSTRUCTIONS}\n${stopReason}`,
+						`${prompt}\n${FINAL_INSTRUCTIONS}\n${stopReason}\n${deliveryInstructions}`,
 						messages,
 					),
 			);
