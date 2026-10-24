@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { alertOwner, errorSummary, setAlertSink } from "./src/alerts.ts";
+import { browserProvider } from "./src/browser-config.ts";
 import { log } from "./src/logger.ts";
 import {
 	findEnvCaseMismatches,
@@ -180,7 +181,7 @@ for (const line of formatProviderStartupSummary()) {
 	log.info(line);
 }
 log.info(
-	`[startup] Web pages: ${isBrowserbaseEnabled() ? "Browserbase Fetch (direct reader fallback)" : "direct reader"}`,
+	`[startup] Web pages: ${isBrowserbaseEnabled() ? "Browserbase Fetch (direct reader fallback)" : "direct reader"}; renderer: ${browserProvider()}`,
 );
 
 const bot = new Bot(token, { client: { timeoutSeconds: 45 } });

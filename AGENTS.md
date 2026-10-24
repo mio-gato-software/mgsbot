@@ -76,7 +76,7 @@ src/
   group-state.ts             ← In-memory group rate limits: spontaneous-reply cooldowns, continuation windows
   web-content.ts             ← Public URL reading: optional Browserbase Fetch when BROWSERBASE_API_KEY is set,
                                direct-reader fallback, public-address/redirect validation, bounded extraction
-  browser-reader.ts          ← Bounded Browserbase CDP sessions for JavaScript-rendered public page text;
+  browser-reader.ts          ← Optional local/Browserbase CDP sessions for JavaScript-rendered public page text;
                                pinned resource fetching, explicit cleanup, labeled static fallback
   web-conversation.ts        ← Shared WEB_SEARCH / WEB_READ / WEATHER_LOOKUP loop; up to four chained
                                batches and five model calls per turn, independent of the chat provider

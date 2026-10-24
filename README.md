@@ -101,7 +101,7 @@ Weather context defaults to Santo Domingo. For another installation, set `WEATHE
 
 Ask naturally about current weather or hourly forecasts for today and the next six days, such as “¿Cómo estará esta noche en San Pedro de Macorís?” and “¿Y mañana?”. Open-Meteo lookups work with every chat provider, independently of Brave or Browserbase. Explicit conversational places/countries override the installation reference; otherwise the reference country is preferred before a global search. The reference is not treated as every participant's location. `ENABLE_WEATHER_LOOKUP=false` disables these queries without removing ambient weather. See [weather queries and location configuration](docs/weather.md).
 
-### Public web links and Browserbase
+### Public web links and optional browsers
 
 Set `BROWSERBASE_API_KEY` in `.env` and restart to automatically use [Browserbase Fetch](https://docs.browserbase.com/platform/fetch/overview) for public links shared in Telegram. Only the key is needed. The startup log reports the selected reader. This works with every chat provider, including in simple assistant mode; passive group links are not fetched.
 
@@ -109,7 +109,9 @@ The bot retrieves raw HTML/text through Browserbase and extracts readable conten
 
 Shared-link previews use Fetch. During conversation and scheduled research, the bot can also open pages using short-lived [Browserbase browser sessions](https://docs.browserbase.com/reference/api/create-a-session) and read JavaScript-rendered text, tables and accessible frames. It uses the same API key, without installing a browser on the server. Page URLs and public resources are validated; HTTP resources use the pinned public-address transport, redirects are checked again, and non-GET/HEAD requests, service workers, downloads and WebSockets are blocked. No logins, clicks, forms or model-generated scripts are supported. Rendering may still miss late or unsupported widgets; errors fall back to explicitly labeled static text, never a fabricated explanation for missing data.
 
-`ENABLE_WEB_READING=false` disables conversational/research page reads; `ENABLE_BROWSER_READING=false` keeps those reads static. Both default to enabled, with browser rendering requiring `BROWSERBASE_API_KEY`. A lookup batch reads at most three pages, and `WEB_READ_DAILY_LIMIT` defaults to 60 page attempts per UTC day (including failures), persisted across restarts. Public page snapshots are cached for five minutes. These reads consume Browserbase browser-session usage when rendering is enabled, independently of the search budget. Sessions have a 60-second server timeout, a 45-second client deadline, and explicit release on success/failure. YouTube and PDF attachment handling is unchanged.
+For a separately installed Chromium browser, set `BROWSER_PROVIDER=local` and `LOCAL_BROWSER_CDP_URL=http://127.0.0.1:9223`. No browser is bundled or installed by the bot. Local mode bypasses Browserbase for rendering and static reads, keeps the public-address protections, and falls back to labeled static text if the browser is unavailable. See [optional local browser setup](docs/local-browser.md).
+
+`ENABLE_WEB_READING=false` disables conversational/research page reads; `ENABLE_BROWSER_READING=false` keeps those reads static. Both default to enabled, with rendering requiring either local browser configuration or `BROWSERBASE_API_KEY`. A lookup batch reads at most three pages, and `WEB_READ_DAILY_LIMIT` defaults to 60 page attempts per UTC day (including failures), persisted across restarts. Public page snapshots are cached for five minutes. These reads consume Browserbase browser-session usage when that provider is selected, independently of the search budget. Sessions have a 60-second server timeout, a 45-second client deadline, and explicit release on success/failure. YouTube and PDF attachment handling is unchanged.
 
 ### Optional web search and recent context
 
