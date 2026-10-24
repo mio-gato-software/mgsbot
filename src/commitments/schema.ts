@@ -10,6 +10,7 @@ export const preferenceInputSchema = z.object({
 	domains: z.array(z.string().trim().min(3).max(253)).max(3).default([]),
 });
 export const taskInputSchema = z.object({
+	renewalReminderDays: z.number().int().min(1).max(2).optional(),
 	instruction: text,
 	kind: z.enum(["reminder", "research"]),
 	searchQuery: z.string().trim().min(2).max(300).optional(),
@@ -17,6 +18,12 @@ export const taskInputSchema = z.object({
 	domains: z.array(z.string().trim().min(3).max(253)).max(3).default([]),
 });
 export const actionSchema = z.discriminatedUnion("type", [
+	z.object({
+		type: z.literal("renewal_reminder"),
+		id,
+		days: z.number().int().min(1).max(2).nullable(),
+		evidence: text,
+	}),
 	z.object({
 		type: z.literal("update"),
 		id,
@@ -42,6 +49,7 @@ export const actionSchema = z.discriminatedUnion("type", [
 	}),
 	z.object({
 		type: z.literal("renew"),
+		days: z.number().int().min(1).max(31).optional(),
 		ids: z.array(id).min(1).max(10),
 		evidence: text,
 	}),
@@ -92,6 +100,14 @@ export const taskSchema = taskInputSchema.extend({
 	status: z.enum(["active", "cancelled", "expired", "completed"]),
 	lastOccurrence: occurrenceSchema.optional(),
 	lastMessage: z.string().max(4000).optional(),
+	renewalTermStartedAt: z.number().finite().optional(),
+	renewalNotice: z
+		.object({
+			forExpiresAt: z.number().finite(),
+			at: z.number().finite(),
+			status: z.enum(["sending", "sent", "unknown", "declined"]),
+		})
+		.optional(),
 });
 export type ScheduledTask = z.infer<typeof taskSchema>;
 export type StandingPreference = z.infer<typeof preferenceSchema>;

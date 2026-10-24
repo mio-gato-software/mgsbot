@@ -79,3 +79,41 @@ export function nextOccurrence(
 export function displayTime(timestamp: number, timezone = BOT_TZ): string {
 	return dayjs.utc(timestamp).tz(timezone).format("YYYY-MM-DD HH:mm");
 }
+
+/** Renew from confirmation time; days are local calendar days, capped at one month. */
+export function renewalDeadline(
+	now: number,
+	timezone: string,
+	days?: number,
+): number {
+	const cap = monthDeadline(now, timezone);
+	if (days === undefined) return cap;
+	if (!Number.isInteger(days) || days < 1 || days > 31)
+		throw new Error("Elige entre 1 día y un mes.");
+	const date = dayjs
+		.utc(now)
+		.tz(timezone)
+		.add(days, "day")
+		.format("YYYY-MM-DD HH:mm:ss");
+	const result = dayjs.tz(date, timezone).valueOf();
+	if (result > cap)
+		throw new Error(
+			"El plazo solicitado supera un mes calendario; elige menos días.",
+		);
+	return result;
+}
+
+export function renewalReminderAt(
+	expiresAt: number,
+	days: number,
+	time: string,
+	timezone: string,
+): number {
+	const date = dayjs
+		.utc(expiresAt)
+		.tz(timezone)
+		.subtract(days, "day")
+		.format("YYYY-MM-DD");
+	const due = localTime(date, time, timezone);
+	return Number.isFinite(due) ? due : localTime(date, "12:00", timezone);
+}

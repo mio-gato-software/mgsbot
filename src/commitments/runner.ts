@@ -13,6 +13,7 @@ import { retrieveMemoryContext } from "../prompt/retrieval.ts";
 import { parseResponse } from "../response-plan.ts";
 import { worldContext } from "../world-context.ts";
 import { displayTime, nextOccurrence } from "./calendar.ts";
+import { renewalButtons, runRenewalNotices } from "./renewal.ts";
 import { allowedCommitmentChat, commitmentsEnabled } from "./requests.ts";
 import type { ScheduledTask } from "./schema.ts";
 import { searchWithPreferences } from "./search.ts";
@@ -136,12 +137,12 @@ export async function runScheduledTasks(
 				continue;
 			}
 			if (task.nextRunAt === undefined) {
-				task.status =
-					task.schedule.frequency === "once" &&
-					task.lastOccurrence?.status === "sent"
-						? "completed"
-						: "expired";
-				task.updatedAt = now;
+				// A recurring task still owns its renewal window after its final occurrence.
+				if (task.schedule.frequency === "once") {
+					task.status =
+						task.lastOccurrence?.status === "sent" ? "completed" : "expired";
+					task.updatedAt = now;
+				}
 				continue;
 			}
 			if (task.nextRunAt > now) continue;
@@ -221,7 +222,7 @@ export async function runScheduledTasks(
 				task.updatedAt = services.now();
 				if (task.nextRunAt === undefined)
 					task.status =
-						task.schedule.frequency === "once" ? "completed" : "expired";
+						task.schedule.frequency === "once" ? "completed" : "active";
 				return true;
 			});
 			if (sent) {
@@ -259,7 +260,7 @@ export async function checkAndSendScheduledTasks(
 	isSleeping: () => boolean,
 ): Promise<void> {
 	if (!commitmentsEnabled()) return;
-	await runScheduledTasks({
+	const services: RunnerServices = {
 		store: commitments,
 		now: Date.now,
 		generate: generateScheduledMessage,
@@ -280,5 +281,13 @@ export async function checkAndSendScheduledTasks(
 			await logBotMessage(message);
 			await drainPromotionSpool(task.chatId);
 		},
+	};
+	await runScheduledTasks(services);
+	await runRenewalNotices({
+		...services,
+		deliver: (task, text) =>
+			api.sendMessage(task.chatId, text, {
+				reply_markup: renewalButtons(task),
+			}),
 	});
 }

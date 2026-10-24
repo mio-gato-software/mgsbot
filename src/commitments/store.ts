@@ -5,8 +5,8 @@ import { readStore, writeStore } from "../memory/storage.ts";
 import { memoryPath } from "../runtime-paths.ts";
 import {
 	displayTime,
-	monthDeadline,
 	nextOccurrence,
+	renewalDeadline,
 	scheduleDeadline,
 } from "./calendar.ts";
 import {
@@ -176,7 +176,21 @@ export class CommitmentStore {
 					throw new Error(
 						"No pude verificar la petición original; repítela explícitamente.",
 					);
-				if (action.type === "update") {
+				if (action.type === "renewal_reminder") {
+					const task = owned(action.id);
+					if (
+						!("schedule" in task) ||
+						task.schedule.frequency === "once" ||
+						task.status !== "active" ||
+						task.expiresAt <= now
+					)
+						throw new Error(
+							"El aviso de renovación requiere una tarea recurrente activa.",
+						);
+					task.renewalReminderDays = action.days ?? undefined;
+					task.updatedAt = now;
+					changes.push({ action: "renewal_reminder", ...task });
+				} else if (action.type === "update") {
 					const task = owned(action.id);
 					if (
 						!("schedule" in task) ||
@@ -199,6 +213,13 @@ export class CommitmentStore {
 						expiresLocal: displayTime(task.expiresAt, task.timezone),
 					});
 				} else if (action.type === "schedule") {
+					if (
+						action.task.renewalReminderDays &&
+						action.task.schedule.frequency === "once"
+					)
+						throw new Error(
+							"Los avisos de renovación requieren una tarea recurrente.",
+						);
 					if (action.task.kind === "research" && !action.task.searchQuery)
 						throw new Error(
 							"La investigación necesita una consulta pública concreta, sin datos personales del chat.",
@@ -222,6 +243,14 @@ export class CommitmentStore {
 						);
 					const task = {
 						...action.task,
+						renewalReminderDays:
+							action.task.schedule.frequency === "once"
+								? undefined
+								: (action.task.renewalReminderDays ??
+									state.tasks.find(
+										(t) =>
+											t.id === action.replaceId && t.chatId === request.chatId,
+									)?.renewalReminderDays),
 						domains: checkedDomains(
 							action.task.domains,
 							action.replaceId ? owned(action.replaceId).domains : [],
@@ -279,7 +308,13 @@ export class CommitmentStore {
 								throw new Error(
 									"Solo se renuevan tareas recurrentes. Para un aviso puntual, pide una nueva fecha.",
 								);
-							entry.expiresAt = monthDeadline(now, entry.timezone);
+							entry.expiresAt = renewalDeadline(
+								now,
+								entry.timezone,
+								action.days,
+							);
+							entry.renewalNotice = undefined;
+							entry.renewalTermStartedAt = now;
 							entry.schedule.endDate = undefined;
 							entry.nextRunAt = nextOccurrence(
 								entry.schedule,
