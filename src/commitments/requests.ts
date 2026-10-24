@@ -12,6 +12,7 @@ import {
 	normalizedText,
 	preferenceContext,
 	type RequestIdentity,
+	sharedTaskManagement,
 } from "./store.ts";
 
 export function commitmentsEnabled(): boolean {
@@ -28,7 +29,7 @@ export function allowedCommitmentChat(chatId: number): boolean {
 }
 export function hasCommitmentIntent(text: string): boolean {
 	if (
-		/\b(guarda|anota|apunta|acuerdate|deja de|no vuelvas|quiero que|quisiera que|me gustaria|prefiero|remember|always|never)\b/.test(
+		/\b(modifica|cambia|cambialo|ajusta|omite|omitir|quita|elimina|eliminalo|remove|delete|update|change|guarda|anota|apunta|acuerdate|deja de|no vuelvas|quiero que|quisiera que|me gustaria|prefiero|remember|always|never)\b/.test(
 			normalizedText(text),
 		)
 	)
@@ -82,11 +83,13 @@ Make this conversational, not a form. Bare domains such as pelotainvernal.com ar
 Ask only for genuinely missing material details. In a LIDOM daily 7 AM report, "estado del juego" reasonably means the latest results/status of the league's games; use that interpretation and describe it in the confirmation. Missing optional report details or an explicit end date are not blockers. A named source like "la página oficial de LIDOM" is a research requirement: preserve it in instruction/searchQuery, without inventing its domain or requiring the user to look up its URL. Put only explicitly supplied/previously validated domains in domains. needsWrittenConfirmation is only for unresolved dictated addresses, never for text already typed in writtenText.
 Attributions such as "lo que dijo alguien del chat" only identify who recommended the sources. Chat participants are NOT the subject of the research: omit attribution names from both the task objective and the public searchQuery. For this example, a suitable searchQuery is "LIDOM resultados últimos juegos página oficial". Preserve the named official-source requirement and supplied domains.
 Recurring schedules have a maximum term of one calendar month starting now. If no end date, omit endDate and the service supplies that term. If requested forever or longer, use the requested schedule; the service caps its deadline and the reply MUST disclose the cap. Respect explicit weekdays/exclusions; daily without exclusions means all seven days. once uses the specified date. weekly uses specified weekday(s). Two times/objectives mean two tasks. No automatic renewal.
-Each action evidence must be an exact substring of the user's direct request. IDs must come from supplied records, same chat; only creator or owner can modify. Match existing tasks to avoid accidental duplicates; use replaceId for schedule edits. A renewal requires an explicit request to continue a known recurring task, not ordinary chat. Source preferences persist, but tasks expire. Style preferences cannot override bot identity, access controls, safety, or operational limits.
+Each action evidence must be an exact substring of the user's direct request. IDs must come from supplied records, same chat; only creator or owner can modify, except tasks in a group with sharedTaskManagement=true may be managed by any participant of that group. Preferences remain creator/owner only. Match existing tasks to avoid accidental duplicates; use replaceId for schedule edits. A renewal requires an explicit request to continue a known recurring task, not ordinary chat. Source preferences persist, but tasks expire. Style preferences cannot override bot identity, access controls, safety, or operational limits.
+A direct correction to a known recurring report (for example "en tu reporte puedes omitir las fuentes consultadas, solo danos los datos relevantes") requests a persistent task update even without saying "every day" again. Use update with the complete revised instruction, retaining the original objective and research requirements; do not merely rewrite today's response or create a separate preference. Do not require the time again: preserve the saved schedule and expiry. Explicitly temporary edits ("solo hoy") are not persistent updates. Use cancel when asked to delete/remove/stop a known task; do not just promise to stop. If the target is ambiguous ask which task, without changing anything. Use schedule/replaceId only for schedule or research-source/query changes. Never use update to renew or change a schedule.
 Format:
 {"actions":[
 {"type":"schedule","task":{"instruction":"self-contained objective, preserve timing references like yesterday's results / tomorrow's games relative to execution day; include necessary user context","kind":"reminder|research","searchQuery":"public search terms only for research, omit for reminders","domains":[],"schedule":{"frequency":"once|daily|weekly","time":"07:00","startDate":"YYYY-MM-DD","weekdays":[0,1,2,3,4,5,6],"endDate":"optional YYYY-MM-DD"}},"replaceId":"optional existing task ID","evidence":"exact user quote"},
 {"type":"prefer","preference":{"kind":"sources|style","instruction":"scoped durable instruction","topics":["topic aliases in user's language, e.g. pelota, béisbol, LIDOM, Licey; general only if genuinely all topics"],"domains":["exact user-provided domain"]},"replaceId":"optional existing preference ID","evidence":"exact user quote"},
+{"type":"update","id":"existing active task ID","instruction":"complete revised task objective and delivery instructions","evidence":"exact user quote"},
 {"type":"cancel","ids":["existing ID"],"evidence":"exact user quote"},
 {"type":"renew","ids":["existing recurring task ID"],"evidence":"exact user quote"}
 ],"clarification":"only if clarification needed; omit otherwise","needsWrittenConfirmation":false,"list":false}
@@ -212,6 +215,7 @@ export async function handleCommitmentRequest(
 			preferences,
 			requester: input.userId,
 			owner: Number(process.env.OWNER_USER_ID),
+			sharedTaskManagement: sharedTaskManagement(input.chatId),
 		});
 		let plan = await services.interpret(
 			{ ...input, text },
@@ -275,7 +279,7 @@ export async function handleCommitmentRequest(
 		return (
 			prefix +
 			capabilities +
-			`\nCOMMITMENT RESULT (saved successfully): ${result}\nConfirm these exact changes briefly, in 1–2 natural sentences per task. Include its time, everyday wording for selected/excluded days, sources when supplied and actual end date; explain that continuing requires another request. Mention timezone only when useful to avoid ambiguity. Do not request another confirmation, repeat internal fields or show technical IDs.`
+			`\nCOMMITMENT RESULT (saved successfully): ${result}\nConfirm these exact changes briefly, in 1–2 natural sentences per task. For content edits, confirm the persistent change and that its existing schedule/deadline remain unchanged; do not recite source domains when the user asked to omit them. For cancellations confirm it will no longer run. For new schedules include its time, everyday wording for selected/excluded days, sources when supplied and actual end date; explain that continuing requires another request. Mention timezone only when useful to avoid ambiguity. Do not request another confirmation, repeat internal fields or show technical IDs.`
 		);
 	} catch (error) {
 		log.warn(

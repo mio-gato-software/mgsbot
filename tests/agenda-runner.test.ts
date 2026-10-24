@@ -246,3 +246,43 @@ test("restart after persisted send intent reports uncertainty without replay", a
 	expect(alerts).toHaveLength(1);
 	expect((await store.read()).tasks[0]?.lastOccurrence?.status).toBe("unknown");
 });
+
+test("editing during generation discards the old response and next run uses the saved correction", async () => {
+	now = localTime("2026-10-22", "07:00");
+	await runScheduledTasks({
+		...services,
+		generate: async (task) => {
+			await store.apply(
+				{
+					chatId: -99,
+					userId: 7,
+					userName: "Ejemplo",
+					messageId: 2,
+					text: "Omite fuentes",
+				},
+				interpretationSchema.parse({
+					actions: [
+						{
+							type: "update",
+							id: task.id,
+							instruction: "Resultados de ayer sin enlaces",
+							evidence: "Omite fuentes",
+						},
+					],
+				}),
+			);
+			return "Old response with links";
+		},
+	});
+	expect(delivered).toHaveLength(0);
+	expect((await store.read()).tasks[0]?.lastOccurrence?.status).toBe("failed");
+	now = localTime("2026-10-23", "07:00");
+	await runScheduledTasks({
+		...services,
+		generate: async (task) => {
+			expect(task.instruction).toBe("Resultados de ayer sin enlaces");
+			return "Updated report";
+		},
+	});
+	expect(delivered).toEqual(["Updated report"]);
+});

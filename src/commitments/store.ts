@@ -27,6 +27,13 @@ export interface RequestIdentity {
 	/** Written clarification, required after a dictated/uncertain source. */
 	domainEvidenceText?: string;
 }
+export function sharedTaskManagement(chatId: number): boolean {
+	return (
+		process.env.ALLOW_GROUP_TASK_EDITS === "true" &&
+		chatId === Number(process.env.ALLOWED_GROUP_ID)
+	);
+}
+
 export function containsDomain(text: string, domain: string): boolean {
 	return new RegExp(
 		`(?:^|[^a-z0-9.-])(?:www\\.)?${domain.replaceAll(".", "\\.")}(?=$|[^a-z0-9.-]|\\.(?:\\s|$))`,
@@ -120,7 +127,9 @@ export class CommitmentStore {
 				);
 				if (
 					!entry ||
-					(entry.creatorId !== request.userId && request.userId !== owner)
+					(entry.creatorId !== request.userId &&
+						request.userId !== owner &&
+						!("schedule" in entry && sharedTaskManagement(request.chatId)))
 				)
 					throw new Error(
 						"Solo puedes cambiar tus propias tareas y preferencias; el dueño puede gestionar todas.",
@@ -167,7 +176,29 @@ export class CommitmentStore {
 					throw new Error(
 						"No pude verificar la petición original; repítela explícitamente.",
 					);
-				if (action.type === "schedule") {
+				if (action.type === "update") {
+					const task = owned(action.id);
+					if (
+						!("schedule" in task) ||
+						task.status !== "active" ||
+						task.expiresAt <= now
+					)
+						throw new Error(
+							"Solo se puede editar una tarea activa; renueva explícitamente las vencidas.",
+						);
+					task.instruction = action.instruction;
+					task.updatedAt = now;
+					task.sourceMessageId = request.messageId;
+					task.evidence = action.evidence;
+					// Discard an obsolete generation already in flight, retaining the next occurrence.
+					if (task.lastOccurrence?.status === "preparing")
+						task.lastOccurrence.status = "failed";
+					changes.push({
+						action: "updated",
+						...task,
+						expiresLocal: displayTime(task.expiresAt, task.timezone),
+					});
+				} else if (action.type === "schedule") {
 					if (action.task.kind === "research" && !action.task.searchQuery)
 						throw new Error(
 							"La investigación necesita una consulta pública concreta, sin datos personales del chat.",

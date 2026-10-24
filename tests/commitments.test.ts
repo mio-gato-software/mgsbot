@@ -465,3 +465,148 @@ test("pending details are isolated from other participants and expire", async ()
 	expect(calls).toBe(0);
 	expect((await store.read()).tasks).toHaveLength(0);
 });
+
+test("a report correction persists in place across reloads and a later deletion stops it", async () => {
+	await store.apply(input, plan([action()]));
+	const before = (await store.read()).tasks[0];
+	if (!before) throw new Error("Missing fixture");
+	const correction =
+		"En tu reporte puedes omitir las fuentes consultadas, solo danos los datos relevantes";
+	const instruction = `${before.instruction}. Consulta las fuentes guardadas pero omite nombres, enlaces y comentarios sobre la búsqueda.`;
+	expect(hasCommitmentIntent(correction)).toBe(true);
+	const result = await handleCommitmentRequest(
+		{ ...input, messageId: 2, text: correction },
+		{
+			store,
+			now: () => now,
+			interpret: async () =>
+				plan([
+					{ type: "update", id: before.id, instruction, evidence: correction },
+				]),
+		},
+	);
+	expect(result).toContain("saved successfully");
+	const reloaded = new CommitmentStore(store.path, () => now);
+	const after = (await reloaded.read()).tasks[0];
+	if (!after) throw new Error("Missing fixture");
+	expect(after).toMatchObject({
+		id: before.id,
+		instruction,
+		schedule: before.schedule,
+		domains: before.domains,
+		searchQuery: before.searchQuery,
+		expiresAt: before.expiresAt,
+		nextRunAt: before.nextRunAt,
+		creatorId: before.creatorId,
+	});
+	expect((await reloaded.read()).tasks).toHaveLength(1);
+	await reloaded.apply(
+		{ ...input, messageId: 3, text: "Elimina el reporte diario" },
+		plan([
+			{
+				type: "cancel",
+				ids: [before.id],
+				evidence: "Elimina el reporte diario",
+			},
+		]),
+	);
+	expect((await store.read()).tasks[0]?.status).toBe("cancelled");
+});
+
+test("shared task management is opt-in, scoped to the allowed group and excludes personal preferences", async () => {
+	const previous = process.env.ALLOW_GROUP_TASK_EDITS;
+	try {
+		delete process.env.ALLOW_GROUP_TASK_EDITS;
+		await store.apply(input, plan([action()]));
+		const task = (await store.read()).tasks[0];
+		if (!task) throw new Error("Missing fixture");
+		const request = {
+			...input,
+			userId: 8,
+			messageId: 2,
+			text: "Omite enlaces en el reporte",
+		};
+		const update = plan([
+			{
+				type: "update",
+				id: task.id,
+				instruction: `${task.instruction}. Omite enlaces.`,
+				evidence: request.text,
+			},
+		]);
+		await expect(store.apply(request, update)).rejects.toThrow("propias");
+		process.env.ALLOW_GROUP_TASK_EDITS = "true";
+		await expect(
+			store.apply({ ...request, chatId: -100 }, update),
+		).rejects.toThrow();
+		await store.apply(request, update);
+		expect((await store.read()).tasks[0]?.instruction).toContain(
+			"Omite enlaces",
+		);
+		await store.apply(
+			{ ...input, messageId: 3, text: "Prefiero respuestas breves" },
+			plan([
+				{
+					type: "prefer",
+					evidence: "Prefiero respuestas breves",
+					preference: {
+						kind: "style",
+						instruction: "Respuestas breves",
+						topics: ["general"],
+					},
+				},
+			]),
+		);
+		const pref = (await store.read()).preferences[0];
+		if (!pref) throw new Error("Missing fixture");
+		await expect(
+			store.apply(
+				{ ...request, messageId: 4, text: "borra" },
+				plan([{ type: "cancel", ids: [pref.id], evidence: "borra" }]),
+			),
+		).rejects.toThrow("propias");
+		await store.apply(
+			{ ...request, messageId: 5, text: "borra" },
+			plan([{ type: "cancel", ids: [task.id], evidence: "borra" }]),
+		);
+		expect((await store.read()).tasks[0]?.status).toBe("cancelled");
+	} finally {
+		if (previous === undefined) delete process.env.ALLOW_GROUP_TASK_EDITS;
+		else process.env.ALLOW_GROUP_TASK_EDITS = previous;
+	}
+});
+
+test("content edits reject expired tasks and unverified evidence without writing", async () => {
+	await store.apply(input, plan([action()]));
+	const task = (await store.read()).tasks[0];
+	if (!task) throw new Error("Missing fixture");
+	const before = await readFile(store.path, "utf8");
+	await expect(
+		store.apply(
+			{ ...input, messageId: 2 },
+			plan([
+				{
+					type: "update",
+					id: task.id,
+					instruction: "Otra cosa",
+					evidence: "invented",
+				},
+			]),
+		),
+	).rejects.toThrow();
+	now = task.expiresAt + 1;
+	await expect(
+		store.apply(
+			{ ...input, messageId: 3 },
+			plan([
+				{
+					type: "update",
+					id: task.id,
+					instruction: "Otra cosa",
+					evidence: input.text,
+				},
+			]),
+		),
+	).rejects.toThrow("activa");
+	expect(await readFile(store.path, "utf8")).toBe(before);
+});
