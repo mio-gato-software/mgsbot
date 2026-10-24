@@ -1,6 +1,6 @@
 # Weather queries and location configuration
 
-Available from [v1.0.66](https://github.com/mio-gato-software/mgsbot/releases/tag/v1.0.66), the bot can request current conditions and hourly forecasts from [Open-Meteo](https://open-meteo.com/en/docs), using its [geocoding API](https://open-meteo.com/en/docs/geocoding-api) to resolve place names. Queries work with every chat provider and need neither Brave nor Browserbase nor a new API key. They are enabled by default; set `ENABLE_WEATHER_LOOKUP=false` to disable conversational queries. Ambient weather for conversation and image context remains available separately.
+Available from [v1.0.66](https://github.com/mio-gato-software/mgsbot/releases/tag/v1.0.66), the bot can request current conditions and hourly forecasts from [Open-Meteo](https://open-meteo.com/en/docs), using its [geocoding API](https://open-meteo.com/en/docs/geocoding-api) to resolve place names. Queries work with every chat provider and need neither Brave nor Browserbase nor a new API key. They are enabled by default; set `ENABLE_WEATHER_LOOKUP=false` to disable conversational and scheduled research queries. Ambient weather for conversation and image context remains available separately.
 
 ## Installation reference
 
@@ -71,3 +71,7 @@ This tool runs on incoming conversational turns, including simple assistant mode
 Geocodes are cached in memory for 24 hours and forecasts for 15 minutes, each bounded to 100 entries. Forecasts are refreshed at the destination's date boundary to preserve the seven-day horizon. Both caches reset on restart. Requests use fixed Open-Meteo endpoints, validated parameters, a 512 KB response limit, 10-second per-request signals and a 25-second total lookup deadline. There are no automatic weather-query retries. Ambient weather retains its existing cache by part of day in `memory/daily-weather.json`.
 
 Unavailable services, invalid responses and unresolved locations are passed to the final generation as missing evidence. The bot is instructed to report the limitation, link Open-Meteo for successful findings, and never substitute the reference city's ambient conditions for the requested forecast.
+
+## Scheduled reports
+
+Research tasks share the bounded lookup loop with chat turns: up to four lookup batches, with a time and evidence budget. When requested, the model resolves current event locations and start times and calls the hourly forecast service. Scheduled lookups require an explicit location rather than silently using the installation reference. Unknown venues or postponed fixtures without a new confirmed start cannot receive a reliable game-time forecast. Unavailable probability is reported as unknown. Source-omission preferences still apply, and no intermediate lookup notices are sent to the chat. Personal reminders do not use this loop.

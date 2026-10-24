@@ -234,6 +234,7 @@ export async function generateWithWebSearch(
 		weather?: ConversationWeatherContext;
 		announce: (text: string) => Promise<void>;
 		useCachedContext?: boolean;
+		delivery?: "scheduled";
 	},
 	timing = {
 		now: () => performance.now(),
@@ -315,7 +316,10 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 			(!canSearch && canRead
 				? "Web search is disabled; WEB_READ is available.\n"
 				: "") +
-			LOOKUP_INSTRUCTIONS;
+			LOOKUP_INSTRUCTIONS +
+			(input.delivery === "scheduled"
+				? "\nSCHEDULED DELIVERY OVERRIDE: Produce only the requested report, without lookup announcements or offers to continue. Follow the saved task and style preferences about source attribution: when sources are omitted, omit all source names and URLs even for weather, despite the general citation instructions above. Still disclose material missing evidence. Tool blocks are internal only.\n"
+				: "");
 
 		while (lookups < MAX_LOOKUPS) {
 			if (planningTime() <= 0) {

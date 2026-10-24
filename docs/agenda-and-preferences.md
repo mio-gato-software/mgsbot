@@ -39,7 +39,7 @@ Delivery uses the configured identity, adaptive personality and retrieved contex
 
 Standing preferences are matched by normalized topic aliases supplied during extraction. They are scoped user preferences subordinate to bot rules; they do not grant permission for unsolicited messages. A tone preference is not a schedule. Names, links and topic aliases should be checked in the natural confirmation; topic matching is deliberately bounded and does not infer every possible synonym.
 
-Scheduled research uses the web evidence path above. The [Open-Meteo weather tool](weather.md) is available during incoming conversational turns and is not invoked by this scheduler. Scheduling weather research does not automatically switch that task to structured Open-Meteo forecasts.
+Scheduled research uses the web evidence path above, then the bounded shared lookup loop, including the [Open-Meteo weather tool](weather.md). The model can resolve fixture cities and exact local start times from current evidence and request hourly forecasts when the task asks for weather. No keyword gate selects this behavior. Scheduled weather requests require an explicit location; missing venues, unconfirmed rescheduling, unavailable probabilities and forecast limits must be reported honestly. Half-hour starts retain their exact time and use labeled surrounding forecast hours. Rain forecasts do not establish a cancellation or its likelihood. Source-omission preferences apply to weather too; internal lookup notices are not sent. Personal reminders do not enter the research loop.
 
 ## Validation
 
