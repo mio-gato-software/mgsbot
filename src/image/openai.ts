@@ -7,6 +7,7 @@ import {
 	resolveOpenAIImageSize,
 } from "../ai/platform.ts";
 import { log } from "../logger.ts";
+import { characterReferencePrompt } from "./prompts.ts";
 import type { ImageProvider } from "./types.ts";
 
 function mimeFromPath(filePath: string): string {
@@ -51,8 +52,8 @@ export class OpenAIImageProvider implements ImageProvider {
 		);
 
 		if (referenceImagePath) {
-			return this.editImage(
-				`This is a reference image of a character in cartoon illustration style. Generate a new image of this same character (same face, body features) in the SAME cartoon/illustrated art style (flat colors, clean linework, digital illustration) but with a completely different outfit, pose, and setting. The scene: ${prompt}. The setting and atmosphere should feel natural for the described scene. IMPORTANT: Maintain the cartoon illustration style throughout. Do NOT render any text, clocks, timestamps, or time indicators in the image. Only the character's identity should match the reference — everything else should be new and fit the scene.`,
+			return this.requestImageEdit(
+				characterReferencePrompt(prompt),
 				referenceImagePath,
 			);
 		}
@@ -71,6 +72,17 @@ export class OpenAIImageProvider implements ImageProvider {
 	}
 
 	async editImage(prompt: string, imagePath: string): Promise<Buffer> {
+		log.debug("[image:openai:edit] Prompt:", prompt.slice(0, 200));
+		return this.requestImageEdit(
+			`Edit this image according to the following instruction: ${prompt}. Preserve the overall composition and subject of the original image unless the instruction explicitly asks otherwise. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
+			imagePath,
+		);
+	}
+
+	private async requestImageEdit(
+		prompt: string,
+		imagePath: string,
+	): Promise<Buffer> {
 		if (!process.env.OPENAI_API_KEY) {
 			throw new Error("OPENAI_API_KEY is required for OpenAI image editing");
 		}
@@ -78,7 +90,6 @@ export class OpenAIImageProvider implements ImageProvider {
 		const model = resolveOpenAIImageModel();
 		const size = resolveOpenAIImageSize();
 		const quality = resolveOpenAIImageQuality();
-		log.debug("[image:openai:edit] Prompt:", prompt.slice(0, 200));
 
 		const image = await toFile(fs.createReadStream(imagePath), "image.png", {
 			type: mimeFromPath(imagePath),
@@ -87,7 +98,7 @@ export class OpenAIImageProvider implements ImageProvider {
 			{
 				model,
 				image,
-				prompt: `Edit this image according to the following instruction: ${prompt}. Preserve the overall composition and subject of the original image unless the instruction explicitly asks otherwise. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
+				prompt,
 				size: size as "1024x1024",
 				quality: quality as "high",
 			},

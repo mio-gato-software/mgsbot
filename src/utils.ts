@@ -19,6 +19,16 @@ import {
 } from "./operation-deadline.ts";
 import { withPersistenceLock } from "./persistence-coordination.ts";
 
+/** Bound UTF-16 length without cutting a supplementary Unicode character in half. */
+export function truncateText(text: string, maxChars: number): string {
+	const end = Math.min(text.length, Math.max(0, Math.trunc(maxChars)));
+	const last = text.charCodeAt(end - 1);
+	const next = text.charCodeAt(end);
+	const splitsSurrogatePair =
+		last >= 0xd800 && last <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+	return text.slice(0, splitsSurrogatePair ? end - 1 : end);
+}
+
 /**
  * Write a file atomically: write to a .tmp file first, then rename.
  * Prevents data loss from truncated writes on crash.
@@ -66,7 +76,8 @@ export function atomicWriteFileSync(
 }
 
 /**
- * Retry a function on 429 (rate limit), 503 (service unavailable), or timeout errors.
+ * Retry transient HTTP failures and timeouts within the shared retry budget.
+ * Providers can expose a numeric status; legacy errors retain 429/503 handling.
  * Uses exponential backoff.
  */
 export async function withRetry<T>(
@@ -91,8 +102,17 @@ export async function withRetry<T>(
 				if (attempt === maxAttempts) throw error;
 				const message = error instanceof Error ? error.message : String(error);
 				const isTimeout = isTimeoutError(error);
+				const status =
+					error instanceof Error &&
+					"status" in error &&
+					typeof error.status === "number"
+						? error.status
+						: undefined;
 				const isRetryable =
-					message.includes("429") || message.includes("503") || isTimeout;
+					isTimeout ||
+					(status !== undefined
+						? [429, 500, 502, 503, 504].includes(status)
+						: message.includes("429") || message.includes("503"));
 				if (!isRetryable) throw error;
 				const delay = baseDelayMs * 2 ** (attempt - 1);
 				await abortableDelay(delay);

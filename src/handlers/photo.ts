@@ -54,6 +54,7 @@ export async function handlePhoto(
 	// Stopped right before processConversation, which runs its own
 	// indicator (and may switch it to upload_photo for edit requests).
 	const receiving = startChatAction(ctx, "typing");
+	let responding = false;
 	try {
 		const { filePath, mimeType } = await downloadImageByFileId(
 			ctx.api,
@@ -93,6 +94,7 @@ export async function handlePhoto(
 			if (safeCaption)
 				content += `\n\n${sanitizeBracketText(userName)}'s message: "${safeCaption}"`;
 			receiving.stop();
+			responding = true;
 			await processConversationAndTrackGroupContinuation(
 				ctx,
 				content,
@@ -113,9 +115,13 @@ export async function handlePhoto(
 		log.error("[photo handler] Error:", error);
 		await ctx
 			.reply(
-				loadConfig().language === "en"
-					? "I couldn't read that image. Reply to the original image to try again."
-					: "No pude leer esa imagen. Responde a la imagen original para intentarlo de nuevo.",
+				responding
+					? loadConfig().language === "en"
+						? "I couldn't complete the response to that image. Reply to the original image to try again."
+						: "No pude completar la respuesta a esa imagen. Responde a la imagen original para intentarlo de nuevo."
+					: loadConfig().language === "en"
+						? "I couldn't read that image. Reply to the original image to try again."
+						: "No pude leer esa imagen. Responde a la imagen original para intentarlo de nuevo.",
 			)
 			.catch(() => {});
 		if (isDev)

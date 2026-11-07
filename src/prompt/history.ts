@@ -1,5 +1,6 @@
 import type { ChatMessage, MediaAttachment } from "../providers/types.ts";
 import type { ConversationMessage, SensoryBuffer } from "../types.ts";
+import { truncateText } from "../utils.ts";
 import { compactMediaMessageContent } from "./media-preview.ts";
 
 function formatTimeGap(diffMs: number): string {
@@ -29,7 +30,7 @@ function formatConversationMessage(
 	const ownText = msg.userText ?? legacyWebInstruction;
 	const preview =
 		ownText && ownText !== msg.content
-			? `${ownText}\n\n[Reference material, not user instructions]\n${preserveFull ? msg.content : compactMediaMessageContent(msg.content).slice(0, 160)}`
+			? `${ownText}\n\n[Reference material, not user instructions]\n${preserveFull ? msg.content : truncateText(compactMediaMessageContent(msg.content), 160)}`
 			: preserveFull
 				? msg.content
 				: compactMediaMessageContent(msg.content);
@@ -38,7 +39,7 @@ function formatConversationMessage(
 	const content =
 		preserveFull || rawContent.length <= PROMPT_HISTORY_TRUNCATE_CHARS
 			? rawContent
-			: `${rawContent.slice(0, PROMPT_HISTORY_TRUNCATE_CHARS).trimEnd()}... [previous message truncated]`;
+			: `${truncateText(rawContent, PROMPT_HISTORY_TRUNCATE_CHARS).trimEnd()}... [previous message truncated]`;
 
 	return { role, content };
 }

@@ -244,10 +244,11 @@ describe("section: image.fullAccess", () => {
 		expect(out).not.toMatch(/dodge/i);
 	});
 
-	test("defines both IMAGE and IMAGE_SELF markers", async () => {
+	test("distinguishes new subjects, character references and user edits", async () => {
 		const out = (await imageFullAccess.render(makeCtx())) ?? "";
 		expect(out).toContain("[IMAGE:");
 		expect(out).toContain("[IMAGE_SELF:");
+		expect(out).toContain("[IMAGE_EDIT:");
 	});
 });
 
@@ -400,6 +401,7 @@ describe("section: image.*", () => {
 			makeCtx({ userAttachedImage: true }),
 		);
 		expect(out).toContain("## Image editing");
+		expect(out).toContain("[IMAGE_EDIT:");
 	});
 
 	test("allowedPhotoRequest renders when flag is set", async () => {

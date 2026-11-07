@@ -104,7 +104,10 @@ test("failed voice delivery cleans up its file and propagates a failed fallback"
 	}
 });
 test("an image-only reply counts as delivery and carries a memory description", async () => {
-	const input = { ...options("[IMAGE: a cat]"), userImagePath: "fixture.png" };
+	const input = {
+		...options("[IMAGE_EDIT: add a hat]"),
+		userImagePath: "fixture.png",
+	};
 	let photos = 0;
 	input.ctx.replyWithPhoto = async () => {
 		photos++;
@@ -116,5 +119,92 @@ test("an image-only reply counts as delivery and carries a memory description", 
 	});
 	expect(photos).toBe(1);
 	expect(result?.sent).toBe(true);
-	expect(result?.cleanedText).toContain("a cat");
+	expect(result?.cleanedText).toContain("add a hat");
+});
+
+for (const [marker, userImagePath, expected] of [
+	["IMAGE_SELF", "recent-food.png", "character"],
+	["IMAGE_SELF", undefined, "character"],
+	["IMAGE", "recent-food.png", "new"],
+	["IMAGE_EDIT", "recent-food.png", "edit"],
+	["IMAGE_EDIT", undefined, "none"],
+] as const) {
+	test(`${marker} with ${userImagePath ? "a recent image" : "no user image"} uses the model-selected reference`, async () => {
+		const input = {
+			...options(`[${marker}: winter scene]`),
+			userImagePath,
+			shouldGenImage: true,
+		};
+		const calls: Array<{ action: string; reference?: string }> = [];
+		input.ctx.replyWithPhoto = async () => ({}) as never;
+		input.buffer.chatId = 820010;
+		await sendResponse(input, {
+			...defaultResponseDependencies,
+			baseImage: () => "character-reference.jpg",
+			fullAccess: () => true,
+			generateImage: async (_prompt, reference) => {
+				calls.push({ action: "generate", reference });
+				return Buffer.from("generated image");
+			},
+			editImage: async (_prompt, reference) => {
+				calls.push({ action: "edit", reference });
+				return Buffer.from("edited image");
+			},
+		});
+		expect(calls).toEqual(
+			expected === "none"
+				? []
+				: [
+						{
+							action: expected === "edit" ? "edit" : "generate",
+							reference:
+								expected === "character"
+									? "character-reference.jpg"
+									: expected === "edit"
+										? "recent-food.png"
+										: undefined,
+						},
+					],
+		);
+	});
+}
+
+test("a self image without a character reference never substitutes a user photo or an invented identity", async () => {
+	const calls: string[] = [];
+	await sendResponse(
+		{
+			...options("[IMAGE_SELF: winter scene]"),
+			shouldGenImage: true,
+			userImagePath: "food.png",
+		},
+		{
+			...defaultResponseDependencies,
+			baseImage: () => null,
+			fullAccess: () => true,
+			generateImage: async () => {
+				calls.push("generate");
+				return Buffer.from("image");
+			},
+			editImage: async () => {
+				calls.push("edit");
+				return Buffer.from("image");
+			},
+		},
+	);
+	expect(calls).toEqual([]);
+});
+
+test("explicit edit markers are parsed and stripped even when image delivery is disabled", () => {
+	expect(
+		parseResponse("Aquí [IMAGE_EDIT: add a hat]", {
+			allowImages: true,
+			allowSpeech: false,
+		}).image,
+	).toEqual({ prompt: "add a hat", self: false, edit: true });
+	expect(
+		parseResponse("Aquí [IMAGE_EDIT: add a hat]", {
+			allowImages: false,
+			allowSpeech: false,
+		}),
+	).toMatchObject({ text: "Aquí", image: undefined });
 });

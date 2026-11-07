@@ -1,3 +1,5 @@
+import { truncateText } from "../utils.ts";
+
 /** Prompt-only previews. Durable sensory/spool messages keep complete extraction input. */
 const MEDIA_MESSAGE_COMPACT_TARGET_CHARS = 240;
 const MEDIA_MESSAGE_PATTERNS = [
@@ -38,9 +40,10 @@ export function compactMediaMessageContent(content: string): string {
 			return `${prefix} ${body}`;
 		}
 
-		const truncated = body
-			.slice(0, MEDIA_MESSAGE_COMPACT_TARGET_CHARS)
-			.trimEnd();
+		const truncated = truncateText(
+			body,
+			MEDIA_MESSAGE_COMPACT_TARGET_CHARS,
+		).trimEnd();
 		return `${prefix} [${pattern.label}] ${truncated}...`;
 	}
 
