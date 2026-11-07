@@ -1,0 +1,4 @@
+/** The reference defines identity and rendering style, rather than a fixed composition. */
+export function characterReferencePrompt(scene: string): string {
+	return `Use the attached image as the identity reference for the subject. Create a new image of the SAME subject, preserving their recognizable facial features, complexion, hair, and body characteristics. Preserve the reference's visual style and medium: a photographic reference should remain photographic, and an illustrated reference should retain its illustration style. Follow the requested outfit, pose, setting, framing, and lighting for the NEW scene instead of copying the reference composition, outfit, or background. New scene: ${scene}. Keep the subject's identity consistent with the reference. Do NOT render any text, clocks, timestamps, or time indicators in the image.`;
+}

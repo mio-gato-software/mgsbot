@@ -3,15 +3,18 @@ import { AlibabaChatProvider } from "../src/providers/alibaba.ts";
 import { AnthropicChatProvider } from "../src/providers/anthropic.ts";
 import { AzureChatProvider } from "../src/providers/azure.ts";
 import { DeepSeekChatProvider } from "../src/providers/deepseek.ts";
+import { FalChatProvider } from "../src/providers/fal.ts";
 import { FireworksChatProvider } from "../src/providers/fireworks.ts";
 import { GeminiChatProvider } from "../src/providers/gemini.ts";
 import { OpenAIChatProvider } from "../src/providers/openai.ts";
 import { OpenRouterChatProvider } from "../src/providers/openrouter.ts";
+import { withRetry } from "../src/utils.ts";
 
 const originalFetch = globalThis.fetch;
 const settings = {
 	GOOGLE_API_KEY: "test-google",
 	OPENAI_API_KEY: "test-openai",
+	FAL_API_KEY: "test-fal",
 	DEEPSEEK_API_KEY: "test-deepseek",
 	ANTHROPIC_API_KEY: "test-anthropic",
 	DASHSCOPE_API_KEY: "test-alibaba",
@@ -72,6 +75,50 @@ const responses = {
 	],
 	usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
 };
+
+test("fal recovers from a transient 500 using the shared retry budget", async () => {
+	let attempts = 0;
+	globalThis.fetch = (async () => {
+		attempts++;
+		return attempts === 1
+			? Response.json({ detail: "Internal Server Error" }, { status: 500 })
+			: Response.json({ output: "Answer" });
+	}) as unknown as typeof fetch;
+	const provider = new FalChatProvider("test-model");
+	expect(
+		await withRetry(() => provider.generateResponse("System", history), 3, 1),
+	).toBe("Answer");
+	expect(attempts).toBe(2);
+});
+
+test("fal preserves permanent HTTP status and does not retry authentication failures", async () => {
+	intercept({ detail: "Unauthorized" }, 401);
+	await expect(
+		new FalChatProvider("test-model").generateResponse("System", history),
+	).rejects.toMatchObject({ status: 401 });
+	expect(calls).toHaveLength(1);
+});
+
+test("fal sends well-formed Unicode while preserving complete emojis and original inputs", async () => {
+	intercept({ output: "Answer" });
+	const system = "System \ud83d";
+	const messages = [
+		{ role: "user" as const, content: "Photo 😀 \ud83d" },
+		{ role: "assistant" as const, content: "Previous \ude00" },
+	];
+	await new FalChatProvider("test-model").generateResponse(system, messages);
+	const request = calls[0];
+	if (!request) throw new Error("missing request");
+	const payload = (await request.json()) as {
+		system_prompt: string;
+		prompt: string;
+	};
+	expect(payload.system_prompt.isWellFormed()).toBe(true);
+	expect(payload.prompt.isWellFormed()).toBe(true);
+	expect(payload.prompt).toContain("Photo 😀");
+	expect(system).toBe("System \ud83d");
+	expect(messages[0]?.content).toBe("Photo 😀 \ud83d");
+});
 
 for (const [Provider, key, endpoint, extra] of [
 	[

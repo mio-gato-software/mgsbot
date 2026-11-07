@@ -13,6 +13,7 @@ import { type MockContextOptions, makeMockContext } from "./telegram-mock.ts";
 const downloads: string[] = [];
 const generated: ChatMessage[][] = [];
 const files: string[] = [];
+const contexts: ReturnType<typeof makeMockContext>[] = [];
 globalThis.fetch = Object.assign(
 	async (url: string | URL | Request) => {
 		assert(
@@ -25,7 +26,9 @@ globalThis.fetch = Object.assign(
 ) as typeof fetch;
 
 function context(options: MockContextOptions) {
-	const { ctx } = makeMockContext(options);
+	const result = makeMockContext(options);
+	contexts.push(result);
+	const { ctx } = result;
 	Object.defineProperty(ctx, "api", {
 		value: {
 			token: "test-token",
@@ -133,4 +136,42 @@ assert.equal(
 );
 assert.equal(new Set(files).size, files.length);
 for (const path of files) assert.equal(await Bun.file(path).exists(), false);
+
+const originalError = console.error;
+const errors: unknown[][] = [];
+console.error = (...args) => errors.push(args);
+try {
+	services.generate = async () => {
+		throw new Error("fal provider unavailable");
+	};
+	await handlePhoto(
+		context({
+			chatId: 990006,
+			photo: [{ file_id: "chat-failure", width: 10, height: 10 }],
+		}),
+		"test-token",
+	);
+	const responseFailure = contexts.at(-1)?.spies.replies;
+	assert.equal(responseFailure?.length, 1);
+	assert(responseFailure?.[0]?.text.includes("completar la respuesta"));
+	assert(!responseFailure?.[0]?.text.includes("leer esa imagen"));
+
+	globalThis.fetch = Object.assign(
+		async () => new Response("unavailable", { status: 500 }),
+		{ preconnect() {} },
+	) as typeof fetch;
+	await handlePhoto(
+		context({
+			chatId: 990007,
+			photo: [{ file_id: "download-failure", width: 10, height: 10 }],
+		}),
+		"test-token",
+	);
+	const readFailure = contexts.at(-1)?.spies.replies;
+	assert.equal(readFailure?.length, 1);
+	assert(readFailure?.[0]?.text.includes("leer esa imagen"));
+	assert.equal(errors.length, 2);
+} finally {
+	console.error = originalError;
+}
 console.log("IMAGE_PROBE_OK");

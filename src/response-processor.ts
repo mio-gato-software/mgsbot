@@ -18,6 +18,7 @@ import type { SensoryBuffer } from "./types.ts";
 export {
 	buildReplyOptions,
 	extractQuoteReplyMarker,
+	IMAGE_EDIT_MARKER_REGEX,
 	IMAGE_MARKER_REGEX,
 	IMAGE_SELF_MARKER_REGEX,
 	QUOTE_REPLY_MARKER,
@@ -128,16 +129,26 @@ export async function sendResponse(
 	if (plan.image) {
 		const base = dependencies.baseImage();
 		const fullAccess = dependencies.fullAccess();
-		if (userImagePath || base || fullAccess) {
+		const userEdit = plan.image.edit === true;
+		const reference =
+			plan.image.self || !fullAccess ? (base ?? undefined) : undefined;
+		const available = userEdit
+			? !!userImagePath
+			: plan.image.self
+				? !!base
+				: !!base || fullAccess;
+		if (available) {
 			let image: Uint8Array | undefined;
 			chatAction?.update("upload_photo");
 			try {
-				image = userImagePath
-					? await dependencies.editImage(plan.image.prompt, userImagePath)
-					: await dependencies.generateImage(
-							plan.image.prompt,
-							!fullAccess || plan.image.self ? (base ?? undefined) : undefined,
-						);
+				log.debug(
+					"[image] Reference:",
+					userEdit ? "user edit" : reference ? "character identity" : "none",
+				);
+				image =
+					userEdit && userImagePath
+						? await dependencies.editImage(plan.image.prompt, userImagePath)
+						: await dependencies.generateImage(plan.image.prompt, reference);
 			} catch (error) {
 				log.error("[image] Generation failed:", error);
 			}
@@ -153,8 +164,8 @@ export async function sendResponse(
 				);
 				if (plan.text.length > 1000)
 					await sendTextReply(ctx, plan.text, replyOptions);
-				const consumeWeekly = !userImagePath && shouldGenImage;
-				const consumeRequest = !userImagePath && allowPhotoRequest;
+				const consumeWeekly = !userEdit && shouldGenImage;
+				const consumeRequest = !userEdit && allowPhotoRequest;
 				if (consumeWeekly || consumeRequest) {
 					await withChatLock(buffer.chatId, async () => {
 						const fresh = await loadSensory(buffer.chatId);
