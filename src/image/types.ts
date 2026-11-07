@@ -1,7 +1,16 @@
+export interface ImageGenerationOptions {
+	/** Report illustrations may need labels and exact numeric tables. */
+	allowText?: boolean;
+}
+
 export interface ImageProvider {
 	readonly name: string;
 	isAvailable(): boolean;
-	generateImage(prompt: string, referenceImagePath?: string): Promise<Buffer>;
+	generateImage(
+		prompt: string,
+		referenceImagePath?: string,
+		options?: ImageGenerationOptions,
+	): Promise<Buffer>;
 	/**
 	 * Edit a user-provided image according to the prompt. Differs from
 	 * generateImage(prompt, ref) in intent: edit applies the prompt as a

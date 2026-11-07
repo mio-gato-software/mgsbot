@@ -13,7 +13,11 @@ import { generateResponse } from "./ai/core.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { handleCommitmentRequest } from "./commitments/requests.ts";
-import { generateScheduledMessage } from "./commitments/runner.ts";
+import {
+	generateScheduledDelivery,
+	type ScheduledMessage,
+} from "./commitments/runner.ts";
+import type { ScheduledTask } from "./commitments/schema.ts";
 import { loadConfig } from "./config.ts";
 import {
 	checkAndCancelResolvedFollowUps,
@@ -100,7 +104,7 @@ export interface ConversationDependencies {
 	web: ConversationWebContext;
 	weather: ConversationWeatherContext;
 	commitments: typeof handleCommitmentRequest;
-	scheduled: typeof generateScheduledMessage;
+	scheduled: (task: ScheduledTask) => Promise<ScheduledMessage | string>;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
 	generate: generateResponse,
@@ -111,7 +115,7 @@ export const defaultConversationDependencies: ConversationDependencies = {
 	web: worldContext,
 	weather: weatherService,
 	commitments: handleCommitmentRequest,
-	scheduled: generateScheduledMessage,
+	scheduled: generateScheduledDelivery,
 };
 
 export async function processConversation(
@@ -294,6 +298,7 @@ export async function processConversation(
 		}
 
 		let taskResponse: string | undefined;
+		let taskDelivery: ScheduledMessage | undefined;
 		const commitmentContext =
 			userId &&
 			ctx.message &&
@@ -324,7 +329,12 @@ export async function processConversation(
 							},
 							run: async (task) => {
 								try {
-									taskResponse = await dependencies.scheduled(task);
+									const delivery = await dependencies.scheduled(task);
+									taskDelivery =
+										typeof delivery === "string"
+											? { text: delivery }
+											: delivery;
+									taskResponse = taskDelivery.text;
 								} catch {
 									currentOperationSignal()?.throwIfAborted();
 									taskResponse =
@@ -373,6 +383,7 @@ export async function processConversation(
 		result = await dependencies.send({
 			ctx,
 			responseText,
+			preparedImage: taskDelivery?.image,
 			shouldGenImage: taskResponse === undefined && shouldGenImage,
 			allowPhotoRequest,
 			buffer,

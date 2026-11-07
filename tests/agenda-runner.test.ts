@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { localTime } from "../src/commitments/calendar.ts";
 import {
+	deliverScheduledMessage,
 	type RunnerServices,
 	runScheduledTasks,
 } from "../src/commitments/runner.ts";
@@ -53,9 +54,9 @@ beforeEach(async () => {
 	services = {
 		store,
 		now: () => now,
-		generate: async () => "Ya están los resultados de anoche.",
+		generate: async () => ({ text: "Ya están los resultados de anoche." }),
 		deliver: async (_chat, text) => {
-			delivered.push(text);
+			delivered.push(text.text);
 		},
 		record: async () => {},
 		alert: async (text) => {
@@ -79,6 +80,67 @@ test("due delivery happens once across concurrent ticks and restart", async () =
 	const task = (await store.read()).tasks[0];
 	expect(task?.lastOccurrence?.status).toBe("sent");
 	expect(task?.nextRunAt).toBe(localTime("2026-10-23", "07:00"));
+});
+
+test("photo plus long report persists send intent before either send and never replays a partial delivery", async () => {
+	now = localTime("2026-10-22", "07:00");
+	let photos = 0;
+	let texts = 0;
+	const api = {
+		sendPhoto: async () => {
+			const persisted = JSON.parse(await Bun.file(store.path).text());
+			expect(persisted.data.tasks[0].lastOccurrence.status).toBe("sending");
+			photos++;
+			return {} as never;
+		},
+		sendMessage: async () => {
+			texts++;
+			throw new Error("Outcome uncertain after photo sent");
+		},
+	};
+	const run = {
+		...services,
+		generate: async () => ({
+			text: "x".repeat(1200),
+			image: Buffer.from("photo"),
+		}),
+		deliver: (
+			chatId: number,
+			message: Parameters<typeof deliverScheduledMessage>[2],
+		) => deliverScheduledMessage(api, chatId, message),
+	};
+	await runScheduledTasks(run);
+	await runScheduledTasks({
+		...run,
+		store: new CommitmentStore(store.path, () => now),
+	});
+	expect(photos).toBe(1);
+	expect(texts).toBe(1);
+	expect((await store.read()).tasks[0]?.lastOccurrence?.status).toBe("unknown");
+	expect(alerts).toHaveLength(1);
+});
+
+test("an unfinished image at eleven minutes stays claimed and its completed delivery is recorded as text", async () => {
+	now = localTime("2026-10-22", "07:00");
+	await runScheduledTasks({
+		...services,
+		generate: async () => {
+			now += 11 * 60000;
+			await runScheduledTasks(services);
+			expect((await store.read()).tasks[0]?.lastOccurrence?.status).toBe(
+				"preparing",
+			);
+			return { text: "Tabla de hoy", image: Buffer.from("photo") };
+		},
+		deliver: async (_chatId, message) => {
+			expect(message.image).toEqual(Buffer.from("photo"));
+			delivered.push(message.text);
+		},
+	});
+	expect(delivered).toEqual(["Tabla de hoy"]);
+	expect((await store.read()).tasks[0]?.lastMessage).toBe("Tabla de hoy");
+	expect((await store.read()).tasks[0]?.lastOccurrence?.status).toBe("sent");
+	expect(alerts).toHaveLength(0);
 });
 
 test("outage skips stale runs instead of flooding, expiry prevents any delivery", async () => {
@@ -106,7 +168,7 @@ test("off, sleep and revoked access suppress sending; rechecked after generation
 		isOff: () => off,
 		generate: async () => {
 			off = true;
-			return "Hola";
+			return { text: "Hola" };
 		},
 	});
 	expect(delivered).toHaveLength(0);
@@ -129,7 +191,7 @@ test("cancelling during generation prevents sending", async () => {
 					actions: [{ type: "cancel", ids: [task.id], evidence: "cancela" }],
 				}),
 			);
-			return "Hola";
+			return { text: "Hola" };
 		},
 	});
 	expect(delivered).toHaveLength(0);
@@ -240,7 +302,7 @@ test("restart after persisted send intent reports uncertainty without replay", a
 		task.lastOccurrence = { dueAt: due, claimedAt: due, status: "sending" };
 		task.nextRunAt = localTime("2026-10-23", "07:00");
 	});
-	now = due + 11 * 60000;
+	now = due + 16 * 60000;
 	await runScheduledTasks(services);
 	await runScheduledTasks(services);
 	expect(delivered).toHaveLength(0);
@@ -272,7 +334,7 @@ test("editing during generation discards the old response and next run uses the 
 					],
 				}),
 			);
-			return "Old response with links";
+			return { text: "Old response with links" };
 		},
 	});
 	expect(delivered).toHaveLength(0);
@@ -282,7 +344,7 @@ test("editing during generation discards the old response and next run uses the 
 		...services,
 		generate: async (task) => {
 			expect(task.instruction).toBe("Resultados de ayer sin enlaces");
-			return "Updated report";
+			return { text: "Updated report" };
 		},
 	});
 	expect(delivered).toEqual(["Updated report"]);

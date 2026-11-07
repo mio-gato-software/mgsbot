@@ -33,6 +33,8 @@ export interface SendResponseOptions {
 	buffer: SensoryBuffer;
 	isGroup: boolean;
 	userImagePath?: string;
+	/** Already generated for an explicitly requested saved task. */
+	preparedImage?: Buffer;
 	/** Live indicator from the caller; switched per modality (photo/voice). */
 	chatAction?: ChatActionHandle;
 }
@@ -102,6 +104,19 @@ export async function sendResponse(
 	});
 	let sent = false;
 	let bufferDirty = false;
+	if (options.preparedImage) {
+		chatAction?.update("upload_photo");
+		await ctx.replyWithPhoto(
+			new InputFile(options.preparedImage, "report.png"),
+			{
+				caption: plan.text.length <= 1000 ? plan.text || undefined : undefined,
+				...replyOptions,
+			},
+		);
+		if (plan.text.length > 1000)
+			await sendTextReply(ctx, plan.text, replyOptions);
+		return { sent: true, cleanedText: plan.text, bufferDirty: false };
+	}
 	if (plan.reaction) {
 		try {
 			await ctx.react(plan.reaction as ReactionTypeEmoji["emoji"]);

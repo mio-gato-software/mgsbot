@@ -7,7 +7,7 @@ import {
 	resolveOpenAIImageSize,
 } from "../ai/platform.ts";
 import { log } from "../logger.ts";
-import type { ImageProvider } from "./types.ts";
+import type { ImageGenerationOptions, ImageProvider } from "./types.ts";
 
 function mimeFromPath(filePath: string): string {
 	const ext = filePath.split(".").pop()?.toLowerCase() ?? "jpg";
@@ -32,6 +32,7 @@ export class OpenAIImageProvider implements ImageProvider {
 	async generateImage(
 		prompt: string,
 		referenceImagePath?: string,
+		options?: ImageGenerationOptions,
 	): Promise<Buffer> {
 		if (!process.env.OPENAI_API_KEY) {
 			throw new Error("OPENAI_API_KEY is required for OpenAI image generation");
@@ -60,7 +61,7 @@ export class OpenAIImageProvider implements ImageProvider {
 		const response = await getOpenAIClient().images.generate(
 			{
 				model,
-				prompt: `Generate an image of: ${prompt}. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
+				prompt: `Generate an image of: ${prompt}.${options?.allowText ? " Render the requested text and numeric data accurately and legibly." : " Do NOT render any text, clocks, timestamps, or time indicators in the image."}`,
 				size: size as "1024x1024",
 				quality: quality as "high",
 			},
