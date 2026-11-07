@@ -25,6 +25,12 @@ export const behaviorEventSchema = z.object({
 	attempts: z.array(z.number().finite()).min(1).max(3),
 	updatedAt: z.number().finite(),
 	lastCaption: z.string().max(1000).optional(),
+	creativeConcept: z.string().max(600).optional(),
+	creativeScene: z.string().max(300).optional(),
+	imageDigest: z
+		.string()
+		.regex(/^[a-f0-9]{64}$/)
+		.optional(),
 });
 export type BehaviorEvent = z.infer<typeof behaviorEventSchema>;
 export const preferenceInputSchema = z.object({

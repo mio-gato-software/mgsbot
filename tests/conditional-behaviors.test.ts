@@ -179,8 +179,39 @@ test("daily limits apply across distinct events and reset in the saved timezone"
 	expect((await store.read()).tasks[0]?.behaviorEvents).toHaveLength(2);
 });
 
+test("each creative effect sees the concept just delivered for the previous event", async () => {
+	const configured = task.behaviors?.[0];
+	if (!configured) throw new Error("Missing behavior");
+	await store.configureBehaviors(task.id, [{ ...configured, maxPerDay: 2 }]);
+	const saved = (await store.read()).tasks[0];
+	if (!saved) throw new Error("Missing task");
+	const histories: string[][] = [];
+	services.evaluate = async () => ({
+		outcome: "matched",
+		reason: "Dos partidos",
+		events: [event, { ...event, key: "second" }],
+	});
+	services.render = async (_behavior, _event, _persona, history) => {
+		histories.push(history.map((item) => item.concept ?? ""));
+		return {
+			text: "Meme",
+			image: Buffer.from("pixels"),
+			creativeConcept: `Concept ${histories.length}`,
+			creativeScene: "Scene",
+		};
+	};
+	await runTaskBehaviors(saved, observation(), services);
+	expect(histories).toEqual([[], ["Concept 1"]]);
+});
+
 test("ambiguous Telegram failure never retries the effect, even next day", async () => {
 	let attempts = 0;
+	services.render = async () => ({
+		text: "Caption",
+		image: Buffer.from("meme"),
+		creativeConcept: "Nocaut",
+		creativeScene: "Ring",
+	});
 	services.deliver = async () => {
 		attempts++;
 		throw new Error("timeout after upload");
@@ -196,6 +227,12 @@ test("ambiguous Telegram failure never retries the effect, even next day", async
 	expect((await store.read()).tasks[0]?.behaviorEvents?.[0]?.status).toBe(
 		"unknown",
 	);
+	expect(
+		(await store.read()).tasks[0]?.behaviorEvents?.[0]?.creativeConcept,
+	).toBe("Nocaut");
+	expect(
+		(await store.read()).tasks[0]?.behaviorEvents?.[0]?.imageDigest,
+	).toHaveLength(64);
 });
 
 test("generation failure counts against the daily budget but may retry next day", async () => {
@@ -427,12 +464,14 @@ test("creative rendering receives verified facts, honors output modality and doe
 		configured,
 		event,
 		"Persona",
-		["Broma anterior"],
+		[{ text: "Broma anterior" }],
 		async (_system, messages) => {
 			expect(messages[0]?.content).toContain(proof);
 			expect(messages[0]?.content).toContain("Broma anterior");
 			return JSON.stringify({
 				text: "¡Ganamos!",
+				concept: "Victoria en el ring",
+				scene: "Mascotas boxeadoras",
 				imagePrompt: "Mascotas en un ring de caricatura, Azul 5-2 Verde",
 			});
 		},
@@ -442,6 +481,7 @@ test("creative rendering receives verified facts, honors output modality and doe
 			expect(options?.allowText).toBe(true);
 			return Buffer.from("pixels");
 		},
+		async () => ({ distinct: true, reason: "New concept" }),
 	);
 	expect(result.image?.length).toBeGreaterThan(0);
 	expect(imageCalls).toBe(1);
@@ -450,10 +490,14 @@ test("creative rendering receives verified facts, honors output modality and doe
 		event,
 		"Persona",
 		[],
-		async () => '{"text":"¡Ganamos!","imagePrompt":null}',
+		async () =>
+			'{"text":"¡Ganamos!","concept":"Felicitación","scene":"","imagePrompt":null}',
 		async () => {
 			throw new Error("Unexpected image");
 		},
 	);
-	expect(text).toEqual({ text: "¡Ganamos!" });
+	expect(text).toMatchObject({
+		text: "¡Ganamos!",
+		creativeConcept: "Felicitación",
+	});
 });

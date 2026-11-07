@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import dayjs from "dayjs";
 import type { Api } from "grammy";
 import { alertOwner } from "../alerts.ts";
@@ -29,7 +30,7 @@ export interface BehaviorServices {
 	isSleeping: () => boolean;
 	isAllowed: (chatId: number) => boolean;
 }
-const PREPARATION_LEASE_MS = 7 * 60000;
+const PREPARATION_LEASE_MS = 10 * 60000;
 const day = (timestamp: number, task: ScheduledTask) =>
 	dayjs.utc(timestamp).tz(task.timezone).format("YYYY-MM-DD");
 
@@ -110,6 +111,18 @@ export async function runTaskBehaviors(
 					const existing = current.behaviorEvents.find(
 						(e) => e.behaviorId === behavior.id && e.eventKey === event.key,
 					);
+					// A behavior prepares one creative output at a time, allowing the
+					// next event to see the first event's saved creative history.
+					if (
+						current.behaviorEvents.some(
+							(e) =>
+								e.behaviorId === behavior.id &&
+								e.eventKey !== event.key &&
+								e.status === "preparing" &&
+								now - e.updatedAt < PREPARATION_LEASE_MS,
+						)
+					)
+						return;
 					if (existing?.status === "sending") {
 						existing.status = "unknown";
 						return;
@@ -150,13 +163,25 @@ export async function runTaskBehaviors(
 				if (claimedAt === undefined) continue;
 				let attempted = false;
 				try {
+					const creativeHistory =
+						(await services.store.read()).tasks.find((t) => t.id === task.id)
+							?.behaviorEvents ?? [];
 					const message = await services.render(
 						behavior,
 						event,
 						observation.persona,
-						previous
-							.flatMap((e) => (e.lastCaption ? [e.lastCaption] : []))
-							.slice(-5),
+						creativeHistory
+							.filter(
+								(e) =>
+									e.behaviorId === behavior.id &&
+									["sent", "sending", "unknown"].includes(e.status),
+							)
+							.map((e) => ({
+								text: e.lastCaption ?? "",
+								concept: e.creativeConcept,
+								scene: e.creativeScene,
+								imageDigest: e.imageDigest,
+							})),
 					);
 					if (
 						!message.text.trim() ||
@@ -182,6 +207,12 @@ export async function runTaskBehaviors(
 							return false;
 						}
 						receipt.status = "sending";
+						receipt.lastCaption = message.text;
+						receipt.creativeConcept = message.creativeConcept;
+						receipt.creativeScene = message.creativeScene;
+						receipt.imageDigest = message.image
+							? createHash("sha256").update(message.image).digest("hex")
+							: undefined;
 						await services.store.persist(state);
 						attempted = true;
 						await services.deliver(task.chatId, message);
