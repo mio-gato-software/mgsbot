@@ -935,13 +935,14 @@ test("chat conversation delivers the scheduled report image directly and resumes
 	const report =
 		"Resultados: 8-3 y 9-5. Tabla: Licey y Gigantes 4-2. Juegos: 16:00, 18:00, 19:30. Lluvia: 60%, 28%, 34%/27%.";
 	let runCalls = 0;
+	let behaviorCalls = 0;
 	let chatCalls = 0;
 	const turns = [
 		"Muy bien.",
 		"Brendy, intenta el reporte de nuevo. Te levanté algunas restricciones. Veamos qué tal funciona ahora.",
 		"Gracias.",
 	];
-	const services = {
+	const services: typeof defaultConversationDependencies = {
 		...defaultConversationDependencies,
 		retrieve: async () => ({
 			relevantEpisodes: [],
@@ -968,7 +969,20 @@ test("chat conversation delivers the scheduled report image directly and resumes
 			)) as typeof handleCommitmentRequest,
 		scheduled: async () => {
 			runCalls++;
-			return { text: report, image: Buffer.from("report image") };
+			return {
+				text: report,
+				image: Buffer.from("report image"),
+				observation: {
+					evidence: ["Verified tool evidence"],
+					persona: "Persona",
+					checkedAt: now,
+				},
+			};
+		},
+		behaviors: async (_api, selected, observation) => {
+			behaviorCalls++;
+			expect(selected.id).toBe(task.id);
+			expect(observation.evidence).toEqual(["Verified tool evidence"]);
 		},
 		generate: async () => {
 			chatCalls++;
@@ -998,6 +1012,7 @@ test("chat conversation delivers the scheduled report image directly and resumes
 		expect(captions).toEqual(i === 1 ? [report] : []);
 	}
 	expect(runCalls).toBe(1);
+	expect(behaviorCalls).toBe(1);
 	expect(chatCalls).toBe(2);
 	expect((await store.read()).tasks).toEqual(before);
 	expect(

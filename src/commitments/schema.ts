@@ -3,6 +3,30 @@ import { scheduleSchema } from "./calendar.ts";
 
 const text = z.string().trim().min(1).max(1200);
 const id = z.string().min(1).max(100);
+export const behaviorInputSchema = z.object({
+	id: id.optional(),
+	condition: text,
+	instruction: text,
+	output: z.enum(["text", "image"]),
+	maxPerDay: z.number().int().min(1).max(3).default(1),
+	maxEventAgeDays: z.number().int().min(1).max(7).default(2),
+});
+export const behaviorSchema = behaviorInputSchema.extend({
+	id,
+	createdAt: z.number().finite(),
+});
+export type ConditionalBehavior = z.infer<typeof behaviorSchema>;
+export const behaviorEventSchema = z.object({
+	behaviorId: id,
+	eventKey: z.string().min(1).max(200),
+	summary: text,
+	date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+	status: z.enum(["preparing", "sending", "sent", "failed", "unknown"]),
+	attempts: z.array(z.number().finite()).min(1).max(3),
+	updatedAt: z.number().finite(),
+	lastCaption: z.string().max(1000).optional(),
+});
+export type BehaviorEvent = z.infer<typeof behaviorEventSchema>;
 export const preferenceInputSchema = z.object({
 	kind: z.enum(["sources", "style"]),
 	instruction: text,
@@ -10,6 +34,7 @@ export const preferenceInputSchema = z.object({
 	domains: z.array(z.string().trim().min(3).max(253)).max(3).default([]),
 });
 export const taskInputSchema = z.object({
+	behaviors: z.array(behaviorInputSchema).max(3).optional(),
 	renewalReminderDays: z.number().int().min(1).max(2).optional(),
 	instruction: text,
 	kind: z.enum(["reminder", "research"]),
@@ -18,6 +43,12 @@ export const taskInputSchema = z.object({
 	domains: z.array(z.string().trim().min(3).max(253)).max(3).default([]),
 });
 export const actionSchema = z.discriminatedUnion("type", [
+	z.object({
+		type: z.literal("set_behaviors"),
+		id,
+		behaviors: z.array(behaviorInputSchema).max(3),
+		evidence: text,
+	}),
 	z.object({
 		type: z.literal("extend"),
 		ids: z.array(id).min(1).max(10),
@@ -90,6 +121,8 @@ const occurrenceSchema = z.object({
 	status: z.enum(["preparing", "sending", "sent", "failed", "unknown"]),
 });
 export const taskSchema = taskInputSchema.extend({
+	behaviors: z.array(behaviorSchema).max(3).optional(),
+	behaviorEvents: z.array(behaviorEventSchema).max(500).optional(),
 	...provenance,
 	timezone: z
 		.string()

@@ -9,6 +9,13 @@ Living document. Rules:
 
 ## Pending
 
+### Add observation sources beyond scheduled reports for conditional behaviors
+
+- **Why:** conditional behaviors now evaluate a scheduled research task's actual tool evidence and keep durable event receipts. They currently run after the parent report; they do not observe every conversation or subscribe to live event feeds.
+- **What to do:** reuse the evaluator and event delivery receipts for explicitly authorized conversation observations or independent watch schedules. Preserve source provenance, per-chat permissions, finite monitoring terms and lookup/image budgets. Define catch-up and silence behavior before adding shorter polling intervals.
+- **Size:** Medium; the shared evaluation and receipt infrastructure is available.
+- Added 2026-11-07.
+
 ### Audit remaining conversational heuristics
 
 - **Why:** task request interpretation and deferred-link routing now use the background model, but other legacy conversational routing paths may still use lexical heuristics contrary to the mandatory rule in AGENTS.md.

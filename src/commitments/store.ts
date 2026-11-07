@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { BOT_TZ } from "../bot-time.ts";
 import { withCommitmentsLock } from "../memory/locks.ts";
 import { readStore, writeStore } from "../memory/storage.ts";
@@ -11,12 +12,35 @@ import {
 	scheduleDeadline,
 } from "./calendar.ts";
 import {
+	behaviorInputSchema,
 	type CommitmentState,
 	type Interpretation,
 	interpretationSchema,
+	type ScheduledTask,
 	type StandingPreference,
 	stateSchema,
 } from "./schema.ts";
+
+/** Runtime configuration, never learned from ordinary memory or web content. */
+function setBehaviors(task: ScheduledTask, raw: unknown, now: number): void {
+	const inputs = z.array(behaviorInputSchema).max(3).parse(raw);
+	if (inputs.length && task.kind !== "research")
+		throw new Error(
+			"Los comportamientos condicionales requieren una tarea de investigación.",
+		);
+	const seen = new Set<string>();
+	task.behaviors = inputs.map((input) => {
+		const previous = task.behaviors?.find((b) => b.id === input.id);
+		if (input.id && (!previous || seen.has(input.id)))
+			throw new Error("Identificador de comportamiento inválido o repetido.");
+		const id = previous?.id ?? randomUUID();
+		seen.add(id);
+		return { ...input, id, createdAt: previous?.createdAt ?? now };
+	});
+	task.updatedAt = now;
+	if (task.lastOccurrence?.status === "preparing")
+		task.lastOccurrence.status = "failed";
+}
 
 export interface RequestIdentity {
 	chatId: number;
@@ -91,16 +115,21 @@ export class CommitmentStore {
 		readonly now = Date.now,
 	) {}
 	read(): Promise<CommitmentState> {
-		return readStore(this.path, stateSchema, () => ({
-			tasks: [],
-			preferences: [],
-			receipts: [],
-			pending: [],
-		}));
+		return readStore(
+			this.path,
+			stateSchema,
+			() => ({
+				tasks: [],
+				preferences: [],
+				receipts: [],
+				pending: [],
+			}),
+			2,
+		);
 	}
 	/** Caller must hold the commitment transaction lock. */
 	persist(state: CommitmentState): Promise<void> {
-		return writeStore(this.path, state, stateSchema, true);
+		return writeStore(this.path, state, stateSchema, true, 2);
 	}
 	async transaction<T>(
 		work: (state: CommitmentState) => T | Promise<T>,
@@ -109,8 +138,7 @@ export class CommitmentStore {
 			const state = await this.read();
 			const before = JSON.stringify(state);
 			const result = await work(state);
-			if (JSON.stringify(state) !== before)
-				await writeStore(this.path, state, stateSchema, true);
+			if (JSON.stringify(state) !== before) await this.persist(state);
 			return result;
 		});
 	}
@@ -118,6 +146,15 @@ export class CommitmentStore {
 		return (await this.read()).preferences.filter(
 			(p) => p.chatId === chatId && p.status === "active",
 		);
+	}
+	/** Headless operator configuration: no fabricated Telegram message or receipt. */
+	async configureBehaviors(taskId: string, inputs: unknown): Promise<void> {
+		await this.transaction((state) => {
+			const task = state.tasks.find((t) => t.id === taskId);
+			if (task?.status !== "active" || task.expiresAt <= this.now())
+				throw new Error("La tarea debe estar activa.");
+			setBehaviors(task, inputs, this.now());
+		});
 	}
 	async apply(request: RequestIdentity, raw: Interpretation): Promise<string> {
 		const plan = interpretationSchema.parse(raw);
@@ -184,7 +221,17 @@ export class CommitmentStore {
 					throw new Error(
 						"No pude verificar la petición original; repítela explícitamente.",
 					);
-				if (action.type === "renewal_reminder") {
+				if (action.type === "set_behaviors") {
+					const task = owned(action.id);
+					if (
+						!("schedule" in task) ||
+						task.status !== "active" ||
+						task.expiresAt <= now
+					)
+						throw new Error("La tarea debe estar activa.");
+					setBehaviors(task, action.behaviors, now);
+					changes.push({ action: "behaviors_updated", ...task });
+				} else if (action.type === "renewal_reminder") {
 					const task = owned(action.id);
 					if (
 						!("schedule" in task) ||
@@ -221,6 +268,9 @@ export class CommitmentStore {
 						expiresLocal: displayTime(task.expiresAt, task.timezone),
 					});
 				} else if (action.type === "schedule") {
+					const previous = action.replaceId
+						? owned(action.replaceId)
+						: undefined;
 					if (
 						action.task.renewalReminderDays &&
 						action.task.schedule.frequency === "once"
@@ -251,6 +301,14 @@ export class CommitmentStore {
 						);
 					const task = {
 						...action.task,
+						behaviors:
+							previous && "schedule" in previous
+								? previous.behaviors
+								: undefined,
+						behaviorEvents:
+							previous && "schedule" in previous
+								? previous.behaviorEvents
+								: undefined,
 						renewalReminderDays:
 							action.task.schedule.frequency === "once"
 								? undefined
@@ -269,6 +327,10 @@ export class CommitmentStore {
 						nextRunAt,
 						status: "active" as const,
 					};
+					if (action.task.behaviors !== undefined)
+						setBehaviors(task, action.task.behaviors, now);
+					if (task.behaviors?.length && task.kind !== "research")
+						throw new Error("Los comportamientos requieren investigación.");
 					state.tasks.push(task);
 					changes.push({
 						action: "saved",

@@ -20,10 +20,11 @@ export async function readStore<T>(
 	path: string,
 	schema: z.ZodType<T>,
 	fallback: () => T,
+	version = 1,
 ): Promise<T> {
 	try {
 		return schema.parse(
-			unwrapVersioned(JSON.parse(await readFile(path, "utf8"))),
+			unwrapVersioned(JSON.parse(await readFile(path, "utf8")), version),
 		);
 	} catch (error) {
 		if (isFileNotFound(error)) return fallback();
@@ -36,12 +37,17 @@ export async function writeStore<T>(
 	value: T,
 	schema: z.ZodType<T>,
 	wrapped = false,
+	version = 1,
 ): Promise<void> {
 	// Protect even direct saves from overwriting a damaged or newer store.
-	await readStore(path, schema, () => value);
+	await readStore(path, schema, () => value, version);
 	const validated = schema.parse(value);
 	await atomicWriteFile(
 		path,
-		JSON.stringify(wrapped ? wrapVersioned(validated) : validated, null, 2),
+		JSON.stringify(
+			wrapped ? wrapVersioned(validated, version) : validated,
+			null,
+			2,
+		),
 	);
 }

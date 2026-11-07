@@ -143,6 +143,23 @@ test("an unfinished image at eleven minutes stays claimed and its completed deli
 	expect(alerts).toHaveLength(0);
 });
 
+test("conditional action failure leaves an already delivered report successful", async () => {
+	now = localTime("2026-10-22", "07:00");
+	await runScheduledTasks({
+		...services,
+		generate: async () => ({
+			text: "Reporte normal",
+			observation: { evidence: ["Final"], persona: "Persona", checkedAt: now },
+		}),
+		behaviors: async () => {
+			expect(delivered).toEqual(["Reporte normal"]);
+			throw new Error("Conditional image failed");
+		},
+	});
+	expect((await store.read()).tasks[0]?.lastOccurrence?.status).toBe("sent");
+	expect(alerts).toHaveLength(1);
+});
+
 test("outage skips stale runs instead of flooding, expiry prevents any delivery", async () => {
 	now = localTime("2026-10-25", "15:00");
 	await runScheduledTasks(services);

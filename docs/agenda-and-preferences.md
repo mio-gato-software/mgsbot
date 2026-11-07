@@ -73,6 +73,37 @@ Saved tasks can require a generated image, such as the current standings table. 
 
 The complete text and requested image are prepared before recording send intent. A missing/failed required image fails that occurrence and alerts the owner instead of recording a successful text-only report. Short reports accompany the photo as a caption; reports over 1,000 characters are sent separately. If either Telegram send has an uncertain outcome, the occurrence is not replayed automatically, including after a partial photo/text delivery. Recovery waits 15 minutes before considering an in-flight preparation interrupted.
 
+## Conditional behaviors
+
+A research task can have up to three configurable `behaviors`. Each defines a factual `condition`, an action `instruction`, an `output` (`text` or `image`), a `maxPerDay` attempt budget (1–3, default 1), and `maxEventAgeDays` (1–7, default 2). They run after a successfully delivered report, using the initial research and actual tool results from that occurrence. The report, its mandatory table image, schedule and expiry remain independent. A failed optional action does not invalidate a delivered report. These are scheduled observations, not immediate event subscriptions; checks use the parent task's existing research cadence and quotas. Persona defines interests and tone but never authorizes new behaviors.
+
+The background model evaluates the condition as `matched`, `not_matched` or `unknown`. Only a match with exact indexed evidence quotes can proceed. Model drafts, prior bot messages and ordinary memory are excluded from trigger evidence. The creative model then receives the confirmed event and the configured action; images use the configured provider without requiring general photo permissions or consuming the weekly character photo. Text and numeric details in generated images still require ordinary factual caution.
+
+Event identities are persisted separately from report occurrences, with prior event summaries provided to the evaluator so paraphrases and different sources can reuse the same key. Code enforces event age, local dates, configuration validity, access/off/sleep guards, per-day attempt budgets and claims. Events before the behavior's configuration date are excluded. An event has at most three preparation attempts, and each counts against the daily budget. Interrupted preparation can be reclaimed after seven minutes, subject to those limits. A send intent is saved before Telegram; sent or uncertain outcomes cannot replay automatically. Changes during preparation are rechecked before sending. Event receipts survive schedule replacement and renewal; parent task cancellation/expiry stops its behaviors.
+
+Configure through chat, for example: “Cuando Equipo Azul gane un partido final, añade un meme de su mascota celebrando al reporte diario.” The extractor resolves the subject from explicit context and saves a scoped behavior, rather than turning it into an unconditional image request. Asking to remove the automatic joke changes the behavior list while preserving the report. New tasks still require a research objective and an explicit check time. Existing task owners, the bot owner, and permitted shared-group managers can configure behaviors. External pages, quoted instructions and casual preferences cannot authorize changes.
+
+For headless configuration, stop the bot and supply the existing task ID in a private JSON file:
+
+```json
+{
+  "taskId": "existing-task-id",
+  "behaviors": [
+    {
+      "condition": "Proyecto Demo publicó una nueva versión estable",
+      "instruction": "Enviar una felicitación breve y creativa mencionando la versión confirmada",
+      "output": "text",
+      "maxPerDay": 1,
+      "maxEventAgeDays": 2
+    }
+  ]
+}
+```
+
+Run `./mgsbot --configure-task-behaviors config.json`, then start the service. Source checkouts can use `bun run behaviors:configure config.json`. The configuration replaces the task's complete behavior list; retain existing behavior IDs to edit them, omit IDs for new behaviors, and use `[]` to disable all. This path does not invent Telegram receipts or modify the report objective, schedule, source domains or deadline. Keep operator-specific files outside version control.
+
+The commitments store now writes schema v2, while accepting legacy/v1 stores. Other memory stores retain their existing versions. Older binaries reject v2 rather than silently deleting behavior configuration or event receipts; rollback must use a compatible binary and preserve newer state. Current behavior observations are public research only. Additional conversation-driven or more frequent observation sources can reuse the evaluator and delivery receipts later.
+
 ## Run a saved report from chat
 
 A direct request such as “intenta el reporte de nuevo” or “corre el reporte ahora como si fueran las 7am” is interpreted by the same background model that manages tasks. It selects the saved task using current chat context; ambiguous references require clarification. No word/regex gate selects execution. References to the usual scheduled hour do not rewind the execution clock or historical weather.

@@ -12,6 +12,7 @@ import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
+import { checkAndSendTaskBehaviors } from "./commitments/behavior-runner.ts";
 import { handleCommitmentRequest } from "./commitments/requests.ts";
 import {
 	generateScheduledDelivery,
@@ -105,6 +106,7 @@ export interface ConversationDependencies {
 	weather: ConversationWeatherContext;
 	commitments: typeof handleCommitmentRequest;
 	scheduled: (task: ScheduledTask) => Promise<ScheduledMessage | string>;
+	behaviors?: typeof checkAndSendTaskBehaviors;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
 	generate: generateResponse,
@@ -116,6 +118,7 @@ export const defaultConversationDependencies: ConversationDependencies = {
 	weather: weatherService,
 	commitments: handleCommitmentRequest,
 	scheduled: generateScheduledDelivery,
+	behaviors: checkAndSendTaskBehaviors,
 };
 
 export async function processConversation(
@@ -299,6 +302,7 @@ export async function processConversation(
 
 		let taskResponse: string | undefined;
 		let taskDelivery: ScheduledMessage | undefined;
+		let executedTask: ScheduledTask | undefined;
 		const commitmentContext =
 			userId &&
 			ctx.message &&
@@ -335,6 +339,7 @@ export async function processConversation(
 											? { text: delivery }
 											: delivery;
 									taskResponse = taskDelivery.text;
+									executedTask = task;
 								} catch {
 									currentOperationSignal()?.throwIfAborted();
 									taskResponse =
@@ -391,6 +396,19 @@ export async function processConversation(
 			userImagePath,
 			chatAction: typing,
 		});
+		if (
+			result?.sent &&
+			executedTask &&
+			taskDelivery?.observation &&
+			dependencies.behaviors
+		)
+			await dependencies
+				.behaviors(ctx.api, executedTask, taskDelivery.observation)
+				.catch(() =>
+					log.warn(
+						"[behaviors] Conditional action failed after manual report delivery",
+					),
+				);
 	} catch (error) {
 		if (!isTimeoutError(error)) throw error;
 		log.warn("[conversation] Provider deadline exceeded");

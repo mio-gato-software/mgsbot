@@ -143,6 +143,7 @@ bun run start
 ```
 
 A valid `bot_profile.json` takes precedence over the in-chat configuration. For custom behavior and style, run `bun run rules:init`, edit `memory/bot_rules.json`, and inspect it with `bun run rules:show`. Rules affect the conversation prompt; they do not override access control or provider configuration.
+bun run behaviors:configure config.json # Configure conditional actions on an existing research task
 
 Place a character reference at `memory/base.png`, `memory/base.jpg`, or `memory/base.jpeg` to enable scheduled character images. `/allowphotorequest` authorizes one on-demand photo; add `group` to target the allowed group. `FULL_ACCESS_MODE=true` also permits generation without a reference.
 
