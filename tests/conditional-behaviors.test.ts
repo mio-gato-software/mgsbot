@@ -414,6 +414,124 @@ test("stale preparing claims can recover within limits; interrupted send intents
 	);
 });
 
+for (const levels of [0, 1, 2]) {
+	test(`evaluation grounds table quotes through ${levels} JSON serialization levels`, async () => {
+		const configured = task.behaviors?.[0];
+		if (!configured) throw new Error("Missing behavior");
+		const table =
+			'2026-11-07\nFinal\tC\tH\tE\nEquipo Verde\t2\t7\t0\nEquipo Azul\t5\t11\t0\nNota: "final confirmado"; archivo C:\\demo';
+		let source = table;
+		for (let level = 0; level < levels; level++)
+			source = JSON.stringify({ content: source });
+		let calls = 0;
+		const result = await evaluateBehavior(
+			configured,
+			[source],
+			[],
+			"2026-11-08",
+			async () => {
+				calls++;
+				return JSON.stringify({
+					outcome: "matched",
+					reason: "Verified final",
+					events: [{ ...event, evidence: [{ index: 0, quote: table }] }],
+				});
+			},
+		);
+		expect(calls).toBe(1);
+		expect(result.events[0]?.key).toBe(event.key);
+		const retained = result.events[0]?.evidence[0]?.quote ?? "";
+		expect(retained.length).toBeGreaterThan(0);
+		expect(source.includes(retained)).toBe(true);
+	});
+}
+
+test("serialized evidence cannot validate changed scores, reconstructed tables or a different source index", async () => {
+	const configured = task.behaviors?.[0];
+	if (!configured) throw new Error("Missing behavior");
+	const table = "2026-11-07\nFinal\tEquipo Azul 5 - Equipo Verde 2";
+	const source = JSON.stringify({ content: table });
+	for (const invalid of [
+		{ index: 0, quote: table.replace("Azul 5", "Azul 8") },
+		{ index: 0, quote: table.replace("\t", " ") },
+		{ index: 1, quote: table },
+	]) {
+		await expect(
+			evaluateBehavior(
+				configured,
+				[source, "Unrelated page"],
+				[],
+				"2026-11-08",
+				async () =>
+					JSON.stringify({
+						outcome: "matched",
+						reason: "Unverified",
+						events: [{ ...event, evidence: [invalid] }],
+					}),
+			),
+		).rejects.toThrow("Unverifiable event evidence");
+	}
+});
+
+test("evaluation labels source indices explicitly and gives actionable repair feedback", async () => {
+	const configured = task.behaviors?.[0];
+	if (!configured) throw new Error("Missing behavior");
+	let calls = 0;
+	const result = await evaluateBehavior(
+		configured,
+		["Unrelated page", proof],
+		[],
+		"2026-11-08",
+		async (_system, messages) => {
+			const supplied = JSON.parse(messages[0]?.content ?? "{}");
+			expect(supplied.evidence).toEqual([
+				{ index: 0, content: "Unrelated page" },
+				{ index: 1, content: proof },
+			]);
+			calls++;
+			if (calls === 2) {
+				expect(messages.at(-1)?.content).toContain(
+					"Unverifiable event evidence at index 2",
+				);
+				expect(messages.at(-1)?.content).toContain(
+					"Valid evidence indices are 0, 1",
+				);
+			}
+			return JSON.stringify({
+				outcome: "matched",
+				reason: "Verified",
+				events: [
+					{
+						...event,
+						evidence: [{ index: calls === 1 ? 2 : 1, quote: proof }],
+					},
+				],
+			});
+		},
+	);
+	expect(calls).toBe(2);
+	expect(result.events[0]?.evidence[0]?.index).toBe(1);
+});
+
+test("evaluation alerts identify the failing stage and reason without attempting image generation", async () => {
+	let renders = 0;
+	await runTaskBehaviors(task, observation(), {
+		...services,
+		evaluate: async () => {
+			throw new Error("Unverifiable event evidence at index 2");
+		},
+		render: async () => {
+			renders++;
+			return { text: "Unexpected" };
+		},
+	});
+	expect(renders).toBe(0);
+	expect(alerts).toHaveLength(1);
+	expect(alerts[0]).toContain("evaluation failed");
+	expect(alerts[0]).toContain("Unverifiable event evidence at index 2");
+	expect(delivered).toEqual([]);
+});
+
 test("evaluation validates verbatim tool evidence and retains event identities across different wording", async () => {
 	const configured = task.behaviors?.[0];
 	if (!configured) throw new Error("Missing behavior");

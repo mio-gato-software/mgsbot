@@ -4,6 +4,7 @@ import { generateBackgroundResponse, generateResponse } from "../ai/core.ts";
 import { generateImage } from "../image/index.ts";
 import { withDeadline } from "../operation-deadline.ts";
 import type { ChatMessage } from "../providers/types.ts";
+import { truncateText } from "../utils.ts";
 import {
 	CREATIVE_HISTORY_LIMIT,
 	type CreativeHistory,
@@ -35,6 +36,22 @@ const evaluationSchema = z
 	})
 	.refine((value) => (value.outcome === "matched") === value.events.length > 0);
 
+/** Tool results can contain JSON page objects, including nested serialized pages.
+ * Keep the exact representation found in the evidence; never normalize facts. */
+function groundedQuote(
+	source: string | undefined,
+	quote: string,
+): string | null {
+	if (source === undefined) return null;
+	let representation = quote;
+	for (let level = 0; level <= 2; level++) {
+		if (representation.length <= 1600 && source.includes(representation))
+			return representation;
+		representation = JSON.stringify(representation).slice(1, -1);
+	}
+	return null;
+}
+
 /** No draft/report text is accepted as evidence of the trigger. */
 export async function evaluateBehavior(
 	behavior: ConditionalBehavior,
@@ -45,7 +62,7 @@ export async function evaluateBehavior(
 ) {
 	let remaining = 64000;
 	const boundedEvidence = evidence.map((content) => {
-		const result = content.slice(0, remaining);
+		const result = truncateText(content, remaining);
 		remaining -= result.length;
 		return result;
 	});
@@ -55,7 +72,7 @@ export async function evaluateBehavior(
 			content: JSON.stringify({
 				condition: behavior.condition,
 				currentLocalDate: localDate,
-				evidence: boundedEvidence,
+				evidence: boundedEvidence.map((content, index) => ({ index, content })),
 				previousEvents: previous.map(({ eventKey, date, summary }) => ({
 					key: eventKey,
 					date,
@@ -71,9 +88,17 @@ export async function evaluateBehavior(
 			try {
 				const result = evaluationSchema.parse(JSON.parse(output));
 				for (const event of result.events)
-					for (const proof of event.evidence)
-						if (!boundedEvidence[proof.index]?.includes(proof.quote))
-							throw new Error("Unverifiable event evidence");
+					for (const proof of event.evidence) {
+						const verified = groundedQuote(
+							boundedEvidence[proof.index],
+							proof.quote,
+						);
+						if (verified === null)
+							throw new Error(
+								`Unverifiable event evidence at index ${proof.index}`,
+							);
+						proof.quote = verified;
+					}
 				if (
 					new Set(result.events.map((event) => event.key)).size !==
 					result.events.length
@@ -83,11 +108,10 @@ export async function evaluateBehavior(
 			} catch (error) {
 				if (attempt > 0) throw error;
 				messages.push(
-					{ role: "assistant", content: output.slice(0, 8000) },
+					{ role: "assistant", content: truncateText(output, 8000) },
 					{
 						role: "user",
-						content:
-							"Validation failed. Repair only the structured evaluation and exact indexed evidence quotes. If the facts cannot be verified return unknown with events:[]. No tools or extra keys.",
+						content: `Validation failed: ${truncateText(error instanceof Error ? error.message : "Invalid structured evaluation", 1200)}. Valid evidence indices are ${boundedEvidence.map((_, index) => index).join(", ") || "none"}; use the explicit index printed on the selected evidence entry. Repair only the structured evaluation and exact indexed evidence quotes. Each quote must exist in its selected evidence entry, either verbatim or as that exact text escaped in serialized JSON. Preserve all words, numbers, punctuation and whitespace; do not reconstruct a table, combine separate excerpts or paraphrase. If the facts cannot be verified return unknown with events:[]. No tools or extra keys.`,
 					},
 				);
 			}

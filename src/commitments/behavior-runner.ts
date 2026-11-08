@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import dayjs from "dayjs";
 import type { Api } from "grammy";
-import { alertOwner } from "../alerts.ts";
+import { alertOwner, errorSummary } from "../alerts.ts";
 import { isBotOff, isSleepingHour } from "../bot-state.ts";
 import { logBotMessage } from "../chat-logger.ts";
 import { log } from "../logger.ts";
@@ -70,6 +70,7 @@ export async function runTaskBehaviors(
 	)
 		return;
 	for (const behavior of task.behaviors) {
+		let stage = "persistence";
 		try {
 			const current = (await services.store.read()).tasks.find(
 				(t) => t.id === task.id,
@@ -78,12 +79,14 @@ export async function runTaskBehaviors(
 			const previous = (current.behaviorEvents ?? []).filter(
 				(e) => e.behaviorId === behavior.id,
 			);
+			stage = "evaluation";
 			const result = await services.evaluate(
 				behavior,
 				observation.evidence,
 				previous,
 				day(services.now(), task),
 			);
+			stage = "persistence";
 			if (result.outcome !== "matched") {
 				log.info(`[behaviors] ${behavior.id}: ${result.outcome}`);
 				continue;
@@ -227,7 +230,10 @@ export async function runTaskBehaviors(
 							.catch(() =>
 								log.warn("[behaviors] History recording failed after delivery"),
 							);
-				} catch {
+				} catch (error) {
+					log.warn(
+						`[behaviors] ${behavior.id}: ${attempted ? "delivery" : "generation"} failed: ${errorSummary(error)}`,
+					);
 					await services.store.transaction((state) => {
 						const receipt = state.tasks
 							.find((t) => t.id === task.id)
@@ -246,10 +252,12 @@ export async function runTaskBehaviors(
 						.catch(() => {});
 				}
 			}
-		} catch {
+		} catch (error) {
+			const reason = errorSummary(error);
+			log.warn(`[behaviors] ${behavior.id}: ${stage} failed: ${reason}`);
 			await services
 				.alert(
-					`Conditional behavior ${behavior.id}: evaluation or persistence failed; no new action confirmed.`,
+					`Conditional behavior ${behavior.id}: ${stage} failed; no new action confirmed. ${reason}`,
 				)
 				.catch(() => {});
 		}
