@@ -4,17 +4,18 @@
   <img src="assets/bot-avatar.png" alt="MGS Bot" width="300" />
 </p>
 
-A Telegram bot with persistent conversation memory, an evolving personality, voice replies, and image generation. Built with Bun, TypeScript, and grammY.
+A conversational Telegram bot with persistent memory, a configurable personality, voice replies, and image generation. Built with Bun, TypeScript, and grammY, for one owner in DMs and optionally one allowed group.
 
-Supports text, `.txt` files, voice notes, audio, images, PDFs, public web pages, and YouTube links. It runs for one owner in DMs and, optionally, one allowed group. Follow-ups and periodic check-ins are opt-in.
-
-Photo questions can continue without resending the image. The bot keeps a Telegram file reference and reopens at most the speaker's latest image while it remains in the short-term buffer (10 messages) and is no more than 30 minutes old. This reference survives restarts; image bytes and download URLs are not stored in memory. After that window, reply to the original photo to inspect it again. JPEG, PNG, and WebP files sent without compression follow the same path. Passive group photos cost no vision calls until their sender addresses the bot; reply to a specific photo when discussing someone else's image.
-
-Gemini and OpenAI receive the image with the conversation in a single chat request. Other chat providers use a question-focused visual description. Recent-image follow-ups include at most one image per turn, including intervening text turns within the window; they still incur image-input costs. No additional classifier or separate summary call is added for Gemini/OpenAI. Earlier images are available through explicit replies, not an unlimited visual archive.
+- Remembers facts, conversation summaries, relationships, and monthly chapters; adaptive personality learns gradually from direct user feedback.
+- Handles text, `.txt` files, voice notes, audio, photos, PDFs, public web pages, and YouTube links.
+- Generates character photos, edits user images, and creates illustrations for scheduled reports.
+- Supports natural-language reminders, recurring research, source/style preferences, and conditional actions such as a celebration meme after a confirmed win.
+- Searches the web, reads public pages, and checks current/hourly weather with any chat provider.
+- Offers opt-in DM follow-ups and periodic check-ins.
 
 ## Quick start
 
-For running from source, use **Bun 1.4.2** (the version pinned in CI and Docker). You also need a Telegram bot token from [@BotFather](https://t.me/BotFather), your numeric Telegram user ID, and an **OpenAI or Google AI API key**.
+Use **Bun 1.4.2**, a Telegram bot token from [@BotFather](https://t.me/BotFather), your numeric Telegram user ID, and an **OpenAI or Google AI API key**.
 
 ```bash
 git clone https://github.com/mio-gato-software/mgsbot.git
@@ -23,7 +24,7 @@ bun install --frozen-lockfile
 cp .env.sample .env
 ```
 
-Edit `.env`. For an OpenAI-only setup, fill in:
+Fill in `.env` for an OpenAI-only setup:
 
 ```dotenv
 BOT_TOKEN=your_telegram_bot_token
@@ -32,191 +33,95 @@ OPENAI_API_KEY=your_openai_api_key
 AI_PLATFORM=openai
 ```
 
-For Gemini, use `GOOGLE_API_KEY` and `AI_PLATFORM=gemini` instead. OpenAI alone covers chat, memory, transcription, voice replies, images, and PDF analysis; **YouTube analysis requires Google**.
+For Gemini, use `GOOGLE_API_KEY` and `AI_PLATFORM=gemini` instead. OpenAI alone covers most features; **YouTube analysis requires Google**.
 
 ```bash
 bun run start
 ```
 
-Send the bot a DM to configure its name, language, and personality. To configure these from files instead, use the [profile commands](#profile-rules-and-character-image) below.
-
-On a computer with a browser, `bun run start -- --setup` opens the configuration wizard. It also opens automatically when the bot token or both AI keys are missing. For a server or Docker deployment, prepare `.env` before starting.
+DM the bot to configure its name, language, and personality, or use the [profile files](#profile-rules-and-character-image). On a computer with a browser, `bun run start -- --setup` opens the configuration wizard; missing credentials also trigger it. Prepare `.env` beforehand on a server or in Docker.
 
 ## Configuration
 
-[`.env.sample`](.env.sample) documents provider credentials, model variables, and optional settings. Restart the bot after changing `.env`.
+[`.env.sample`](.env.sample) lists credentials, model variables, defaults, and optional settings. Restart after editing `.env`.
 
-### Access and groups
+`OWNER_USER_ID` permits the owner's DMs; `ALLOWED_GROUP_ID` optionally permits one group. The group router supports direct mentions, replies, natural continuations, and spontaneous responses. Unaddressed messages can contribute to memory; `ENABLE_GROUP_VOICE_CONTEXT=false` disables passive voice-note transcription.
 
-- `OWNER_USER_ID` authorizes the owner’s DMs. Without it, normal DM conversations are unavailable.
-- `ALLOWED_GROUP_ID` authorizes one group. Other groups are rejected; leave it unset for DM-only use.
-- In the allowed group, the bot responds to replies, tags, or its name. It can also continue a conversation or reply spontaneously when the group router allows it. Messages it receives without being addressed can contribute to memory.
-- `ENABLE_GROUP_VOICE_CONTEXT=false` disables transcription of passive group voice notes. Direct mentions and voice replies remain eligible for transcription.
-
-### Providers
-
-`AI_PLATFORM` sets the default chat and support platform. When unset, it selects Gemini if a Google key exists, otherwise OpenAI. Each service can be configured independently:
+`AI_PLATFORM` supplies defaults: Gemini when a Google key exists, otherwise OpenAI. Services are independently configurable:
 
 | Service | Setting |
 | --- | --- |
-| Conversation | `CHAT_PROVIDER` and the provider’s model variable |
-| Transcription | `STT_PROVIDER` |
-| Voice replies | `TTS_PROVIDER` |
-| Image generation | `IMAGE_PROVIDER` |
+| Conversation | `CHAT_PROVIDER` and its model variable |
+| Transcription / voice replies | `STT_PROVIDER` / `TTS_PROVIDER` |
+| Image generation | `IMAGE_PROVIDER` and its model variable |
 | Memory embeddings | `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `EMBEDDING_DIM` |
 | Background memory work | `BACKGROUND_PROVIDER`, `BACKGROUND_MODEL` |
-| Image / PDF analysis | `VISION_PROVIDER`, `DOCUMENT_PROVIDER` |
-| Routing classifiers | `CLASSIFIER_PROVIDER`, `CLASSIFIER_MODEL` |
+| Image / PDF analysis | `VISION_PROVIDER` / `DOCUMENT_PROVIDER` |
+| Routing classifiers | `CLASSIFIER_PROVIDER`, `CLASSIFIER_MODEL`; optional TypeSafe/Jev |
 
-For background work through fal, set `BACKGROUND_PROVIDER=fal` and `BACKGROUND_MODEL=openai/gpt-6-luna` with `FAL_API_KEY`. This is independent of the main chat model and disables reasoning for background calls. Set `BACKGROUND_FALLBACK_TO_CHAT=false` to propagate failures for caller handling/retry instead of charging the chat model; fallback remains enabled by default.
+Chat providers: `gemini`, `openai`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `deepseek`, and `fal`. Keep an OpenAI or Google key for support services when using another chat provider. `BACKGROUND_FALLBACK_TO_CHAT=false` prevents background failures from invoking the chat model.
 
-For optional fast group-routing and image-edit classifiers, add `TYPESAFE_API_KEY`. TypeSafe is selected automatically when `CLASSIFIER_PROVIDER` is unset; you can also set `CLASSIFIER_PROVIDER=typesafe`. An explicit `openai`, `gemini`, or `fal` selection takes precedence. `TYPESAFE_MODEL` defaults to the pinned `jev-1.13.0`; `CLASSIFIER_MODEL` remains the legacy model. Without a TypeSafe key, or on timeout (2 seconds), API failure, invalid output, or uncertain answers, the existing classifier runs using `AI_PLATFORM` and `CLASSIFIER_MODEL`, including its existing chat/heuristic fallbacks. Initial confidence gates are 0.6 for both group decisions and probabilities at or below 0.2 / at or above 0.8 for image-edit intent; uncertain results fall back rather than directly authorizing a response. `/provider` and startup logs show the effective classifier. TypeSafe does not generate memories or summaries and does not change `BACKGROUND_PROVIDER`.
-
-Chat supports `gemini`, `openai`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `deepseek`, and `fal`. Keep an OpenAI or Google key configured for support services even when using another chat provider.
-
-Use `/provider` in an owner DM to inspect the active configuration, or `/provider <name> [model]` to change chat until restart. This does not change transcription, voice, images, or background memory work. For a persistent change, edit `.env`.
-
-OpenRouter can also use fal.ai: set `CHAT_PROVIDER=openrouter`, `OPENROUTER_TRANSPORT=fal`, `FAL_API_KEY`, and `OPENROUTER_MODEL`.
-
-### Behavior
-
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `BOT_TIMEZONE` | `America/Santo_Domingo` | Time awareness and scheduling |
-| `ENABLE_SLEEP_SCHEDULE` | `true` | Quiet hours, 23:30–06:00; suppresses group replies and proactive messages |
-| `ENABLE_FOLLOW_UPS` | `false` | DM follow-ups about plans mentioned in conversation |
-| `ENABLE_COMMITMENTS` | `true` | Explicit reminders/research with finite recurrence; durable scoped preferences |
-| `ENABLE_ADAPTIVE_PERSONALITY` | `true` | Gradual, evidence-backed personality tendencies; disable to use only configured identity/rules |
-| `ENABLE_CHECK_INS` | `false` | Periodic DM check-ins; `CHECK_INS_PER_WEEK` defaults to `2` |
-| `SIMPLE_ASSISTANT_MODE` | `false` | Basic assistant prompt with multimedia processing disabled |
-| `ENABLE_TUTOR_MODE` | `false` | English practice and English transcription guidance |
-| `FULL_ACCESS_MODE` | `false` | On-demand images without the weekly limit; does not change access control |
-| `ENABLE_CHAT_LOG` | `false` | Daily text logs in `logs/`; `CHAT_LOG_RETENTION_DAYS` defaults to `30` |
-
-Adaptive tendencies are grounded in direct user feedback and fade toward the configured baseline; see [adaptive personality](docs/adaptive-personality.md) for the saturation diagnosis, corrections and evaluation limits.
-
-Ask naturally for a reminder or recurring research task, including selected weekdays, a time and optional sources. Recurrences expire after at most one calendar month and require explicit renewal. Ambiguous requests and dictated links require clarification. See [agenda and standing preferences](docs/agenda-and-preferences.md) for examples, permissions, reliability limits and source handling.
-
-Weather context defaults to Santo Domingo. For another installation, set `WEATHER_CITY` (for example `Santiago, Chile`); optionally set `WEATHER_COUNTRY=CL` to prefer that country for city names without a country. Exact coordinates remain supported when both `WEATHER_LATITUDE` and `WEATHER_LONGITUDE` are set. Set `BOT_TIMEZONE` separately for the bot's clock and schedules.
-
-Ask naturally about current weather or hourly forecasts for today and the next six days, such as “¿Cómo estará esta noche en San Pedro de Macorís?” and “¿Y mañana?”. Open-Meteo lookups work with every chat provider, independently of Brave or Browserbase. Explicit conversational places/countries override the installation reference; otherwise the reference country is preferred before a global search. The reference is not treated as every participant's location. `ENABLE_WEATHER_LOOKUP=false` disables these queries without removing ambient weather. See [weather queries and location configuration](docs/weather.md).
-
-### Public web links and optional browsers
-
-Set `BROWSERBASE_API_KEY` in `.env` and restart to automatically use [Browserbase Fetch](https://docs.browserbase.com/platform/fetch/overview) for public links shared in Telegram. Only the key is needed. The startup log reports the selected reader. This works with every chat provider, including in simple assistant mode; passive group links are not fetched.
-
-The bot retrieves raw HTML/text through Browserbase and extracts readable content locally. API errors, timeouts, and upstream HTTP failures fall back to the existing direct reader. Without a key, it uses the direct reader immediately. Both paths validate public destinations at each redirect and enforce response-size, timeout, and extracted-content limits. Page content is passed to the model as untrusted reference material.
-
-Shared-link previews use Fetch. During conversation and scheduled research, the bot can also open pages using short-lived [Browserbase browser sessions](https://docs.browserbase.com/reference/api/create-a-session) and read JavaScript-rendered text, tables and accessible frames. It uses the same API key, without installing a browser on the server. Page URLs and public resources are validated; HTTP resources use the pinned public-address transport, redirects are checked again, and non-GET/HEAD requests, service workers, downloads and WebSockets are blocked. No logins, clicks, forms or model-generated scripts are supported. Rendering may still miss late or unsupported widgets; errors fall back to explicitly labeled static text, never a fabricated explanation for missing data.
-
-For a separately installed Chromium browser, set `BROWSER_PROVIDER=local` and `LOCAL_BROWSER_CDP_URL=http://127.0.0.1:9223`. No browser is bundled or installed by the bot. Local mode bypasses Browserbase for rendering and static reads, keeps the public-address protections, and falls back to labeled static text if the browser is unavailable. See [optional local browser setup](docs/local-browser.md).
-
-`ENABLE_WEB_READING=false` disables conversational/research page reads; `ENABLE_BROWSER_READING=false` keeps those reads static. Both default to enabled, with rendering requiring either local browser configuration or `BROWSERBASE_API_KEY`. A lookup batch reads at most three pages, and `WEB_READ_DAILY_LIMIT` defaults to 60 page attempts per UTC day (including failures), persisted across restarts. Public page snapshots are cached for five minutes. These reads consume Browserbase browser-session usage when that provider is selected, independently of the search budget. Sessions have a 60-second server timeout, a 45-second client deadline, and explicit release on success/failure. YouTube and PDF attachment handling is unchanged.
-
-### Optional web search and recent context
-
-Set `BRAVE_API_KEY` and restart to enable public internet search with any chat provider. Missing or blank keys omit the entire feature, including news refreshes; normal conversation continues unchanged. `ENABLE_WEB_SEARCH=false` also disables it.
-
-The conversation model can decide to check an unfamiliar public event, recent news, or a question needing current information. It sends a short acknowledgement before searching, then replies using up to three Brave source excerpts with links. Vague references should prompt clarification; personal news and ordinary chat do not need a lookup. No extra classifier runs on each message. Incoming conversational turns allow up to four chained lookup batches shared across search, page reading and weather, with at most five model calls total. The model can use a search result to choose the next tool, for example finding a game's venue/time before checking its forecast. Only the first acknowledgement is sent; ordinary chat still needs one model call. Unavailable search, ambiguous events and missing evidence are reported honestly.
-
-The chain has a 150-second total deadline, with the last 30 seconds reserved for answering; a lookup batch has at most 45 seconds and each model decision at most 60 seconds within the remaining budget. Each result contributes at most 8,000 characters; omitted content is explicitly unknown. Repeated requests, invalid/mixed control blocks and obvious private parameters stop the chain. Existing public-address checks, caches and daily search/page budgets remain in force; one batch may make several network requests. See [execution limits and privacy](docs/weather.md#execution-and-caching). Chained lookups are available from [v1.1.0](https://github.com/mio-gato-software/mgsbot/releases/tag/v1.1.0); `v1.0.66` supports the earlier single-batch flow.
-
-Search replies keep the bot's configured personality and group-chat tone: a casual notice, usually two to four sentences with source links, and only the details relevant to the latest message. Follow-ups build on the exchange instead of repeating a report. Material uncertainty remains explicit; detailed comparisons are available when requested.
-
-When asked for an opinion, the bot uses research to form a view consistent with its configured personality, then leads with its stance and the reason behind it. Links support the factual basis; it does not merely summarize the news, copy a source's opinion, or automatically agree with the user. Unverified premises stay conditional, and factual questions still receive factual answers. This also applies when using cached context.
-
-During active use, the bot also refreshes five ambient headlines in the background at most once per 24 hours (shared across chats). `NEWS_CONTEXT_QUERY` defaults to `noticias actualidad República Dominicana mundo`; set `ENABLE_NEWS_CONTEXT=false` for on-demand search only. Headlines are context for relevant conversations, never automatic bulletins. Simple assistant mode supports on-demand search but does not refresh ambient headlines.
-
-`memory/world-context/` holds the shared headlines, five recent lookups **per chat**, and a persistent request counter. Excerpts keep their source URLs and retrieval/publication labels. Context expires after 48 hours, is excluded immediately after expiry and pruned on access; recalling it never extends its lifetime. Identical queries with the same freshness filter reuse results for one hour. The conversational loop uses at most 4,000 characters of cached excerpts, within its 32,000-character temporary lookup-context limit. Raw search results are not appended to sensory memory or promoted into personal facts; extraction preserves personal interests/reactions rather than world news.
-
-`WEB_SEARCH_DAILY_LIMIT` defaults to 60 attempts across the entire bot per UTC day, including headline refreshes and failures, and survives restarts. `0` stops new requests while allowing unexpired cached context. There are no automatic search retries. Actual provider calls also have durable per-key rolling 31-day guards: 800 Brave searches, 800 Browserbase Fetch calls, and 48 browser sessions reserving their full 60-second lifetime. See [research budgets](docs/agenda-and-preferences.md#research-budgets) for prior usage, shared credentials and recovery. Search excerpts are treated as untrusted references, not full articles or proof that a reported event occurred. Browserbase is independent and is not required for Brave search.
+`BOT_TIMEZONE` controls the clock and schedules. Sleep hours suppress group replies and proactive sends. Follow-ups and check-ins are disabled by default; enable them with `ENABLE_FOLLOW_UPS` and `ENABLE_CHECK_INS`. Other modes include `ENABLE_TUTOR_MODE`, `SIMPLE_ASSISTANT_MODE`, and optional chat logging. See [adaptive personality](docs/adaptive-personality.md) for its controls and limits.
 
 ## Profile, rules, and character image
 
-To configure the bot without the Telegram setup conversation:
+To configure the persona without the Telegram setup conversation:
 
 ```bash
 bun run profile:init
-# Edit memory/bot_profile.json: name, birth year, gender, language, personality.
-bun run profile:show
-bun run start
+bun run rules:init
+# Edit memory/bot_profile.json and memory/bot_rules.json, then start normally.
 ```
 
-A valid `bot_profile.json` takes precedence over the in-chat configuration. For custom behavior and style, run `bun run rules:init`, edit `memory/bot_rules.json`, and inspect it with `bun run rules:show`. Rules affect the conversation prompt; they do not override access control or provider configuration.
-bun run behaviors:configure config.json # Configure conditional actions on an existing research task
+A valid profile overrides in-chat configuration. Rules customize conversational behavior and style; access control and provider settings remain in `.env`. Inspect files with `bun run profile:show` and `bun run rules:show`.
 
-Place a character reference at `memory/base.png`, `memory/base.jpg`, or `memory/base.jpeg` to enable scheduled character images. `/allowphotorequest` authorizes one on-demand photo; add `group` to target the allowed group. `FULL_ACCESS_MODE=true` also permits generation without a reference.
+Place the character reference at `memory/base.png`, `memory/base.jpg`, or `memory/base.jpeg`. Character photos always require this reference and preserve its photographic or illustrated medium. The normal weekly photo becomes eligible during a conversation; `/allowphotorequest` grants one requested photo. `FULL_ACCESS_MODE=true` enables on-demand generation, including external subjects without a character reference.
 
-These paths use `MEMORY_DIR` when set.
+User-image edits use the user's photo; character photos use the configured reference. Photo follow-ups can reuse the sender's latest image within the recent-message buffer for up to 30 minutes; otherwise reply to the original photo. These paths use `MEMORY_DIR` when configured.
+
+## Agenda and research
+
+Ask naturally for one-time reminders, daily/weekly research, selected weekdays, or lasting source/style preferences. Recurrences last at most **one calendar month** and require explicit renewal. `ENABLE_COMMITMENTS=false` or simple assistant mode disables the agenda.
+
+Reports can include requested images and conditional text/images based on confirmed research evidence. Conditions are checked after the parent report, at its scheduled cadence. Saved receipts prevent automatic replay of sent or uncertain deliveries. See [agenda and standing preferences](docs/agenda-and-preferences.md) for examples, permissions, budgets, and headless configuration.
+
+- **Search:** `BRAVE_API_KEY` enables public search and optional ambient headlines.
+- **Page reading:** works directly without extra credentials. `BROWSERBASE_API_KEY` adds Fetch and JavaScript rendering; a separately installed [local Chromium browser](docs/local-browser.md) is another option. Reads are bounded, public, and read-only.
+- **Weather:** Open-Meteo needs no extra key. Configure `WEATHER_CITY` and optionally `WEATHER_COUNTRY` separately from the timezone. See [weather queries](docs/weather.md) for forecast limits and scheduled reports.
 
 ## Telegram commands
 
-All commands are sent through the owner’s DM.
+Send commands in the owner's DM.
 
 | Command | Action |
 | --- | --- |
 | `/help` | List commands |
-| `/provider [name] [model]` | Inspect or change the chat provider for this session |
+| `/provider [name] [model]` | Inspect configuration or change chat until restart; other services stay independently configured |
 | `/allowphotorequest [group]` | Authorize one photo request in the DM or allowed group |
 | `/off` / `/on` | Disable / enable responses without stopping the process |
-| `/optimize` | Run the daily memory-confidence decay check and report statistics |
+| `/optimize` | Check memory-confidence decay and report statistics |
 
-## Deployment
+## Deployment and data
 
-### Docker
+For Docker, prepare `.env` and run `docker compose up -d --build`. Compose mounts `.env` read-only and persists `memory/`, `audios/`, and `logs/`; data directories must be writable by the container's `bun` user.
 
-Prepare `.env` as described above, then run:
+For a standalone executable, use `bun run build` or `bun run build:linux`, or download a [release](https://github.com/mio-gato-software/mgsbot/releases) for Linux x64, macOS ARM64, or Windows x64. Run it from the directory containing `.env`; Bun is unnecessary on the target machine. Pushing `main` runs CI; tagged releases publish binaries. See [deployment and upgrades](docs/deployment.md).
 
-```bash
-docker compose up -d --build
-docker compose logs -f bot
-```
+`memory/` holds persistent user data, profiles, schedules, and recovery state. `MEMORY_DIR` changes its root; update Docker mounts accordingly. Preserve it across upgrades and use only one process per store. Verified daily backups retain seven dated snapshots; keep an external copy too. Never commit credentials or runtime data.
 
-Compose mounts `.env` read-only and persists `memory/`, `audios/`, and `logs/` on the host. Those directories must be writable by the container’s `bun` user. If you change `MEMORY_DIR`, update the volume mapping too.
-
-### Standalone executable
-
-Build with `bun run build` (current platform) or `bun run build:linux` (Linux x64). Both produce `./mgsbot`. Prebuilt binaries are published through [GitHub Releases](https://github.com/mio-gato-software/mgsbot/releases): `mgsbot-linux` for Linux x64, `mgsbot-macos` for macOS ARM64, and `mgsbot-windows.exe` for Windows x64. Rename the downloaded asset to the executable name expected by your installation.
-
-A push to `main` runs CI but does not publish downloadable binaries. The `release:patch`, `release:minor` and `release:major` scripts bump the package version, create a `v*` tag and push `main` and tags. The release workflow runs lint, typecheck and tests, builds all three assets, and publishes the release as latest. Release-based updaters receive only published releases. Weather queries are included from [v1.0.66](https://github.com/mio-gato-software/mgsbot/releases/tag/v1.0.66).
-
-Run the executable from a directory containing `.env`; relative data paths are resolved from the working directory. Bun is not required on the target machine.
-
-```bash
-./mgsbot --init-profile
-# Edit memory/bot_profile.json.
-./mgsbot --show-profile
-./mgsbot --init-rules    # Optional custom rules
-./mgsbot --help         # All configuration helpers
-./mgsbot
-```
-
-The [deployment guide](docs/deployment.md) covers service verification, release assets, backups and rollback using generic examples. Keep private installation details and operational records outside version control.
-
-## Data and maintenance
-
-`memory/` contains learned facts, conversation summaries, recent messages, identities, personality, schedules, and promotion recovery data. Set `MEMORY_DIR` to use a different root. This is persistent user data: keep it across upgrades and run only one bot process against it.
-
-- **Backups:** verified daily snapshots live in `memory/backups/`, with seven dated snapshots retained. Startup awaits a verified snapshot before memory migrations. Keep an external copy as well; local snapshots share the runtime disk.
-- **Recovery:** malformed stores are preserved and writes fail instead of replacing them with empty data. Interrupted promotions retry from saved checkpoints; after ten failures, the chunk stays available for operator recovery.
-- **Routine work:** confidence decay and the memory janitor run automatically. `bun run promote:stats` reports promotion decisions and extraction quality; `bun run memory:stats` reports background usage, cache hits, and prompt size. Low-confidence facts are archived for relevant historical recall rather than deleted. Full media text is preserved through extraction, and narrative updates are batched.
-- **Embedding changes:** startup rebuilds stale vectors when the embedding provider, model, or dimensions change. `AUTO_REEMBED=false` disables this; `bun run scripts/reembed-memory.ts` forces a rebuild. Stop the bot and preserve a backup before running a manual rewrite.
-
-See [maintenance and recovery](docs/maintenance.md) for restoration and failed-promotion procedures, and [TODO.md](TODO.md) for pending operational checks.
+See [maintenance and recovery](docs/maintenance.md) for backups, corrupted stores, interrupted promotions, and embedding changes. `bun run memory:stats` reports usage and cache metrics; `bun run promote:stats` reports extraction quality. [TODO.md](TODO.md) tracks known pending work.
 
 ## Development
 
 ```bash
 bun run dev          # Restart on source changes
 bun run lint:fix     # Apply lint and formatting fixes
-bun run typecheck    # Check TypeScript; Bun does not type-check at runtime
-bun test --coverage  # Run tests and enforce coverage thresholds
+bun run typecheck    # Bun does not type-check at runtime
+bun test --coverage  # Disposable test memory; enforce coverage thresholds
 bun run build        # Compile the executable
 ```
 
-Tests use a disposable memory directory, including when `MEMORY_DIR` is inherited, and inject external services for conversation and recovery tests.
-
-For navigation: `index.ts` owns startup and shutdown; `src/handlers/` handles incoming media and routing; `src/conversation.ts` coordinates turns; `src/prompt/`, `src/memory/`, and `src/providers/` contain prompt assembly, persistence, and chat adapters. Voice and image adapters live in `src/stt/`, `src/tts/`, and `src/image/`. The detailed repository guide is in [AGENTS.md](AGENTS.md).
+[AGENTS.md](AGENTS.md) describes the architecture and repository rules.
 
 ## License
 
