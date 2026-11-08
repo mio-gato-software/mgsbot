@@ -44,6 +44,7 @@
 		"profile:sync": "bun run index.ts --sync-profile",
 		"rules:init": "bun run index.ts --init-rules",
 		"rules:show": "bun run index.ts --show-rules",
+		"behaviors:configure": "bun run scripts/configure-task-behaviors.ts",
 		"memory:stats": "bun run scripts/memory-stats.ts",
 		"promote:stats": "bun run scripts/promotion-stats.ts",
 		"test": "bun test",

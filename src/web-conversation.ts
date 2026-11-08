@@ -244,6 +244,8 @@ export async function generateWithWebSearch(
 		announce: (text: string) => Promise<void>;
 		useCachedContext?: boolean;
 		maxLookups?: number;
+		/** Actual tool results only; excludes model drafts, memory and quoted promises. */
+		onEvidence?: (content: string) => void;
 		reviewFinal?: (
 			draft: string,
 			messages: ChatMessage[],
@@ -501,6 +503,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 				bounded(evidence, Math.max(0, Math.min(MAX_RESULT_CHARS, room))) +
 				footer;
 			messages.push({ role: "user", content });
+			input.onEvidence?.(content);
 			evidenceChars += content.length;
 			if (timedOut || evidenceChars >= maxEvidenceChars - 1_000) {
 				stopReason = timedOut

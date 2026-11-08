@@ -8,6 +8,7 @@ import {
 	resolveClassifierModel,
 	resolveClassifierProvider,
 } from "../src/ai/platform.ts";
+import { creativeNoveltyWithTypeSafe } from "../src/ai/typesafe-classifier.ts";
 import {
 	formatProviderStartupSummary,
 	validateProviderConfiguration,
@@ -111,6 +112,30 @@ test("TypeSafe auto-selection respects explicit providers and is optional withou
 	expect(formatProviderStartupSummary(env).join("\n")).toContain(
 		"Classifiers: typesafe (jev-1.13.0)",
 	);
+});
+
+test("typed creative novelty handles repetition, distinct ideas and uncertain results", async () => {
+	let answer = { choice: "repetitive", confidence: 0.95 };
+	mockFetch(async (_url, init) => {
+		const body = JSON.parse(String(init?.body));
+		expect(body.questions.novelty.type).toBe("choice");
+		return Response.json({
+			answers: { novelty: { type: "choice", ...answer } },
+		});
+	});
+	expect(
+		await creativeNoveltyWithTypeSafe({ concept: "Same ring joke" }, [
+			{ concept: "Ring joke" },
+		]),
+	).toBe(false);
+	answer = { choice: "distinct", confidence: 0.9 };
+	expect(
+		await creativeNoveltyWithTypeSafe({ concept: "Cooking joke" }, []),
+	).toBe(true);
+	answer = { choice: "distinct", confidence: 0.5 };
+	expect(
+		await creativeNoveltyWithTypeSafe({ concept: "Unclear joke" }, []),
+	).toBeNull();
 });
 
 test("typed group answers bypass the legacy model and bound the supplied context", async () => {

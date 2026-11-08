@@ -3,7 +3,7 @@ import { resolveImageProviderName } from "../provider-options.ts";
 import { FalImageProvider } from "./fal.ts";
 import { GeminiImageProvider } from "./gemini.ts";
 import { OpenAIImageProvider } from "./openai.ts";
-import type { ImageProvider } from "./types.ts";
+import type { ImageGenerationOptions, ImageProvider } from "./types.ts";
 
 export type { ImageProvider } from "./types.ts";
 
@@ -37,8 +37,13 @@ export function isImageGenAvailable(): boolean {
 export async function generateImage(
 	prompt: string,
 	referenceImagePath?: string,
+	options?: ImageGenerationOptions,
 ): Promise<Buffer> {
-	return createImageProvider().generateImage(prompt, referenceImagePath);
+	return createImageProvider().generateImage(
+		prompt,
+		referenceImagePath,
+		options,
+	);
 }
 
 export async function editImage(

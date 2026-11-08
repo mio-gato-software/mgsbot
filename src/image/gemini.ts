@@ -7,7 +7,7 @@ import {
 } from "../ai/platform.ts";
 import { log } from "../logger.ts";
 import { characterReferencePrompt } from "./prompts.ts";
-import type { ImageProvider } from "./types.ts";
+import type { ImageGenerationOptions, ImageProvider } from "./types.ts";
 
 const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
 
@@ -27,6 +27,7 @@ export class GeminiImageProvider implements ImageProvider {
 	async generateImage(
 		prompt: string,
 		referenceImagePath?: string,
+		options?: ImageGenerationOptions,
 	): Promise<Buffer> {
 		if (!hasGoogleApiKey) {
 			throw new Error("GOOGLE_API_KEY is required for Gemini image generation");
@@ -50,7 +51,7 @@ export class GeminiImageProvider implements ImageProvider {
 			);
 		} else {
 			parts.push({
-				text: `Generate an image of: ${prompt}. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
+				text: `Generate an image of: ${prompt}.${options?.allowText ? " Render the requested text and numeric data accurately and legibly." : " Do NOT render any text, clocks, timestamps, or time indicators in the image."}`,
 			});
 		}
 

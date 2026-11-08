@@ -30,6 +30,7 @@ const forceProfile = process.argv.includes("--force");
 const showProfile = process.argv.includes("--show-profile");
 const showRules = process.argv.includes("--show-rules");
 const syncProfile = process.argv.includes("--sync-profile");
+const behaviorConfigIndex = process.argv.indexOf("--configure-task-behaviors");
 
 if (showHelp) {
 	console.log(`MGS Bot
@@ -44,6 +45,7 @@ Usage:
   ./mgsbot --init-rules          Create memory/bot_rules.json for editable behavior rules
   ./mgsbot --init-rules --force  Overwrite memory/bot_rules.json with a fresh template
   ./mgsbot --show-rules          Print custom behavior rules
+  ./mgsbot --configure-task-behaviors config.json  Apply task behaviors while the bot is stopped
 
 Headless personality setup:
   1. Run ./mgsbot --init-profile
@@ -51,6 +53,19 @@ Headless personality setup:
   3. Run ./mgsbot
 
 If memory/bot_profile.json exists and is valid, it is used as the active personality profile.`);
+	process.exit(0);
+}
+
+if (behaviorConfigIndex !== -1) {
+	const file = process.argv[behaviorConfigIndex + 1];
+	if (!file) throw new Error("A behavior configuration file is required.");
+	const { configureTaskBehaviorsFile } = await import(
+		"./src/commitments/behavior-config.ts"
+	);
+	await configureTaskBehaviorsFile(file);
+	console.log(
+		"Conditional behaviors saved. Parent schedule, report and expiry preserved.",
+	);
 	process.exit(0);
 }
 
