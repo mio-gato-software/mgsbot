@@ -12,6 +12,7 @@ import {
 	SENSORY_DIR,
 } from "../src/memory/sensory.ts";
 import { buildMessages } from "../src/prompt/history.ts";
+import { compactMediaMessageContent } from "../src/prompt/media-preview.ts";
 import type { ConversationMessage, SensoryBuffer } from "../src/types.ts";
 
 // Distinct fixture ID within the disposable test memory root.
@@ -46,6 +47,40 @@ function userMsg(content: string, i: number): ConversationMessage {
 
 describe("sensory buffer", () => {
 	afterEach(cleanup);
+
+	test("old image reference previews do not split emojis at the 160-character boundary", () => {
+		const prefix = "[Image from tester]: ";
+		const original = {
+			...userMsg(`${prefix}${"x".repeat(159 - prefix.length)}😀 tail`, 0),
+			userText: "What is this?",
+		};
+		const buffer = makeBuffer([
+			original,
+			userMsg("ok", 1),
+			userMsg("another photo", 2),
+		]);
+		const output = buildMessages(buffer)[0]?.content ?? "";
+		expect(output.isWellFormed()).toBe(true);
+		expect(output).not.toContain("�");
+		expect(original.content).toContain("😀 tail");
+	});
+
+	test("history and media preview limits preserve Unicode at their cut points", () => {
+		const old = userMsg(
+			`${"x".repeat(449 - "[tester]: ".length)}😀${"tail".repeat(20)}`,
+			0,
+		);
+		const output =
+			buildMessages(makeBuffer([old, userMsg("ok", 1), userMsg("next", 2)]))[0]
+				?.content ?? "";
+		expect(output.isWellFormed()).toBe(true);
+		expect(output).not.toContain("�");
+		const media = compactMediaMessageContent(
+			`[Image from tester]: ${"x".repeat(239)}😀 more text`,
+		);
+		expect(media.isWellFormed()).toBe(true);
+		expect(media).not.toContain("�");
+	});
 
 	test("loadSensory returns empty buffer when file is missing", async () => {
 		await cleanup();

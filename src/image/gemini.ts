@@ -6,7 +6,8 @@ import {
 	resolveGeminiImageSize,
 } from "../ai/platform.ts";
 import { log } from "../logger.ts";
-import type { ImageProvider } from "./types.ts";
+import { characterReferencePrompt } from "./prompts.ts";
+import type { ImageGenerationOptions, ImageProvider } from "./types.ts";
 
 const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
 
@@ -26,6 +27,7 @@ export class GeminiImageProvider implements ImageProvider {
 	async generateImage(
 		prompt: string,
 		referenceImagePath?: string,
+		options?: ImageGenerationOptions,
 	): Promise<Buffer> {
 		if (!hasGoogleApiKey) {
 			throw new Error("GOOGLE_API_KEY is required for Gemini image generation");
@@ -44,12 +46,12 @@ export class GeminiImageProvider implements ImageProvider {
 			parts.push(
 				{ inlineData: { mimeType, data: base64Data } },
 				{
-					text: `This is a reference image of a character in cartoon illustration style. Generate a new image of this same character (same face, body features) in the SAME cartoon/illustrated art style (flat colors, clean linework, digital illustration) but with a completely different outfit, pose, and setting. The scene: ${prompt}. The setting and atmosphere should feel natural for the described scene (e.g. indoor scenes like a bedroom, living room, restaurant, bar, mall, gym, or office should have appropriate indoor lighting; outdoor scenes like a beach, park, city street, rooftop, garden, or poolside should have appropriate natural lighting). IMPORTANT: Maintain the cartoon illustration style throughout. Do NOT render any text, clocks, timestamps, or time indicators in the image. Only the character's identity should match the reference — everything else should be new and fit the scene.`,
+					text: characterReferencePrompt(prompt),
 				},
 			);
 		} else {
 			parts.push({
-				text: `Generate an image of: ${prompt}. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
+				text: `Generate an image of: ${prompt}.${options?.allowText ? " Render the requested text and numeric data accurately and legibly." : " Do NOT render any text, clocks, timestamps, or time indicators in the image."}`,
 			});
 		}
 

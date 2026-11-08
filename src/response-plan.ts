@@ -1,5 +1,6 @@
 export const IMAGE_MARKER_REGEX = /\[IMAGE:\s*([^\]]+)\]/;
 export const IMAGE_SELF_MARKER_REGEX = /\[IMAGE_SELF:\s*([^\]]+)\]/;
+export const IMAGE_EDIT_MARKER_REGEX = /\[IMAGE_EDIT:\s*([^\]]+)\]/;
 export const REACTION_MARKER_REGEX = /\[REACT:\s*([^\]]+)\]/;
 export const QUOTE_REPLY_MARKER = "[QUOTE_REPLY]";
 export const SILENCE_MARKER = "[SILENCE]";
@@ -42,7 +43,7 @@ export interface ResponsePlan {
 	text: string;
 	textOutsideSpeech: string;
 	speech?: string;
-	image?: { prompt: string; self: boolean };
+	image?: { prompt: string; self: boolean; edit?: true };
 	reaction?: string;
 	quoteReplyRequested: boolean;
 }
@@ -58,12 +59,17 @@ export function parseResponse(
 	const reaction = text.match(REACTION_MARKER_REGEX)?.[1]?.trim();
 	text = text.replace(/\[REACT:\s*[^\]]+\]/g, "").trim();
 	const selfMatch = text.match(IMAGE_SELF_MARKER_REGEX);
-	const imageMatch = selfMatch ?? text.match(IMAGE_MARKER_REGEX);
+	const editMatch = !selfMatch ? text.match(IMAGE_EDIT_MARKER_REGEX) : null;
+	const imageMatch = selfMatch ?? editMatch ?? text.match(IMAGE_MARKER_REGEX);
 	const image =
 		options.allowImages && imageMatch?.[1]?.trim()
-			? { prompt: imageMatch[1].trim(), self: !!selfMatch }
+			? {
+					prompt: imageMatch[1].trim(),
+					self: !!selfMatch,
+					...(editMatch ? { edit: true as const } : {}),
+				}
 			: undefined;
-	text = text.replace(/\[IMAGE(?:_SELF)?:\s*[^\]]+\]/g, "").trim();
+	text = text.replace(/\[IMAGE(?:_SELF|_EDIT)?:\s*[^\]]+\]/g, "").trim();
 	const speechPattern = /\[TTS\]([\s\S]+?)\[\/?TTS\]/g;
 	const speeches = [...text.matchAll(speechPattern)]
 		.map((match) => match[1]?.trim() ?? "")

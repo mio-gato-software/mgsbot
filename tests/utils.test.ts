@@ -2,6 +2,43 @@ import { describe, expect, test } from "bun:test";
 import { isFileNotFound, withRetry } from "../src/utils.ts";
 
 describe("withRetry", () => {
+	for (const status of [429, 500, 502, 503, 504]) {
+		test(`retries typed HTTP ${status} failures up to the shared limit`, async () => {
+			let attempts = 0;
+			const error = Object.assign(new Error("Provider unavailable"), {
+				status,
+			});
+			await expect(
+				withRetry(
+					async () => {
+						attempts++;
+						throw error;
+					},
+					3,
+					1,
+				),
+			).rejects.toBe(error);
+			expect(attempts).toBe(3);
+		});
+	}
+
+	test("an explicit permanent status overrides incidental retry numbers in the body", async () => {
+		let attempts = 0;
+		const error = Object.assign(new Error("Invalid resource 503"), {
+			status: 400,
+		});
+		await expect(
+			withRetry(
+				async () => {
+					attempts++;
+					throw error;
+				},
+				3,
+				1,
+			),
+		).rejects.toBe(error);
+		expect(attempts).toBe(1);
+	});
 	test("returns result on first success", async () => {
 		const result = await withRetry(() => Promise.resolve("ok"));
 		expect(result).toBe("ok");

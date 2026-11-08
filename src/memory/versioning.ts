@@ -5,8 +5,11 @@ export interface Versioned<T> {
 	data: T;
 }
 
-export function wrapVersioned<T>(data: T): Versioned<T> {
-	return { schemaVersion: CURRENT_SCHEMA_VERSION, data };
+export function wrapVersioned<T>(
+	data: T,
+	version = CURRENT_SCHEMA_VERSION,
+): Versioned<T> {
+	return { schemaVersion: version, data };
 }
 
 function isVersioned(raw: unknown): raw is Versioned<unknown> {
@@ -24,10 +27,13 @@ function isVersioned(raw: unknown): raw is Versioned<unknown> {
  * `data`; legacy files (bare arrays, or objects written before schemaVersion
  * existed) are returned unchanged.
  */
-export function unwrapVersioned<T>(raw: unknown): T {
+export function unwrapVersioned<T>(
+	raw: unknown,
+	supportedVersion = CURRENT_SCHEMA_VERSION,
+): T {
 	if (typeof raw === "object" && raw !== null && "schemaVersion" in raw) {
 		const version = (raw as { schemaVersion: unknown }).schemaVersion;
-		if (version !== CURRENT_SCHEMA_VERSION) {
+		if (version !== CURRENT_SCHEMA_VERSION && version !== supportedVersion) {
 			throw new Error(`Unsupported memory schema version: ${String(version)}`);
 		}
 	}

@@ -71,8 +71,9 @@ export class FalChatProvider implements ChatProvider {
 				},
 				body: JSON.stringify({
 					model: this.model,
-					system_prompt: systemPrompt,
-					prompt,
+					// A malformed surrogate from any upstream preview must not poison the request.
+					system_prompt: systemPrompt.toWellFormed(),
+					prompt: prompt.toWellFormed(),
 					temperature: 0.7,
 					reasoning: this.reasoning,
 				}),
@@ -80,8 +81,11 @@ export class FalChatProvider implements ChatProvider {
 			});
 			if (!response.ok) {
 				const errorBody = await response.text().catch(() => "");
-				throw new Error(
-					`fal.ai API error: ${response.status} ${response.statusText} ${errorBody}`,
+				throw Object.assign(
+					new Error(
+						`fal.ai API error: ${response.status} ${response.statusText} ${errorBody}`,
+					),
+					{ status: response.status },
 				);
 			}
 			return (await response.json()) as FalResponse;

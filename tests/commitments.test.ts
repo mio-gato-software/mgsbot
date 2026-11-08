@@ -313,6 +313,75 @@ test("editing a schedule preserves validated sources without making the user rep
 	expect(tasks[1]?.schedule.time).toBe("08:00");
 });
 
+test("image clarification survives restart and remains in model context when rescheduling the report", async () => {
+	await store.apply(input, plan([action()]));
+	const original = (await store.read()).tasks[0];
+	if (!original) throw new Error("Missing task");
+	const request = "Actualiza la tarea para que incluya la imagen.";
+	await handleCommitmentRequest(
+		{ ...input, messageId: 2, text: request },
+		{
+			store,
+			now: () => now,
+			interpret: async () =>
+				plan([], { clarification: "¿La imagen de la tabla de posiciones?" }),
+		},
+	);
+	store = new CommitmentStore(store.path, () => now);
+	const instruction = `${original.instruction}. Generar y adjuntar imagen de la tabla de posiciones actualizada en cada entrega.`;
+	await handleCommitmentRequest(
+		{
+			...input,
+			messageId: 3,
+			text: "Esa imagen.",
+			recentConversation: [
+				{ role: "model", text: "¿La imagen de la tabla de posiciones?" },
+			],
+		},
+		{
+			store,
+			now: () => now,
+			interpret: async (latest, context) => {
+				expect(latest.text).toContain(request);
+				expect(JSON.parse(context).recentConversation[0].text).toContain(
+					"tabla de posiciones",
+				);
+				return plan([
+					{
+						type: "update",
+						id: original.id,
+						instruction,
+						evidence: "Esa imagen.",
+					},
+				]);
+			},
+		},
+	);
+	const updated = (await store.read()).tasks[0];
+	expect(updated?.instruction).toBe(instruction);
+	expect(updated?.schedule).toEqual(original.schedule);
+	expect(updated?.expiresAt).toBe(original.expiresAt);
+	await handleCommitmentRequest(
+		{ ...input, messageId: 4, text: "Cambia la hora a las 6:30 AM." },
+		{
+			store,
+			now: () => now,
+			interpret: async (_latest, context) => {
+				expect(JSON.parse(context).tasks[0].instruction).toBe(instruction);
+				const edit = action("06:30");
+				edit.task.instruction = instruction;
+				edit.evidence = "Cambia la hora a las 6:30 AM.";
+				return plan([{ ...edit, replaceId: original.id }]);
+			},
+		},
+	);
+	const saved = (await new CommitmentStore(store.path).read()).tasks.find(
+		(t) => t.status === "active",
+	);
+	expect(saved?.schedule.time).toBe("06:30");
+	expect(saved?.instruction).toBe(instruction);
+});
+
 const screenshotRequest =
 	"DemoBot. Aparte de la página oficial de LIDOM, ¿puedes tener en cuenta lo que dijo Ejemplo? pelotainvernal.com y https://bengaleses.com. Todos los días a las 7 AM darnos el estado del juego?";
 
@@ -783,7 +852,7 @@ test("manual execution uses a saved task once without advancing its schedule or 
 	const request = {
 		...input,
 		messageId: 2,
-		text: "Brendy, intenta el reporte de nuevo.",
+		text: "DemoBot, intenta el reporte de nuevo.",
 	};
 	let runs = 0;
 	const replies: string[] = [];
@@ -852,7 +921,7 @@ test("manual execution rejects wrong-chat, inactive and fabricated targets and f
 	}
 });
 
-test("chat conversation delivers the scheduled generator output directly and resumes ordinary chat", async () => {
+test("chat conversation delivers the scheduled report image directly and resumes ordinary chat", async () => {
 	const { processConversation, defaultConversationDependencies } = await import(
 		"../src/conversation.ts"
 	);
@@ -866,13 +935,14 @@ test("chat conversation delivers the scheduled generator output directly and res
 	const report =
 		"Resultados: 8-3 y 9-5. Tabla: Licey y Gigantes 4-2. Juegos: 16:00, 18:00, 19:30. Lluvia: 60%, 28%, 34%/27%.";
 	let runCalls = 0;
+	let behaviorCalls = 0;
 	let chatCalls = 0;
 	const turns = [
 		"Muy bien.",
-		"Brendy, intenta el reporte de nuevo. Te levanté algunas restricciones. Veamos qué tal funciona ahora.",
+		"DemoBot, intenta el reporte de nuevo. Te levanté algunas restricciones. Veamos qué tal funciona ahora.",
 		"Gracias.",
 	];
-	const services = {
+	const services: typeof defaultConversationDependencies = {
 		...defaultConversationDependencies,
 		retrieve: async () => ({
 			relevantEpisodes: [],
@@ -899,7 +969,20 @@ test("chat conversation delivers the scheduled generator output directly and res
 			)) as typeof handleCommitmentRequest,
 		scheduled: async () => {
 			runCalls++;
-			return report;
+			return {
+				text: report,
+				image: Buffer.from("report image"),
+				observation: {
+					evidence: ["Verified tool evidence"],
+					persona: "Persona",
+					checkedAt: now,
+				},
+			};
+		},
+		behaviors: async (_api, selected, observation) => {
+			behaviorCalls++;
+			expect(selected.id).toBe(task.id);
+			expect(observation.evidence).toEqual(["Verified tool evidence"]);
 		},
 		generate: async () => {
 			chatCalls++;
@@ -915,14 +998,21 @@ test("chat conversation delivers the scheduled generator output directly and res
 			messageId: 101 + i,
 			text,
 		});
+		const captions: string[] = [];
+		ctx.replyWithPhoto = async (_photo, options) => {
+			captions.push(options?.caption ?? "");
+			return {} as never;
+		};
 		expect(await processConversation(ctx, text, "Ejemplo", {}, services)).toBe(
 			true,
 		);
 		expect(spies.replies.map((r) => r.text)).toEqual([
-			i === 1 ? report : "De acuerdo.",
+			...(i === 1 ? [] : ["De acuerdo."]),
 		]);
+		expect(captions).toEqual(i === 1 ? [report] : []);
 	}
 	expect(runCalls).toBe(1);
+	expect(behaviorCalls).toBe(1);
 	expect(chatCalls).toBe(2);
 	expect((await store.read()).tasks).toEqual(before);
 	expect(
