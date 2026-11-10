@@ -7,7 +7,11 @@ import {
 	resolveOpenAIImageSize,
 } from "../ai/platform.ts";
 import { log } from "../logger.ts";
-import { characterReferencePrompt } from "./prompts.ts";
+import {
+	characterReferencePrompt,
+	noImageText,
+	userImageEditPrompt,
+} from "./prompts.ts";
 import type { ImageGenerationOptions, ImageProvider } from "./types.ts";
 
 function mimeFromPath(filePath: string): string {
@@ -54,7 +58,7 @@ export class OpenAIImageProvider implements ImageProvider {
 
 		if (referenceImagePath) {
 			return this.requestImageEdit(
-				characterReferencePrompt(prompt),
+				`${characterReferencePrompt(prompt)} ${noImageText}`,
 				referenceImagePath,
 			);
 		}
@@ -62,7 +66,7 @@ export class OpenAIImageProvider implements ImageProvider {
 		const response = await getOpenAIClient().images.generate(
 			{
 				model,
-				prompt: `Generate an image of: ${prompt}.${options?.allowText ? " Render the requested text and numeric data accurately and legibly." : " Do NOT render any text, clocks, timestamps, or time indicators in the image."}`,
+				prompt: `Generate an image of: ${prompt}. ${options?.allowText ? "Render the requested text and numeric data accurately and legibly." : noImageText}`,
 				size: size as "1024x1024",
 				quality: quality as "high",
 			},
@@ -75,7 +79,7 @@ export class OpenAIImageProvider implements ImageProvider {
 	async editImage(prompt: string, imagePath: string): Promise<Buffer> {
 		log.debug("[image:openai:edit] Prompt:", prompt.slice(0, 200));
 		return this.requestImageEdit(
-			`Edit this image according to the following instruction: ${prompt}. Preserve the overall composition and subject of the original image unless the instruction explicitly asks otherwise. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
+			`${userImageEditPrompt(prompt)} ${noImageText}`,
 			imagePath,
 		);
 	}

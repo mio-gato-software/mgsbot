@@ -7,6 +7,7 @@ import {
 	resolveFalImageQuality,
 } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
+import { characterReferencePrompt, userImageEditPrompt } from "./prompts.ts";
 import type { ImageProvider } from "./types.ts";
 
 const DEFAULT_GENERATION_TIMEOUT_MS = 300_000;
@@ -59,6 +60,20 @@ export class FalImageProvider implements ImageProvider {
 	}
 
 	async generateImage(
+		prompt: string,
+		referenceImagePath?: string,
+	): Promise<Buffer> {
+		return this.requestImage(
+			referenceImagePath ? characterReferencePrompt(prompt) : prompt,
+			referenceImagePath,
+		);
+	}
+
+	async editImage(prompt: string, imagePath: string): Promise<Buffer> {
+		return this.requestImage(userImageEditPrompt(prompt), imagePath);
+	}
+
+	private async requestImage(
 		prompt: string,
 		referenceImagePath?: string,
 	): Promise<Buffer> {
@@ -133,10 +148,5 @@ export class FalImageProvider implements ImageProvider {
 
 		log.debug("[image:fal] Image generated successfully");
 		return Buffer.from(await imageResponse.arrayBuffer());
-	}
-
-	async editImage(prompt: string, imagePath: string): Promise<Buffer> {
-		// fal.ai's /edit endpoint handles editing natively; just forward.
-		return this.generateImage(prompt, imagePath);
 	}
 }

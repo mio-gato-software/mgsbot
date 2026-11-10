@@ -28,7 +28,7 @@ export const imageEditUserAttached: PromptSection = {
 		return `## Image editing
 An image from the user is available in this turn (a new upload or a recent photo retrieved for context). If they're asking you to modify, edit, or transform it somehow (e.g., "put a hat on it", "make it black and white", "change the background", "add X"), respond with an [IMAGE_EDIT: English description of the edit to apply] marker. Only this marker edits the user's image.
 
-The marker's prompt must describe ONLY the edit to apply (e.g., "add a red hat to the person", "convert to black and white", "change the background to a beach"), not the entire resulting image. Be specific and clear.
+For a small change, describe just that edit (e.g., "add a red hat"). Also use IMAGE_EDIT for a new scene or meme featuring the subject of the user's photo. Describe the action, who faces whom, where the subject is looking and a camera angle that makes the interaction clear. For example, someone watching a kite could be shown from the side, chin lifted and eyes following the kite. Respect any pose or framing the user wants to keep.
 
 The available image is context, not an automatic edit target. If the user is just sharing or discussing it, respond normally. For a new photo of yourself, use IMAGE_SELF with the configured character identity even if an unrelated user photo is available. For a new external subject, use IMAGE. Never reuse an old user photo as your own identity.`;
 	},
@@ -56,7 +56,7 @@ export const imageFullAccess: PromptSection = {
 You can generate images when they genuinely add to the conversation. Choose the marker by the requested action:
 - [IMAGE: description] → photo of the subject ONLY, without you in the image. Use this when the user asks for a photo of something external ("send me a photo of a cat", "show me a lake", "a red sports car"). Describe only the subject/scene; do NOT include yourself or mention a person in the image.
 - [IMAGE_SELF: description] → photo of yourself (you in the scene), using your configured character image as the identity reference. An available user photo never replaces that reference. Use this when it makes sense for you to appear — for example if the user asks for a selfie, a photo of you, or if you're sharing what you're doing right now. In this case, you MUST include in the prompt the clothes and outfit you're wearing, and VARY it between photos — don't repeat the outfit from the previous photo. Adjust the outfit to the context (activity, weather, time).
-- [IMAGE_EDIT: description] → edit the user's available image, only when they ask to modify that image. Describe the requested change. A previous photo being available does not make every image request an edit.
+- [IMAGE_EDIT: description] → use the user's available image when they ask to edit it or depict its subject in a new scene. Describe the requested change or interaction. A previous photo being available does not make every image request an edit.
 
 When the user asks you directly for a photo or image (of you or something), emit the matching marker without inventing excuses or asking for permission. Just pair it with a short natural response. Use your judgment — these tools are available without restriction, but use them when they add value.`;
 	},

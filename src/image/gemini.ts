@@ -6,7 +6,11 @@ import {
 	resolveGeminiImageSize,
 } from "../ai/platform.ts";
 import { log } from "../logger.ts";
-import { characterReferencePrompt } from "./prompts.ts";
+import {
+	characterReferencePrompt,
+	noImageText,
+	userImageEditPrompt,
+} from "./prompts.ts";
 import type { ImageGenerationOptions, ImageProvider } from "./types.ts";
 
 const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
@@ -46,12 +50,12 @@ export class GeminiImageProvider implements ImageProvider {
 			parts.push(
 				{ inlineData: { mimeType, data: base64Data } },
 				{
-					text: characterReferencePrompt(prompt),
+					text: `${characterReferencePrompt(prompt)} ${noImageText}`,
 				},
 			);
 		} else {
 			parts.push({
-				text: `Generate an image of: ${prompt}.${options?.allowText ? " Render the requested text and numeric data accurately and legibly." : " Do NOT render any text, clocks, timestamps, or time indicators in the image."}`,
+				text: `Generate an image of: ${prompt}. ${options?.allowText ? "Render the requested text and numeric data accurately and legibly." : noImageText}`,
 			});
 		}
 
@@ -95,7 +99,7 @@ export class GeminiImageProvider implements ImageProvider {
 			contents: createUserContent([
 				{ inlineData: { mimeType, data: base64Data } },
 				{
-					text: `Edit this image according to the following instruction: ${prompt}. Preserve the overall composition and subject of the original image unless the instruction explicitly asks otherwise. Do NOT render any text, clocks, timestamps, or time indicators in the image.`,
+					text: `${userImageEditPrompt(prompt)} ${noImageText}`,
 				},
 			]),
 			config: {
