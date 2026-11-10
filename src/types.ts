@@ -24,6 +24,7 @@ export interface ImageReference {
 	fileId: string;
 	messageId: number;
 	mimeType?: string;
+	dimensions?: { width: number; height: number };
 }
 
 // --- New Memory Architecture ---

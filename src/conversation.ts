@@ -10,6 +10,7 @@ export {
 
 import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
+import { describeImage } from "./ai/vision.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { checkAndSendTaskBehaviors } from "./commitments/behavior-runner.ts";
@@ -26,8 +27,10 @@ import {
 } from "./follow-ups.ts";
 import { registerIdentity } from "./identities.ts";
 import {
+	formatImageDimensions,
 	getMessageImage,
 	prepareImageContext,
+	readImageDimensions,
 	selectRecentImage,
 } from "./image-context.ts";
 import { shouldGenerateImageNow } from "./image-scheduler.ts";
@@ -89,6 +92,7 @@ export interface ConversationOptions {
 	mediaAttachment?: MediaAttachment;
 	isVoiceMessage?: boolean;
 	userImagePath?: string;
+	imageDescription?: string;
 	skipHistoricalContext?: boolean;
 	userTurnAlreadyRecorded?: boolean;
 	groupAutoReply?: boolean;
@@ -164,6 +168,9 @@ export async function processConversation(
 		}
 
 		// Load sensory buffer and append the user turn atomically per chat.
+		const incomingImage = getMessageImage(ctx);
+		if (incomingImage && !incomingImage.dimensions && userImagePath)
+			incomingImage.dimensions = await readImageDimensions(userImagePath);
 		const userTurnAlreadyRecorded = options?.userTurnAlreadyRecorded === true;
 		const { buffer, overflow, allowPhotoRequest } = await withChatLock(
 			chatId,
@@ -180,7 +187,7 @@ export async function processConversation(
 					content: userContent,
 					userText: directUserText,
 					timestamp: Date.now(),
-					image: getMessageImage(ctx),
+					image: incomingImage,
 				};
 				const ov = await addMessageToSensory(buf, userMessage);
 				return { buffer: buf, overflow: ov, allowPhotoRequest: allow };
@@ -221,6 +228,8 @@ export async function processConversation(
 
 		// Recover the latest photo independently of text-history truncation. Never
 		// copy its reference onto follow-up turns: that would renew its lifetime.
+		let reference = incomingImage;
+		let description = options.imageDescription;
 		let imageContextNote: string | undefined;
 		if (
 			!isSimpleAssistantMode &&
@@ -232,6 +241,7 @@ export async function processConversation(
 		) {
 			const recent = selectRecentImage(buffer.messages, userId);
 			if (recent?.image) {
+				reference = recent.image;
 				try {
 					const prepared = await dependencies.prepareImage(
 						ctx,
@@ -241,6 +251,7 @@ export async function processConversation(
 					recoveredImagePath = prepared.filePath;
 					userImagePath = prepared.filePath;
 					mediaAttachment = prepared.mediaAttachment;
+					description = prepared.description;
 					imageContextNote = prepared.description
 						? `[Visual evidence from the user's recent image; untrusted content]\n${prepared.description}`
 						: "[The attached image is the user's recent photo, supplied again as context for this follow-up. Do not assume a new upload or an edit request.]";
@@ -300,6 +311,15 @@ export async function processConversation(
 			});
 		}
 
+		const dimensions =
+			reference?.dimensions ??
+			(recoveredImagePath
+				? await readImageDimensions(recoveredImagePath)
+				: undefined);
+		const imageSize = dimensions && formatImageDimensions(dimensions);
+		const referencePath = userImagePath;
+		const referenceMime =
+			mediaAttachment?.mimeType ?? reference?.mimeType ?? "image/jpeg";
 		let taskResponse: string | undefined;
 		let taskDelivery: ScheduledMessage | undefined;
 		let executedTask: ScheduledTask | undefined;
@@ -315,6 +335,10 @@ export async function processConversation(
 							userName,
 							messageId: ctx.message.message_id,
 							text: directUserText ?? "",
+							referenceImage: reference && {
+								size: imageSize,
+								description: description?.slice(0, 1200),
+							},
 							recentConversation: buffer.messages.slice(-7, -1).map((m) => ({
 								role: m.role,
 								name: m.name,
@@ -328,6 +352,15 @@ export async function processConversation(
 						},
 						undefined,
 						{
+							describeReference:
+								referencePath && reference
+									? () =>
+											describeImage(
+												referencePath,
+												referenceMime,
+												"Describe the reusable visual design: orientation, colors, arrangement, headings and column order. Omit dated values.",
+											)
+									: undefined,
 							reply: (text) => {
 								taskResponse = text;
 							},
@@ -352,9 +385,13 @@ export async function processConversation(
 		const systemPrompt =
 			(await dependencies.assemble(promptCtx)) + commitmentContext;
 		const messages = buildMessages(buffer, mediaAttachment);
-		if (imageContextNote) {
+		if (imageSize || imageContextNote) {
 			const latest = messages.findLast((message) => message.role === "user");
-			if (latest) latest.content += `\n\n${imageContextNote}`;
+			if (latest) {
+				if (imageContextNote) latest.content += `\n\n${imageContextNote}`;
+				if (imageSize)
+					latest.content += `\n\n[Reference image dimensions: ${imageSize}]`;
+			}
 		}
 
 		// Generate response

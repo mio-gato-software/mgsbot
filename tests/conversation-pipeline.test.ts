@@ -262,9 +262,15 @@ test("weather replies persist the final answer and preserve the place through a 
 test("a follow-up recovers the original image after disk reload and text-history truncation", async () => {
 	const id = ++chatId;
 	const services = dependencies();
+	const requests: string[] = [];
+	services.commitments = async (input) => {
+		expect(input.referenceImage?.size).toBe("720×1080 px (2:3)");
+		requests.push(input.text);
+		return "";
+	};
 	const photo = makeMockContext({
 		chatId: id,
-		photo: [{ file_id: "original", width: 100, height: 100 }],
+		photo: [{ file_id: "original", width: 720, height: 1080 }],
 	});
 	await processConversation(
 		photo.ctx,
@@ -277,6 +283,7 @@ test("a follow-up recovers the original image after disk reload and text-history
 	expect(saved.messages[0]?.image).toEqual({
 		fileId: "original",
 		messageId: 1,
+		dimensions: { width: 720, height: 1080 },
 	});
 	expect(JSON.stringify(saved)).not.toContain("pixels");
 	// Enough text to exclude the original image marker from the prompt budget.
@@ -302,15 +309,17 @@ test("a follow-up recovers the original image after disk reload and text-history
 			1,
 		);
 		expect(messages.at(-1)?.mediaAttachment?.data).toBe("recovered-pixels");
+		expect(messages.at(-1)?.content).toContain("720×1080 px (2:3)");
 		return "Dice salida";
 	};
 	await processConversation(
-		makeMockContext({ chatId: id }).ctx,
+		makeMockContext({ chatId: id, text: "¿Y qué dice el letrero?" }).ctx,
 		"¿Y qué dice el letrero?",
 		"Ana",
 		{},
 		services,
 	);
+	expect(requests).toEqual(["", "¿Y qué dice el letrero?"]);
 	const updated = await loadSensory(id);
 	expect(updated.messages.filter((message) => message.image)).toHaveLength(1);
 });

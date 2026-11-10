@@ -38,21 +38,29 @@ test("keeps the largest photo reference; a new upload wins over a replied photo"
 		messageId: 12,
 		photo: [
 			{ file_id: "small", width: 100, height: 100 },
-			{ file_id: "large", width: 1000, height: 1000 },
+			{ file_id: "large", width: 720, height: 1080 },
 		],
 		replyToMessage: {
 			message_id: 3,
 			photo: [{ file_id: "old", width: 10, height: 10 }],
 		},
 	});
-	expect(getMessageImage(ctx)).toEqual({ fileId: "large", messageId: 12 });
+	expect(getMessageImage(ctx)).toEqual({
+		fileId: "large",
+		messageId: 12,
+		dimensions: { width: 720, height: 1080 },
+	});
 	const reply = makeMockContext({
 		replyToMessage: {
 			message_id: 3,
 			photo: [{ file_id: "old", width: 10, height: 10 }],
 		},
 	});
-	expect(getMessageImage(reply.ctx)).toEqual({ fileId: "old", messageId: 3 });
+	expect(getMessageImage(reply.ctx)).toEqual({
+		fileId: "old",
+		messageId: 3,
+		dimensions: { width: 10, height: 10 },
+	});
 });
 
 test("uncompressed image files and replies preserve MIME type", () => {

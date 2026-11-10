@@ -99,6 +99,7 @@ export const actionSchema = z.discriminatedUnion("type", [
 ]);
 export const interpretationSchema = z.object({
 	actions: z.array(actionSchema).max(8),
+	needsVisualDescription: z.boolean().optional(),
 	run: z.object({ taskId: id, evidence: text }).optional(),
 	clarification: z.string().max(400).optional(),
 	discardPending: z.boolean().default(false),
@@ -171,6 +172,7 @@ export const stateSchema = z.object({
 				userId: z.number().int(),
 				text: z.string().max(5000),
 				/** Only text actually typed by this user, never speech transcription. */
+				question: z.string().max(400).optional(),
 				writtenText: z.string().max(5000).optional(),
 				requireWritten: z.boolean().default(false),
 				expiresAt: z.number(),

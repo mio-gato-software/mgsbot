@@ -17,6 +17,12 @@ export const messageSchema = z
 			.object({
 				fileId: z.string().min(1),
 				messageId: z.number().int(),
+				dimensions: z
+					.object({
+						width: z.number().int().positive(),
+						height: z.number().int().positive(),
+					})
+					.optional(),
 				mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]).optional(),
 			})
 			.optional(),

@@ -1052,3 +1052,100 @@ test("manual run permission is enforced when shared group management is disabled
 		else process.env.ALLOW_GROUP_TASK_EDITS = previous;
 	}
 });
+
+test("a report design can be inspected and saved in the same turn with direct user evidence", async () => {
+	await store.apply(input, plan([action()]));
+	const [original] = (await store.read()).tasks;
+	if (!original) throw new Error("missing fixture");
+	const text = "Usa esa composición para el boletín";
+	const instruction = `${original.instruction}. Imagen vertical 2:3, con encabezado verde y dos columnas.`;
+	const contexts: Array<{ canDescribeReference: boolean }> = [];
+	const result = await handleCommitmentRequest(
+		{
+			...input,
+			text,
+			messageId: 2,
+			referenceImage: { size: "720×1080 px (2:3)" },
+		},
+		{
+			store,
+			now: () => now,
+			interpret: async (request, context) => {
+				expect(request.text).toBe(text);
+				const parsed = JSON.parse(context);
+				contexts.push(parsed);
+				expect(parsed.referenceImage.size).toContain("2:3");
+				if (parsed.canDescribeReference)
+					return plan([], { needsVisualDescription: true });
+				expect(parsed.referenceImage.description).toBe(
+					"Green header, two columns",
+				);
+				return plan([
+					{ type: "update", id: original.id, instruction, evidence: text },
+				]);
+			},
+		},
+		{
+			describeReference: async () => "Green header, two columns",
+			run: async () => {},
+			reply: () => {},
+		},
+	);
+	expect(contexts.map((c) => c.canDescribeReference)).toEqual([true, false]);
+	expect(result).toContain("saved successfully");
+	expect((await store.read()).tasks).toMatchObject([
+		{
+			id: original.id,
+			instruction,
+			evidence: text,
+			expiresAt: original.expiresAt,
+			schedule: original.schedule,
+		},
+	]);
+});
+
+test.each(["Sí", "Así mismo", "Adelante con ese formato"])(
+	"the first affirmative response retains the pending proposal across reload: %s",
+	async (text) => {
+		await store.apply(input, plan([action()]));
+		const [task] = (await store.read()).tasks;
+		if (!task) throw new Error("missing fixture");
+		const question =
+			"¿Quieres aplicar el formato vertical al boletín de la mañana?";
+		await handleCommitmentRequest(
+			{ ...input, messageId: 2, text: "¿Y el formato del boletín?" },
+			{
+				store,
+				now: () => now,
+				interpret: async () => plan([], { clarification: question }),
+			},
+		);
+		store = new CommitmentStore(store.path, () => now);
+		const instruction = `${task.instruction}. Imagen en formato vertical.`;
+		await handleCommitmentRequest(
+			{ ...input, messageId: 3, text },
+			{
+				store,
+				now: () => now,
+				interpret: async (_request, context) => {
+					expect(JSON.parse(context)).toMatchObject({
+						latestMessage: text,
+						pendingQuestion: question,
+					});
+					return plan([
+						{ type: "update", id: task.id, instruction, evidence: text },
+					]);
+				},
+			},
+		);
+		const state = await store.read();
+		expect(state.pending).toHaveLength(0);
+		expect(state.tasks[0]).toMatchObject({
+			id: task.id,
+			instruction,
+			evidence: text,
+			schedule: task.schedule,
+			expiresAt: task.expiresAt,
+		});
+	},
+);

@@ -61,7 +61,10 @@ test("saved image requirements produce an attachment even when the report has no
 		...services,
 		planImage: async (saved) => {
 			expect(saved.instruction).toBe(task.instruction);
-			return "Tabla de posiciones actualizada, estilo marcador deportivo";
+			return {
+				description:
+					"Tabla de posiciones actualizada, estilo marcador deportivo",
+			};
 		},
 		image: (visual, report) =>
 			generateScheduledImage(
@@ -126,9 +129,9 @@ test("image plan validation repairs once and rejects malformed output without ex
 			calls++;
 			if (calls === 1) return "[IMAGE: unvalidated prompt]";
 			expect(messages.at(-1)?.content).toContain("Format validation failed");
-			return '{"image":"Tabla actual"}';
+			return '{"image":{"description":"Tabla actual"}}';
 		}),
-	).toBe("Tabla actual");
+	).toEqual({ description: "Tabla actual" });
 	expect(calls).toBe(2);
 	calls = 0;
 	await expect(
@@ -145,7 +148,7 @@ test("required image failure prevents a text-only success, including empty provi
 		await expect(
 			generateScheduledDelivery(task, {
 				...services,
-				planImage: async () => "Tabla actual",
+				planImage: async () => ({ description: "Tabla actual" }),
 				image: (visual, report) =>
 					generateScheduledImage(visual, report, async () => {
 						if (empty) return Buffer.alloc(0);
@@ -178,4 +181,26 @@ test("scheduled photo captions respect Telegram limits and long reports are deli
 		expect(captions).toEqual([length <= 1000 ? text : undefined]);
 		expect(texts).toEqual(length <= 1000 ? [] : [text]);
 	}
+});
+
+test("a saved nonstandard canvas yields the requested pixel dimensions even with a fixed-size renderer", async () => {
+	const dimensions = { width: 456, height: 720 };
+	const plan = await planScheduledImage(
+		{ ...task, instruction: "Una infografía de 456×720 px." },
+		async () =>
+			JSON.stringify({ image: { description: "Infografía", dimensions } }),
+	);
+	if (!plan) throw new Error("missing visual");
+	const image = await generateScheduledImage(
+		plan,
+		"Verificado",
+		async (_prompt, _reference, options) => {
+			expect(options?.dimensions).toEqual(dimensions);
+			return Buffer.from(
+				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",
+				"base64",
+			);
+		},
+	);
+	expect(await new Bun.Image(image).metadata()).toMatchObject(dimensions);
 });

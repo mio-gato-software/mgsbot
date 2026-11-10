@@ -42,8 +42,32 @@ export function getMessageImage(ctx: Context): ImageReference | undefined {
 		};
 	}
 	return photo && message
-		? { fileId: photo.file_id, messageId: message.message_id }
+		? {
+				fileId: photo.file_id,
+				messageId: message.message_id,
+				dimensions: { width: photo.width, height: photo.height },
+			}
 		: undefined;
+}
+
+/** Telegram omits the original dimensions for image documents. */
+export async function readImageDimensions(filePath: string) {
+	try {
+		const { width, height } = await new Bun.Image(filePath).metadata();
+		return { width, height };
+	} catch {
+		return undefined;
+	}
+}
+
+export function formatImageDimensions({
+	width,
+	height,
+}: NonNullable<ImageReference["dimensions"]>): string {
+	let a = width;
+	let b = height;
+	while (b > 0) [a, b] = [b, a % b];
+	return `${width}×${height} px (${width / a}:${height / a})`;
 }
 
 /** One recent image, scoped to this chat's sensory buffer and the current speaker. */

@@ -44,7 +44,14 @@ export class OpenAIImageProvider implements ImageProvider {
 		}
 
 		const model = resolveOpenAIImageModel();
-		const size = resolveOpenAIImageSize();
+		const dimensions = options?.dimensions;
+		const size = dimensions
+			? dimensions.width === dimensions.height
+				? "1024x1024"
+				: dimensions.width < dimensions.height
+					? "1024x1536"
+					: "1536x1024"
+			: resolveOpenAIImageSize();
 		const quality = resolveOpenAIImageQuality();
 		log.debug("[image:openai] Prompt:", prompt.slice(0, 200));
 		log.debug(

@@ -67,6 +67,7 @@ export async function handlePhoto(
 		try {
 			const provider = createChatProvider();
 			let content = `[Image from ${imageName}]`;
+			let description: string | undefined;
 			let mediaAttachment: MediaAttachment | undefined;
 			if (supportsInlineImages(provider)) {
 				const data = Buffer.from(
@@ -79,7 +80,7 @@ export async function handlePhoto(
 					source !== ctx.message
 						? [source?.caption, caption].filter(Boolean).join("\n")
 						: caption;
-				const description = await describeImage(filePath, mimeType, question);
+				description = await describeImage(filePath, mimeType, question);
 				if (
 					!description.trim() ||
 					description.trim() === "[image description failed]"
@@ -104,6 +105,7 @@ export async function handlePhoto(
 					botOff: isBotOff(),
 					isSleepingHour: isSleepingHour(),
 					mediaAttachment,
+					imageDescription: description,
 					userImagePath: filePath,
 				},
 			);

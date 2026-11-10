@@ -1,6 +1,7 @@
 export interface ImageGenerationOptions {
 	/** Report illustrations may need labels and exact numeric tables. */
 	allowText?: boolean;
+	dimensions?: { width: number; height: number };
 }
 
 export interface ImageProvider {
