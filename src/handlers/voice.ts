@@ -4,7 +4,7 @@ import type { Bot, Context } from "grammy";
 import { classifyGroupMessageIntent } from "../ai/classifiers.ts";
 import { isBotOff, isSleepingHour } from "../bot-state.ts";
 import { withChatAction } from "../chat-actions.ts";
-import { getBotName } from "../config.ts";
+import { getBotName, loadConfig } from "../config.ts";
 import {
 	getUserDisplayName,
 	isGroupChat,
@@ -15,8 +15,9 @@ import { log } from "../logger.ts";
 import { downloadAndTranscribe } from "../media-handlers.ts";
 import { loadSensory } from "../memory/index.ts";
 import { isTimeoutError } from "../operation-deadline.ts";
+import { audioFailureReply } from "../telegram-delivery.ts";
 import type { MentionType } from "../types.ts";
-import { isDev, safeMediaExtension } from "../utils.ts";
+import { safeMediaExtension } from "../utils.ts";
 import {
 	buildPassiveVoiceContent,
 	buildReplyAwareTextContent,
@@ -205,8 +206,12 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 			if (isTimeoutError(error) && (!isGroup || mentionType !== "none"))
 				throw error;
 			log.error("[voice handler] Error:", error);
-			if (isDev)
-				await ctx.reply(`[Dev] Voice handler error: ${error}`).catch(() => {});
+			if (!isGroup || mentionType !== "none")
+				await ctx
+					.reply(audioFailureReply(loadConfig().language), {
+						reply_to_message_id: ctx.message?.message_id,
+					})
+					.catch(() => {});
 		}
 	});
 
@@ -256,8 +261,11 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 		} catch (error) {
 			if (isTimeoutError(error)) throw error;
 			log.error("[audio handler] Error:", error);
-			if (isDev)
-				await ctx.reply(`[Dev] Audio handler error: ${error}`).catch(() => {});
+			await ctx
+				.reply(audioFailureReply(loadConfig().language), {
+					reply_to_message_id: ctx.message?.message_id,
+				})
+				.catch(() => {});
 		}
 	});
 }

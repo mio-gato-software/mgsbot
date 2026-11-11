@@ -53,7 +53,8 @@ import { loadSensory } from "./memory/index.ts";
 import { isTimeoutError } from "./operation-deadline.ts";
 import { isSimpleAssistantMode } from "./prompt/modes.ts";
 import { processSetupConversation } from "./setup.ts";
-import { isDev, safeMediaExtension } from "./utils.ts";
+import { audioFailureReply } from "./telegram-delivery.ts";
+import { safeMediaExtension } from "./utils.ts";
 import { extractPublicWebUrl, fetchPublicWebPage } from "./web-content.ts";
 
 const ALLOWED_GROUP_ID = Number(process.env.ALLOWED_GROUP_ID);
@@ -346,10 +347,11 @@ export function registerHandlers(bot: Bot): void {
 				} catch (error) {
 					if (isTimeoutError(error)) throw error;
 					log.error("[reply-to-audio handler] Error:", error);
-					if (isDev)
-						await ctx
-							.reply(`[Dev] Reply-to-audio error: ${error}`)
-							.catch(() => {});
+					await ctx
+						.reply(audioFailureReply(loadConfig().language), {
+							reply_to_message_id: ctx.message?.message_id,
+						})
+						.catch(() => {});
 				}
 				return;
 			}

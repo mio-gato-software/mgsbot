@@ -36,3 +36,9 @@ export async function withMarkdownFallback<T>(
 		return send();
 	}
 }
+
+export function audioFailureReply(language?: string): string {
+	return language === "en"
+		? "I couldn't process that audio. Please send it again in a moment."
+		: "No pude procesar ese audio. Vuelve a enviarlo en un momento.";
+}

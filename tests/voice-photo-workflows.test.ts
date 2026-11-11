@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
-import type { Bot, Context } from "grammy";
+import { type Bot, type Context, HttpError } from "grammy";
 import * as classifiers from "../src/ai/classifiers.ts";
 import * as vision from "../src/ai/vision.ts";
 import { backgroundTasks } from "../src/background-tasks.ts";
@@ -361,13 +361,16 @@ test("audio files in groups remain passive unless addressed", async () => {
 	expect(addressed.spies.replies).toHaveLength(1);
 	expect(transcribe.mock.calls[0]?.[1]).toBe("audio/mpeg");
 });
-test("audio download failures are recorded as a failed transcription", async () => {
+test("audio download failures receive a helpful reply without invoking the chat model", async () => {
 	globalThis.fetch = (async () =>
 		new Response("failed", { status: 404 })) as unknown as typeof fetch;
-	const { ctx } = context({ audio: { file_id: "audio" } });
+	const { ctx, spies } = context({ audio: { file_id: "audio" } });
 	await voiceHandler("audio")(ctx);
 	expect(transcribe).not.toHaveBeenCalled();
-	expect((await messages(ctx))[0]?.content).toContain("[transcription failed]");
+	expect(generate).not.toHaveBeenCalled();
+	expect(spies.replies.map((r) => r.text)).toEqual([
+		"I couldn't process that audio. Please send it again in a moment.",
+	]);
 });
 
 function photo(options: MockContextOptions = {}) {
@@ -438,3 +441,51 @@ test("inline providers receive image bytes and skip separate analysis", async ()
 	const prompt = (await messages(ctx))[0];
 	expect(prompt?.content).toContain("Read this chart");
 });
+
+test("passive group voice transport errors stay invisible even in development", async () => {
+	const { ctx, spies } = context({
+		chatType: "supergroup",
+		voice: { file_id: "voice", duration: 21 },
+		replyToMessage: {
+			from: { id: 987655, first_name: "Luis" },
+			text: "An unrelated conversation",
+		},
+	});
+	const getFile = spyOn(ctx.api, "getFile").mockRejectedValue(
+		new HttpError(
+			"Network request for getFile failed",
+			new Error("private transport details"),
+		),
+	);
+	restores.push(() => getFile.mockRestore());
+	await voiceHandler()(ctx);
+	expect(getFile).toHaveBeenCalledTimes(3);
+	expect(spies.replies).toHaveLength(0);
+	expect(spies.chatActions).toHaveLength(0);
+	expect(transcribe).not.toHaveBeenCalled();
+	expect(generate).not.toHaveBeenCalled();
+});
+
+test.each(["voice", "audio"] as const)(
+	"addressed %s transport errors receive one nontechnical retry notice",
+	async (kind) => {
+		const { ctx, spies } = context({
+			chatType: "supergroup",
+			[kind]: { file_id: "file", duration: 20 },
+			replyToMessage: { from: { id: 42 }, text: "Send audio" },
+		});
+		const getFile = spyOn(ctx.api, "getFile").mockRejectedValue(
+			new HttpError(
+				"Network request for getFile failed",
+				new Error("private transport details"),
+			),
+		);
+		restores.push(() => getFile.mockRestore());
+		await voiceHandler(kind)(ctx);
+		expect(getFile).toHaveBeenCalledTimes(3);
+		expect(spies.replies.map((r) => r.text)).toEqual([
+			"I couldn't process that audio. Please send it again in a moment.",
+		]);
+		expect(generate).not.toHaveBeenCalled();
+	},
+);

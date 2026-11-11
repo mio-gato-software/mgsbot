@@ -1,7 +1,8 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
-import type { Context } from "grammy";
+import { type Context, GrammyError, HttpError } from "grammy";
 import * as documents from "../src/ai/documents.ts";
+import { resetAlertState, setAlertSink } from "../src/alerts.ts";
 import { handleDocument } from "../src/handlers/document.ts";
 import * as routing from "../src/handlers/routing.ts";
 import {
@@ -15,6 +16,7 @@ import {
 	extractYouTubeUrl,
 	MAX_TEXT_ATTACHMENT_BYTES,
 } from "../src/media-handlers.ts";
+import { withDeadline } from "../src/operation-deadline.ts";
 import * as stt from "../src/stt/index.ts";
 import { makeMockContext } from "./helpers/telegram-mock.ts";
 
@@ -23,6 +25,8 @@ const files: string[] = [];
 const restores: Array<() => void> = [];
 afterEach(async () => {
 	globalThis.fetch = originalFetch;
+	setAlertSink(null);
+	resetAlertState();
 	restores.splice(0).forEach((restore) => {
 		restore();
 	});
@@ -212,7 +216,7 @@ for (const byId of [false, true]) {
 		await expect(run()).rejects.toThrow("provider unavailable");
 		expect(existsSync(seenPath)).toBe(false);
 		response("Unavailable", 503);
-		expect(await run()).toBe("[transcription failed]");
+		await expect(run()).rejects.toThrow("503");
 		expect(transcribe).toHaveBeenCalledTimes(2);
 	});
 }
@@ -384,4 +388,159 @@ test("concurrent PDF downloads with the same message ID get independent files", 
 	]);
 	files.push(...paths);
 	expect(paths[0]).not.toBe(paths[1]);
+});
+
+for (const byId of [false, true]) {
+	test(`audio ${byId ? "by ID" : "from context"} recovers a getFile connection failure without duplicating transcription`, async () => {
+		response("audio bytes");
+		const ctx = context("voice.ogg");
+		const original = ctx.api.getFile.bind(ctx.api);
+		const getFile = spyOn(ctx.api, "getFile")
+			.mockRejectedValueOnce(
+				new HttpError("getFile failed", new Error("connection reset")),
+			)
+			.mockImplementation(original);
+		const transcribe = spyOn(stt, "transcribeAudio").mockResolvedValue(
+			"Recovered",
+		);
+		restores.push(
+			() => getFile.mockRestore(),
+			() => transcribe.mockRestore(),
+		);
+		const text = byId
+			? await downloadAndTranscribeByFileId(
+					ctx.api,
+					"test-token",
+					"audio",
+					"audio/ogg",
+					"ogg",
+					"retry",
+					1,
+				)
+			: await downloadAndTranscribe(
+					ctx,
+					"test-token",
+					"audio/ogg",
+					"ogg",
+					"retry",
+				);
+		expect(text).toBe("Recovered");
+		expect(getFile).toHaveBeenCalledTimes(2);
+		expect(transcribe).toHaveBeenCalledTimes(1);
+		expect(existsSync(transcribe.mock.calls[0]?.[0] ?? "")).toBe(false);
+	});
+}
+
+test("audio retries a truncated download and a server error before transcribing complete bytes", async () => {
+	let attempts = 0;
+	globalThis.fetch = (async () => {
+		attempts++;
+		if (attempts === 1)
+			return new Response(
+				new ReadableStream({
+					start(controller) {
+						controller.enqueue(new Uint8Array([1]));
+						controller.error(new Error("Connection lost"));
+					},
+				}),
+			);
+		return attempts === 2
+			? new Response("Unavailable", { status: 503 })
+			: new Response("complete audio");
+	}) as unknown as typeof fetch;
+	const transcribe = spyOn(stt, "transcribeAudio").mockImplementation(
+		async (path) => {
+			expect(await Bun.file(path).text()).toBe("complete audio");
+			return "Complete";
+		},
+	);
+	restores.push(() => transcribe.mockRestore());
+	expect(
+		await downloadAndTranscribe(
+			context("voice.ogg"),
+			"test-token",
+			"audio/ogg",
+			"ogg",
+			"retry",
+		),
+	).toBe("Complete");
+	expect(attempts).toBe(3);
+	expect(transcribe).toHaveBeenCalledTimes(1);
+});
+
+test("audio stops after three connection failures and rejects permanent metadata errors immediately", async () => {
+	const ctx = context("voice.ogg");
+	const alerts: string[] = [];
+	setAlertSink(async (text) => {
+		alerts.push(text);
+	});
+	const getFile = spyOn(ctx.api, "getFile").mockRejectedValue(
+		new HttpError(
+			"getFile failed",
+			Object.assign(new Error("Connection reset"), { code: "ECONNRESET" }),
+		),
+	);
+	restores.push(() => getFile.mockRestore());
+	await expect(
+		downloadAndTranscribe(ctx, "test-token", "audio/ogg", "ogg", "retry"),
+	).rejects.toBeInstanceOf(HttpError);
+	expect(getFile).toHaveBeenCalledTimes(3);
+	expect(alerts).toHaveLength(1);
+	expect(alerts[0]).toContain("ECONNRESET");
+	getFile.mockClear();
+	getFile.mockRejectedValue(
+		new GrammyError(
+			"Rejected",
+			{ ok: false, error_code: 400, description: "Invalid file" },
+			"getFile",
+			{},
+		),
+	);
+	await expect(
+		downloadAndTranscribe(ctx, "test-token", "audio/ogg", "ogg", "retry"),
+	).rejects.toBeInstanceOf(GrammyError);
+	expect(getFile).toHaveBeenCalledTimes(1);
+});
+
+test("audio cancellation interrupts metadata and retry-after waits", async () => {
+	const ctx = context("voice.ogg");
+	let signal: AbortSignal | undefined;
+	ctx.getFile = async (supplied) => {
+		signal = supplied as AbortSignal;
+		return new Promise(() => {});
+	};
+	await expect(
+		withDeadline("test", 20, () =>
+			downloadAndTranscribe(ctx, "test-token", "audio/ogg", "ogg", "retry"),
+		),
+	).rejects.toThrow("timed out");
+	expect(signal?.aborted).toBe(true);
+	const getFile = spyOn(ctx.api, "getFile").mockRejectedValue(
+		new GrammyError(
+			"Too many requests",
+			{
+				ok: false,
+				error_code: 429,
+				description: "Rate limit",
+				parameters: { retry_after: 30 },
+			},
+			"getFile",
+			{},
+		),
+	);
+	restores.push(() => getFile.mockRestore());
+	await expect(
+		withDeadline("test", 20, () =>
+			downloadAndTranscribeByFileId(
+				ctx.api,
+				"test-token",
+				"audio",
+				"audio/ogg",
+				"ogg",
+				"retry",
+				1,
+			),
+		),
+	).rejects.toThrow("timed out");
+	expect(getFile).toHaveBeenCalledTimes(1);
 });

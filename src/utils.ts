@@ -84,6 +84,10 @@ export async function withRetry<T>(
 	fn: () => Promise<T>,
 	maxAttempts = 3,
 	baseDelayMs = 1000,
+	policy?: {
+		shouldRetry: (error: unknown) => boolean;
+		delayMs?: (error: unknown, defaultDelayMs: number) => number;
+	},
 ): Promise<T> {
 	if (ownsRetryBudget()) {
 		currentOperationSignal()?.throwIfAborted();
@@ -108,13 +112,15 @@ export async function withRetry<T>(
 					typeof error.status === "number"
 						? error.status
 						: undefined;
-				const isRetryable =
-					isTimeout ||
-					(status !== undefined
-						? [429, 500, 502, 503, 504].includes(status)
-						: message.includes("429") || message.includes("503"));
+				const isRetryable = policy
+					? policy.shouldRetry(error)
+					: isTimeout ||
+						(status !== undefined
+							? [429, 500, 502, 503, 504].includes(status)
+							: message.includes("429") || message.includes("503"));
 				if (!isRetryable) throw error;
-				const delay = baseDelayMs * 2 ** (attempt - 1);
+				const defaultDelay = baseDelayMs * 2 ** (attempt - 1);
+				const delay = policy?.delayMs?.(error, defaultDelay) ?? defaultDelay;
 				await abortableDelay(delay);
 			}
 		}

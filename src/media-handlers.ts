@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { unlink } from "node:fs/promises";
-import type { Context } from "grammy";
+import { type Context, GrammyError, HttpError } from "grammy";
+import { alertOwner } from "./alerts.ts";
 import { log } from "./logger.ts";
-import { requestSignal } from "./operation-deadline.ts";
+import {
+	currentOperationSignal,
+	isTimeoutError,
+	requestSignal,
+	withDeadline,
+} from "./operation-deadline.ts";
 import { transcribeAudio } from "./stt/index.ts";
-import { safeMediaExtension } from "./utils.ts";
+import { safeMediaExtension, withRetry } from "./utils.ts";
 
 export const MAX_TEXT_ATTACHMENT_BYTES = 1_000_000;
 
@@ -24,39 +30,17 @@ export async function downloadAndTranscribe(
 	fileExtension: string,
 	prefix: string,
 ): Promise<string> {
-	const file = await ctx.getFile();
-	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
-	log.debug("[downloadAndTranscribe] Downloading file:", file.file_path);
-
-	const response = await fetch(url, { signal: requestSignal(30_000) });
-	if (!response.ok) {
-		log.error(
-			"[downloadAndTranscribe] Download failed:",
-			response.status,
-			response.statusText,
-		);
-		return "[transcription failed]";
-	}
-
-	const buffer = Buffer.from(await response.arrayBuffer());
-	const filePath = `./audios/${prefix}_${ctx.message?.message_id}_${randomUUID()}.${fileExtension}`;
-	await Bun.write(filePath, buffer);
-	log.debug(
-		"[downloadAndTranscribe] Saved to:",
-		filePath,
-		`(${buffer.length} bytes)`,
+	return transcribeTelegramFile(
+		() =>
+			ctx.getFile(
+				currentOperationSignal() as Parameters<Context["getFile"]>[0],
+			),
+		botToken,
+		mimeType,
+		fileExtension,
+		prefix,
+		ctx.message?.message_id,
 	);
-
-	try {
-		const transcription = await transcribeAudio(filePath, mimeType);
-		log.debug(
-			"[downloadAndTranscribe] Transcription:",
-			transcription.slice(0, 200),
-		);
-		return transcription;
-	} finally {
-		await cleanupFile(filePath);
-	}
 }
 
 export async function downloadAndTranscribeByFileId(
@@ -68,39 +52,107 @@ export async function downloadAndTranscribeByFileId(
 	prefix: string,
 	messageId: number,
 ): Promise<string> {
-	const file = await api.getFile(fileId);
-	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
-	log.debug(
-		"[downloadAndTranscribeByFileId] Downloading file:",
-		file.file_path,
+	return transcribeTelegramFile(
+		() =>
+			api.getFile(
+				fileId,
+				currentOperationSignal() as Parameters<Context["api"]["getFile"]>[1],
+			),
+		botToken,
+		mimeType,
+		fileExtension,
+		prefix,
+		messageId,
 	);
+}
 
-	const response = await fetch(url, { signal: requestSignal(30_000) });
-	if (!response.ok) {
-		log.error(
-			"[downloadAndTranscribeByFileId] Download failed:",
-			response.status,
-			response.statusText,
+function audioDownloadErrorDetails(error: unknown): string {
+	const cause = error instanceof HttpError ? error.error : error;
+	const code =
+		cause instanceof Error && "code" in cause ? String(cause.code) : undefined;
+	const status = error instanceof GrammyError ? error.error_code : undefined;
+	return [error instanceof Error ? error.name : "Unknown error", status, code]
+		.filter((value) => value !== undefined)
+		.join(" / ");
+}
+
+async function transcribeTelegramFile(
+	getFile: () => ReturnType<Context["getFile"]>,
+	botToken: string,
+	mimeType: string,
+	fileExtension: string,
+	prefix: string,
+	messageId: number | undefined,
+): Promise<string> {
+	// Retry only the read-only download. Transcription and delivery each run once.
+	const buffer = await withRetry(
+		() =>
+			withDeadline("Telegram audio download", 30_000, async () => {
+				const file = await getFile();
+				if (!file.file_path)
+					throw new Error("Telegram did not return an audio file path");
+				let response: Response;
+				let bytes: ArrayBuffer;
+				try {
+					response = await fetch(
+						`https://api.telegram.org/file/bot${botToken}/${file.file_path}`,
+						{ signal: requestSignal() },
+					);
+					if (!response.ok) {
+						await response.body?.cancel();
+						throw new GrammyError(
+							"Audio download failed",
+							{
+								ok: false,
+								error_code: response.status,
+								description: response.statusText,
+							},
+							"getFile",
+							{},
+						);
+					}
+					bytes = await response.arrayBuffer();
+				} catch (error) {
+					currentOperationSignal()?.throwIfAborted();
+					if (error instanceof GrammyError) throw error;
+					throw new HttpError("Audio download connection failed", error);
+				}
+				return Buffer.from(bytes);
+			}),
+		3,
+		500,
+		{
+			shouldRetry: (error) => {
+				const retryable =
+					error instanceof HttpError ||
+					isTimeoutError(error) ||
+					(error instanceof GrammyError &&
+						[429, 500, 502, 503, 504].includes(error.error_code));
+				if (retryable)
+					log.warn(
+						"[telegram-audio] Download failed; retrying:",
+						audioDownloadErrorDetails(error),
+					);
+				return retryable;
+			},
+			delayMs: (error, delay) =>
+				error instanceof GrammyError
+					? Math.max(delay, (error.parameters.retry_after ?? 0) * 1000)
+					: delay,
+		},
+	).catch(async (error) => {
+		// Keep the failed operation visible to the operator even during passive listening.
+		log.error("[telegram-audio] Download failed permanently:", error);
+		await alertOwner(
+			"telegram-audio-download",
+			`No se pudo descargar un audio de Telegram. ${audioDownloadErrorDetails(error)}. El error completo quedó registrado en el servicio.`,
 		);
-		return "[transcription failed]";
-	}
-
-	const buffer = Buffer.from(await response.arrayBuffer());
+		throw error;
+	});
 	const filePath = `./audios/${prefix}_${messageId}_${randomUUID()}.${fileExtension}`;
-	await Bun.write(filePath, buffer);
-	log.debug(
-		"[downloadAndTranscribeByFileId] Saved to:",
-		filePath,
-		`(${buffer.length} bytes)`,
-	);
-
 	try {
-		const transcription = await transcribeAudio(filePath, mimeType);
-		log.debug(
-			"[downloadAndTranscribeByFileId] Transcription:",
-			transcription.slice(0, 200),
-		);
-		return transcription;
+		await Bun.write(filePath, buffer);
+		return await transcribeAudio(filePath, mimeType);
 	} finally {
 		await cleanupFile(filePath);
 	}
