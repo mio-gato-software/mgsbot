@@ -326,10 +326,7 @@ export async function processConversation(
 		let taskDelivery: ScheduledMessage | undefined;
 		let executedTask: ScheduledTask | undefined;
 		const commitmentContext =
-			userId &&
-			ctx.message &&
-			!ctx.message.forward_origin &&
-			!options.groupAutoReply
+			userId && ctx.message && !ctx.message.forward_origin
 				? await dependencies.commitments(
 						{
 							chatId,
@@ -442,6 +439,7 @@ export async function processConversation(
 			ctx,
 			responseText,
 			preparedImage: taskDelivery?.image,
+			preparedImageOnly: taskDelivery?.delivery === "image_only",
 			shouldGenImage: taskResponse === undefined && shouldGenImage,
 			allowPhotoRequest,
 			buffer,

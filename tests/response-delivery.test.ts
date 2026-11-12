@@ -208,3 +208,25 @@ test("explicit edit markers are parsed and stripped even when image delivery is 
 		}),
 	).toMatchObject({ text: "Aquí", image: undefined });
 });
+
+test("manual image-only delivery suppresses short and long captions while retaining report history", async () => {
+	for (const text of ["Report", "report ".repeat(300)]) {
+		const input = options(text);
+		let photos = 0;
+		input.ctx.replyWithPhoto = async (_photo, config) => {
+			photos++;
+			expect(config?.caption).toBeUndefined();
+			return {} as never;
+		};
+		input.ctx.reply = async () => {
+			throw Error("Unexpected accompanying message");
+		};
+		const result = await sendResponse({
+			...input,
+			preparedImage: Buffer.from("report"),
+			preparedImageOnly: true,
+		});
+		expect(result?.cleanedText).toBe(text.trim());
+		expect(photos).toBe(1);
+	}
+});

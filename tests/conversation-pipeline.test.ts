@@ -481,3 +481,45 @@ test("a group retry passes the replied-to bot photo caption to task interpretati
 	await processConversation(ctx, "Inténtalo otra vez", "Ada", {}, services);
 	expect(received).toBe(true);
 });
+
+test("group auto-reply routing still interprets an authorized report retry and uses image-only delivery", async () => {
+	const services = dependencies();
+	const text = "Inténtalo de nuevo";
+	const { ctx, spies } = makeMockContext({
+		chatId: ++chatId,
+		chatType: "supergroup",
+		text,
+	});
+	let interpreted = false;
+	services.commitments = async (input, _services, execution) => {
+		expect(input.text).toBe(text);
+		interpreted = true;
+		if (!execution) throw Error("Missing execution");
+		await execution.run({ id: "saved-report" } as never);
+		return "";
+	};
+	services.scheduled = async () => ({
+		text: "Yesterday results, standings, and today's fixtures",
+		image: Buffer.from("report"),
+		delivery: "image_only",
+	});
+	services.generate = async () => {
+		throw Error("Retry bypassed saved report");
+	};
+	let photos = 0;
+	ctx.replyWithPhoto = async (_photo, options) => {
+		photos++;
+		expect(options?.caption).toBeUndefined();
+		return {} as never;
+	};
+	await processConversation(
+		ctx,
+		text,
+		"Ada",
+		{ groupAutoReply: true, groupContinuation: true },
+		services,
+	);
+	expect(interpreted).toBe(true);
+	expect(photos).toBe(1);
+	expect(spies.replies).toHaveLength(0);
+});

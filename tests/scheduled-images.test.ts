@@ -222,3 +222,39 @@ test("a failed factual report never invokes the image renderer", async () => {
 	).rejects.toThrow("Report provider timed out");
 	expect(renders).toBe(0);
 });
+
+test("image-only reports retain the full draft for rendering but send no caption or text", async () => {
+	for (const text of ["Short report", "long ".repeat(500)]) {
+		const prepared = await generateScheduledDelivery(task, {
+			...services,
+			generate: async () => text,
+			planImage: async () => ({
+				description: "Yesterday results, standings and today's fixtures",
+				delivery: "image_only" as const,
+			}),
+			image: async (visual, report) => {
+				expect(visual.description).toContain("fixtures");
+				expect(report).toBe(text.trim());
+				return Buffer.from("report image");
+			},
+		});
+		expect(prepared.text).toBe(text.trim());
+		expect(prepared.delivery).toBe("image_only");
+		let photos = 0;
+		await deliverScheduledMessage(
+			{
+				sendPhoto: async (_chat, _image, options) => {
+					photos++;
+					expect(options?.caption).toBeUndefined();
+					return {} as never;
+				},
+				sendMessage: async () => {
+					throw new Error("Unexpected accompanying text");
+				},
+			},
+			-99,
+			prepared,
+		);
+		expect(photos).toBe(1);
+	}
+});

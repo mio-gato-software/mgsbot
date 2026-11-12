@@ -4,6 +4,7 @@ import type { BehaviorObservation } from "./behavior-runner.ts";
 
 export interface ScheduledMessage {
 	text: string;
+	delivery?: "image_only";
 	image?: Buffer;
 	observation?: BehaviorObservation;
 }
@@ -14,16 +15,24 @@ export async function deliverScheduledMessage(
 	message: ScheduledMessage,
 ): Promise<void> {
 	const image = message.image;
+	if (message.delivery === "image_only" && !image)
+		throw new Error("Image-only report has no image");
 	if (image) {
 		await withMarkdownFallback((parseMode) =>
 			api.sendPhoto(chatId, new InputFile(image, "report.png"), {
-				caption: message.text.length <= 1000 ? message.text : undefined,
-				...(parseMode && message.text.length <= 1000
+				caption:
+					message.delivery !== "image_only" && message.text.length <= 1000
+						? message.text
+						: undefined,
+				...(parseMode &&
+				message.delivery !== "image_only" &&
+				message.text.length <= 1000
 					? { parse_mode: parseMode }
 					: {}),
 			}),
 		);
-		if (message.text.length <= 1000) return;
+		if (message.delivery === "image_only" || message.text.length <= 1000)
+			return;
 	}
 	await withMarkdownFallback((parseMode) =>
 		api.sendMessage(
