@@ -25,7 +25,9 @@ export function researchFailureNotice(error: unknown): string {
 			case "invalid_response":
 				return "El proveedor devolvió una solicitud de consulta inválida en lugar del reporte. Puedes pedir que lo intente de nuevo.";
 			case "verification":
-				return "La revisión del reporte detectó datos pendientes de verificar. La entrega falló en esa revisión; puedes pedir que lo intente de nuevo.";
+				return error.cause
+					? "No se pudo completar la revisión del reporte. El error del revisor quedó registrado para diagnóstico; puedes pedir que lo intente de nuevo."
+					: `La revisión del reporte detectó datos pendientes de verificar: ${error.message.slice(0, 500)}. Puedes pedir que lo intente de nuevo.`;
 			case "generation":
 				return "Falló el proveedor mientras preparaba el reporte. El error quedó registrado para diagnóstico; puedes pedir que lo intente de nuevo.";
 		}
