@@ -79,6 +79,7 @@ async function generateOpenAIBackgroundResponse(
 	systemPrompt: string,
 	messages: ChatMessage[],
 	model: string,
+	reasoning = false,
 ): Promise<BackgroundResult> {
 	const input = [
 		...(systemPrompt
@@ -92,7 +93,10 @@ async function generateOpenAIBackgroundResponse(
 	const response = await getOpenAIClient().responses.create({
 		model,
 		input,
-		...openaiReasoningConfig(model, resolveOpenAIBackgroundReasoningEffort()),
+		...openaiReasoningConfig(
+			model,
+			reasoning ? "low" : resolveOpenAIBackgroundReasoningEffort(),
+		),
 	});
 	return {
 		text: response.output_text ?? "",
@@ -109,7 +113,7 @@ export async function generateBackgroundResponse(
 	systemPrompt: string,
 	messages: ChatMessage[],
 	operation = "background",
-	options: { allowChatFallback?: boolean } = {},
+	options: { allowChatFallback?: boolean; reasoning?: boolean } = {},
 ): Promise<string> {
 	return (
 		await generateBackgroundResponseWithModel(
@@ -125,7 +129,7 @@ export async function generateBackgroundResponseWithModel(
 	systemPrompt: string,
 	messages: ChatMessage[],
 	operation = "background",
-	options: { allowChatFallback?: boolean } = {},
+	options: { allowChatFallback?: boolean; reasoning?: boolean } = {},
 ): Promise<{ text: string; model: string }> {
 	return withDeadline("background generation", BACKGROUND_TIMEOUT_MS, () =>
 		generateBackgroundWithinDeadline(
@@ -141,7 +145,7 @@ async function generateBackgroundWithinDeadline(
 	systemPrompt: string,
 	messages: ChatMessage[],
 	operation: string,
-	options: { allowChatFallback?: boolean },
+	options: { allowChatFallback?: boolean; reasoning?: boolean },
 ): Promise<{ text: string; model: string }> {
 	const provider = resolveBackgroundProvider();
 	const model = backgroundModelId();
@@ -164,13 +168,14 @@ async function generateBackgroundWithinDeadline(
 							? new FalChatProvider(
 									model,
 									"BACKGROUND_PROVIDER=fal",
-									false,
+									options.reasoning ?? false,
 								).generateResponseWithUsage(systemPrompt, messages)
 							: provider === "openai"
 								? generateOpenAIBackgroundResponse(
 										systemPrompt,
 										messages,
 										model,
+										options.reasoning,
 									)
 								: generateGeminiBackgroundResponse(
 										systemPrompt,

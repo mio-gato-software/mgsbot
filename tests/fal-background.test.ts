@@ -155,3 +155,19 @@ test("research recovery cannot return to the failed chat model even when global 
 	).rejects.toThrow("recovery provider failed");
 	expect(models).toEqual(["openai/gpt-6-luna"]);
 });
+
+test("factual audit reasoning can be enabled independently of ordinary background work", async () => {
+	configure();
+	let reasoning: unknown;
+	mockFetch(async (_url, init) => {
+		reasoning = JSON.parse(String(init?.body)).reasoning;
+		return Response.json({ output: '{"checks":[]}' });
+	});
+	await generateBackgroundResponseWithModel(
+		"Audit facts",
+		[{ role: "user", content: "Evidence and draft" }],
+		"scheduled-report-review",
+		{ reasoning: true },
+	);
+	expect(reasoning).toBe(true);
+});

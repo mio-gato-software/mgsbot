@@ -580,3 +580,28 @@ test("scheduled review repairs malformed model output once without executing emb
 	).rejects.toThrow();
 	expect(invalidCalls).toBe(2);
 });
+
+test("factual review keeps late source corrections and requests reasoned verification", async () => {
+	const { reviewScheduledReport } = await import(
+		"../src/commitments/runner.ts"
+	);
+	const task = (await store.read()).tasks[0];
+	if (!task) throw Error("Missing task");
+	const evidence = `${"Earlier source content. ".repeat(400)}Dated correction: today's fixture was rescheduled.`;
+	let invoked = false;
+	await reviewScheduledReport(
+		task,
+		"Current report.",
+		[{ role: "user", content: evidence }],
+		async (_system, messages, _operation, options) => {
+			invoked = true;
+			expect(options?.reasoning).toBe(true);
+			expect(JSON.parse(messages[0]?.content ?? "{}").trace[0].content).toBe(
+				evidence,
+			);
+			expect(JSON.parse(messages[0]?.content ?? "{}").executedAt).toBeString();
+			return '{"checks":[]}';
+		},
+	);
+	expect(invoked).toBe(true);
+});
