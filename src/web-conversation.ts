@@ -262,6 +262,7 @@ export async function generateWithWebSearch(
 			draft: string,
 			messages: ChatMessage[],
 		) => Promise<string | undefined>;
+		repairFinal?: (draft: string, missing: string) => Promise<string>;
 		delivery?: "scheduled";
 	},
 	timing = {
@@ -296,6 +297,46 @@ export async function generateWithWebSearch(
 		let evidenceChars = 0;
 		let lookups = 0;
 		let reviews = 0;
+		let repairs = 0;
+		const finishReviewed = async (
+			draft: string,
+			knownMissing?: string,
+		): Promise<string> => {
+			let answer = finalAnswer(draft);
+			const review = input.reviewFinal;
+			if (!review) return answer;
+			let missing = knownMissing;
+			if (missing === undefined)
+				missing = await withDeadline(
+					"final factual review",
+					Math.min(30_000, remaining()),
+					() => review(answer, messages),
+				);
+			while (missing) {
+				const repair = input.repairFinal;
+				const correction = missing;
+				if (!repair || repairs >= 2 || remaining() < 10_000)
+					throw new ResearchFailure("verification", missing);
+				repairs++;
+				log.info(
+					"[research] Repairing factual draft from verified evidence",
+					repairs,
+				);
+				answer = finalAnswer(
+					await withDeadline(
+						"factual report repair",
+						Math.min(45_000, remaining() - 5_000),
+						() => repair(answer, correction),
+					),
+				);
+				missing = await withDeadline(
+					"repaired factual review",
+					Math.min(30_000, remaining()),
+					() => review(answer, messages),
+				);
+			}
+			return answer;
+		};
 		let failure: unknown;
 		let announced = false;
 		let stopReason = `Lookup budget exhausted; no more than ${maxLookups} batches are allowed.`;
@@ -419,10 +460,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 						continue;
 					}
 				}
-				if (input.reviewFinal && !reviewed) {
-					const missing = await input.reviewFinal(output, messages);
-					if (missing) throw new ResearchFailure("verification", missing);
-				}
+				if (input.reviewFinal && !reviewed) return finishReviewed(output);
 				return lookups ? finalAnswer(output) : output;
 			}
 			const lookup = parseLookup(output, input.delivery === "scheduled");
@@ -561,12 +599,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 						messages,
 					),
 			);
-			const answer = finalAnswer(final);
-			if (input.reviewFinal) {
-				const missing = await input.reviewFinal(answer, messages);
-				if (missing) throw new ResearchFailure("verification", missing);
-			}
-			return answer;
+			return await finishReviewed(final);
 		} catch (error) {
 			currentOperationSignal()?.throwIfAborted();
 			log.error("[research] Final generation failed:", error);

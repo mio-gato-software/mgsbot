@@ -641,3 +641,40 @@ async function captureResearchFailure(
 		return researchFailureNotice(error);
 	}
 }
+
+test("an exhausted drafting loop repairs from audit findings before returning a verified report", async () => {
+	const f = fixture(["Old standings", "Old standings", "Old standings"]);
+	let repairs = 0;
+	const result = await generateWithWebSearch({
+		...f.input,
+		reviewFinal: async (draft) =>
+			draft === "Corrected standings"
+				? undefined
+				: "Use the latest team records in the source.",
+		repairFinal: async (draft, correction) => {
+			repairs++;
+			expect(draft).toBe("Old standings");
+			expect(correction).toContain("latest team records");
+			return "Corrected standings";
+		},
+	});
+	expect(result).toBe("Corrected standings");
+	expect(repairs).toBe(1);
+	expect(f.calls).toHaveLength(3);
+});
+
+test("failed factual repairs are bounded and never returned as verified reports", async () => {
+	const f = fixture(["Old standings", "Old standings", "Old standings"]);
+	let repairs = 0;
+	await expect(
+		generateWithWebSearch({
+			...f.input,
+			reviewFinal: async () => "Standings still conflict with the source.",
+			repairFinal: async () => {
+				repairs++;
+				return "Old standings";
+			},
+		}),
+	).rejects.toMatchObject({ code: "verification" });
+	expect(repairs).toBe(2);
+});
