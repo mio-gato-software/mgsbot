@@ -2,7 +2,7 @@ const sceneComposition =
 	"Compose the shot around the action. Choose a camera viewpoint that shows the interaction clearly, and orient the subject's body, head and gaze toward what they are doing or looking at. Render their recognizable features from that angle. A frontal view is appropriate when it fits the scene. Honor any requested pose, gaze or framing.";
 
 export function characterReferencePrompt(scene: string): string {
-	return `Create a new image of the SAME subject in this scene: ${scene}. Use the reference for recognizable facial features, complexion, hair and body characteristics. Preserve its visual style and medium: a photographic reference should remain photographic, and an illustrated reference should retain its illustration style. Follow the scene's outfit, setting and lighting. ${sceneComposition}`;
+	return `Create a new image of the SAME subject in this scene: ${scene}. Use the reference for recognizable facial features, complexion, hair and body characteristics. Prioritize preserving the reference's facial identity and body proportions, including build and relative limb lengths, over conflicting scene descriptions. Vary clothing, pose and setting to match the scene without redesigning the face or body. Preserve its visual style and medium: a photographic reference should remain photographic, and an illustrated reference should retain its illustration style. Follow the scene's outfit, setting and lighting. ${sceneComposition}`;
 }
 
 export function userImageEditPrompt(instruction: string): string {

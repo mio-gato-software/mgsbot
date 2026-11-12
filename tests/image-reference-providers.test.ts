@@ -69,6 +69,11 @@ test("reference requests carry the original image and composition guidance for t
 	for (const i of [0, 3, 6]) {
 		expect(requests[i].prompt).toContain("SAME subject");
 		expect(requests[i].prompt).toContain(
+			"facial identity and body proportions",
+		);
+		expect(requests[i].prompt).toContain("over conflicting scene descriptions");
+		expect(requests[i].prompt).toContain("Vary clothing, pose and setting");
+		expect(requests[i].prompt).toContain(
 			"photographic reference should remain photographic",
 		);
 		expect(requests[i].prompt).toContain("snowy street");
