@@ -136,3 +136,22 @@ test("empty and partial chat responses are retried with a bounded budget and nev
 		fetchSpy?.mockRestore();
 	}
 });
+
+test("research recovery cannot return to the failed chat model even when global fallback is enabled", async () => {
+	configure();
+	process.env.BACKGROUND_FALLBACK_TO_CHAT = "true";
+	const models: string[] = [];
+	mockFetch(async (_url, init) => {
+		models.push(JSON.parse(String(init?.body)).model);
+		return Response.json({ error: "recovery provider failed" });
+	});
+	await expect(
+		generateBackgroundResponseWithModel(
+			"",
+			[{ role: "user", content: "report" }],
+			"scheduled-research-recovery",
+			{ allowChatFallback: false },
+		),
+	).rejects.toThrow("recovery provider failed");
+	expect(models).toEqual(["openai/gpt-6-luna"]);
+});

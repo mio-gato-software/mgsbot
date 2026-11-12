@@ -133,6 +133,13 @@ export const scheduledGenerationServices = {
 	retrieve: retrieveMemoryContext,
 	assemble: assembleSystemPrompt,
 	generate: generateResponse,
+	fallback: (system: string, messages: ChatMessage[]) =>
+		generateBackgroundResponse(
+			system,
+			messages,
+			"scheduled-research-recovery",
+			{ allowChatFallback: false },
+		),
 	review: reviewScheduledReport,
 	repair: repairScheduledReport,
 	planImage: planScheduledImage,
@@ -190,6 +197,7 @@ async function generateScheduledReport(
 						messages,
 						chatId: task.chatId,
 						generate: services.generate,
+						fallbackGenerate: services.fallback,
 						web: services.web,
 						weather: {
 							isEnabled: () => services.weather.isEnabled(),

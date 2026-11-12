@@ -109,9 +109,15 @@ export async function generateBackgroundResponse(
 	systemPrompt: string,
 	messages: ChatMessage[],
 	operation = "background",
+	options: { allowChatFallback?: boolean } = {},
 ): Promise<string> {
 	return (
-		await generateBackgroundResponseWithModel(systemPrompt, messages, operation)
+		await generateBackgroundResponseWithModel(
+			systemPrompt,
+			messages,
+			operation,
+			options,
+		)
 	).text;
 }
 
@@ -119,9 +125,15 @@ export async function generateBackgroundResponseWithModel(
 	systemPrompt: string,
 	messages: ChatMessage[],
 	operation = "background",
+	options: { allowChatFallback?: boolean } = {},
 ): Promise<{ text: string; model: string }> {
 	return withDeadline("background generation", BACKGROUND_TIMEOUT_MS, () =>
-		generateBackgroundWithinDeadline(systemPrompt, messages, operation),
+		generateBackgroundWithinDeadline(
+			systemPrompt,
+			messages,
+			operation,
+			options,
+		),
 	);
 }
 
@@ -129,10 +141,13 @@ async function generateBackgroundWithinDeadline(
 	systemPrompt: string,
 	messages: ChatMessage[],
 	operation: string,
+	options: { allowChatFallback?: boolean },
 ): Promise<{ text: string; model: string }> {
 	const provider = resolveBackgroundProvider();
 	const model = backgroundModelId();
-	const allowChatFallback = process.env.BACKGROUND_FALLBACK_TO_CHAT !== "false";
+	const allowChatFallback =
+		options.allowChatFallback ??
+		process.env.BACKGROUND_FALLBACK_TO_CHAT !== "false";
 	const inputChars =
 		systemPrompt.length +
 		messages.reduce((sum, message) => sum + message.content.length, 0);

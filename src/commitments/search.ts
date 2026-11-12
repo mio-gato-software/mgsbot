@@ -5,9 +5,11 @@ import type { WebSearchRequest } from "../web-search.ts";
 import { commitmentsEnabled } from "./requests.ts";
 import { commitments, matchingPreferences, normalizeDomain } from "./store.ts";
 
-function searchSources(
-	result: string,
-): { url: string; [key: string]: unknown }[] {
+function parseSearchResponse(result: string): {
+	sources: { url: string; [key: string]: unknown }[];
+	checkedAt?: unknown;
+	limitation?: string;
+} {
 	try {
 		const json = JSON.parse(
 			result.replace(
@@ -15,14 +17,21 @@ function searchSources(
 				"",
 			),
 		);
-		return Array.isArray(json.sources)
-			? json.sources.filter(
-					(s: { url?: unknown }) =>
-						typeof s?.url === "string" && /^https?:\/\//i.test(s.url),
-				)
-			: [];
+		if (!json || typeof json !== "object")
+			return { sources: [], limitation: "Invalid search response" };
+		return {
+			checkedAt: json.checkedAt,
+			sources: Array.isArray(json.sources)
+				? json.sources.filter(
+						(source: { url?: unknown }) =>
+							typeof source?.url === "string" &&
+							/^https?:\/\//i.test(source.url),
+					)
+				: [],
+		};
 	} catch {
-		return [];
+		// The search service also returns plain-text limitations such as no results.
+		return { sources: [], limitation: result.slice(0, 1000) };
 	}
 }
 
@@ -75,8 +84,8 @@ export async function searchWithPreferences(
 			(await readSources(
 				web,
 				chatId,
-				searchSources(result)
-					.slice(0, 2)
+				parseSearchResponse(result)
+					.sources.slice(0, 2)
 					.map((s) => s.url),
 			))
 		);
@@ -100,22 +109,15 @@ export async function searchWithPreferences(
 			});
 			// A site-restricted search is not a visit to the website, and an off-site
 			// search result must not masquerade as evidence from the requested source.
-			const json = JSON.parse(
-				result.replace(
-					/^Reused a recent search; no new request was made\.\n/,
-					"",
-				),
-			);
-			const sources = Array.isArray(json.sources)
-				? json.sources.filter((source: { url?: string }) => {
-						try {
-							const host = new URL(source.url ?? "").hostname;
-							return host === domain || host.endsWith(`.${domain}`);
-						} catch {
-							return false;
-						}
-					})
-				: [];
+			const json = parseSearchResponse(result);
+			const sources = json.sources.filter((source) => {
+				try {
+					const host = new URL(source.url).hostname;
+					return host === domain || host.endsWith(`.${domain}`);
+				} catch {
+					return false;
+				}
+			});
 			results.push(
 				JSON.stringify({
 					requestedDomain: domain,
@@ -124,7 +126,10 @@ export async function searchWithPreferences(
 					sources,
 					...(sources.length
 						? {}
-						: { limitation: "No usable evidence from this domain" }),
+						: {
+								limitation:
+									json.limitation ?? "No usable evidence from this domain",
+							}),
 				}),
 			);
 			urls.push(sources[0]?.url ?? `https://${domain}/`);

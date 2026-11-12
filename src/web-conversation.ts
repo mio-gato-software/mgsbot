@@ -251,6 +251,7 @@ export async function generateWithWebSearch(
 		messages: ChatMessage[];
 		chatId: number;
 		generate: typeof generateResponse;
+		fallbackGenerate?: typeof generateResponse;
 		web: ConversationWebContext;
 		weather?: ConversationWeatherContext;
 		announce: (text: string) => Promise<void>;
@@ -296,6 +297,50 @@ export async function generateWithWebSearch(
 		const messages = input.messages.map((message) => ({ ...message }));
 		let evidenceChars = 0;
 		let lookups = 0;
+		let recovered = false;
+		const generateStep = async (
+			system: string,
+			budget: () => number,
+		): Promise<string> => {
+			const call = async (generate: typeof input.generate) => {
+				const output = await withDeadline(
+					recovered
+						? "recovery research generation"
+						: "primary research generation",
+					Math.max(1, Math.min(CHAT_TIMEOUT_MS, budget())),
+					() => generate(system, messages),
+				);
+				if (!output.trim())
+					throw new ResearchFailure(
+						"empty_response",
+						"Research model returned no output",
+					);
+				return output;
+			};
+			if (recovered && input.fallbackGenerate)
+				return call(input.fallbackGenerate);
+			try {
+				return await call(input.generate);
+			} catch (error) {
+				currentOperationSignal()?.throwIfAborted();
+				const transient =
+					isTimeoutError(error) ||
+					(error instanceof ResearchFailure &&
+						error.code === "empty_response") ||
+					(error instanceof Error &&
+						"status" in error &&
+						typeof error.status === "number" &&
+						[429, 500, 502, 503, 504].includes(error.status));
+				if (!input.fallbackGenerate || !transient || budget() <= 1000)
+					throw error;
+				log.error(
+					"[research] Primary model failed; continuing with recovery model and retained evidence:",
+					error,
+				);
+				recovered = true;
+				return call(input.fallbackGenerate);
+			}
+		};
 		let reviews = 0;
 		let repairs = 0;
 		const finishReviewed = async (
@@ -406,14 +451,9 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 			}
 			let output: string;
 			try {
-				output = await withDeadline(
-					"lookup decision",
-					Math.min(CHAT_TIMEOUT_MS, planningTime()),
-					() =>
-						input.generate(
-							`${prompt}\nLookup batches remaining: ${maxLookups - lookups}.`,
-							messages,
-						),
+				output = await generateStep(
+					`${prompt}\nLookup batches remaining: ${maxLookups - lookups}.`,
+					planningTime,
 				);
 			} catch (error) {
 				currentOperationSignal()?.throwIfAborted();
@@ -590,14 +630,9 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 		if (remaining() <= 0)
 			throw new ResearchFailure("generation", stopReason, failure);
 		try {
-			const final = await withDeadline(
-				"final lookup response",
-				Math.min(CHAT_TIMEOUT_MS, remaining()),
-				() =>
-					input.generate(
-						`${prompt}\n${FINAL_INSTRUCTIONS}\n${stopReason}\n${deliveryInstructions}`,
-						messages,
-					),
+			const final = await generateStep(
+				`${prompt}\n${FINAL_INSTRUCTIONS}\n${stopReason}\n${deliveryInstructions}`,
+				remaining,
 			);
 			return await finishReviewed(final);
 		} catch (error) {

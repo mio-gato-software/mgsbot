@@ -678,3 +678,74 @@ test("failed factual repairs are bounded and never returned as verified reports"
 	).rejects.toMatchObject({ code: "verification" });
 	expect(repairs).toBe(2);
 });
+
+test("research changes model after a timeout while retaining evidence, audits and lookup budget", async () => {
+	const { OperationTimeoutError } = await import(
+		"../src/operation-deadline.ts"
+	);
+	const f = fixture([
+		search("event schedule"),
+		() => {
+			throw new OperationTimeoutError("primary provider");
+		},
+	]);
+	let recoveryCalls = 0;
+	const result = await generateWithWebSearch({
+		...f.input,
+		fallbackGenerate: async (_system, messages) => {
+			recoveryCalls++;
+			expect(messages.map((m) => m.content).join("\n")).toContain(
+				"Calendario verificado",
+			);
+			return recoveryCalls === 1 ? weather() : "Verified complete report";
+		},
+		reviewFinal: async (draft) => {
+			expect(draft).toBe("Verified complete report");
+			return undefined;
+		},
+	});
+	expect(result).toBe("Verified complete report");
+	expect(f.calls).toHaveLength(2);
+	expect(recoveryCalls).toBe(2);
+	expect(f.weatherRequests).toHaveLength(1);
+});
+
+test("failure of both models preserves the recovery error and never returns a generic report", async () => {
+	const { OperationTimeoutError } = await import(
+		"../src/operation-deadline.ts"
+	);
+	const f = fixture([
+		() => {
+			throw new OperationTimeoutError("primary provider");
+		},
+	]);
+	let recoveryCalls = 0;
+	await expect(
+		generateWithWebSearch({
+			...f.input,
+			fallbackGenerate: async () => {
+				recoveryCalls++;
+				throw new OperationTimeoutError("recovery provider");
+			},
+		}),
+	).rejects.toThrow("recovery provider");
+	expect(f.calls).toHaveLength(1);
+	expect(recoveryCalls).toBe(1);
+});
+
+test("parent cancellation prevents research model recovery", async () => {
+	const f = fixture([() => new Promise<string>(() => {})]);
+	let recoveryCalls = 0;
+	await expect(
+		withDeadline("parent", 15, () =>
+			generateWithWebSearch({
+				...f.input,
+				fallbackGenerate: async () => {
+					recoveryCalls++;
+					return "Should not run";
+				},
+			}),
+		),
+	).rejects.toThrow("parent timed out");
+	expect(recoveryCalls).toBe(0);
+});

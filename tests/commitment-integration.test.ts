@@ -153,3 +153,26 @@ test("research opens saved sources even when their search excerpts are empty", a
 	]);
 	expect(evidence).toContain("Actual scoreboard");
 });
+
+test("plain-text search limitations preserve their cause and still open the preferred source", async () => {
+	const visited: string[] = [];
+	const result = await searchWithPreferences(
+		{
+			isEnabled: () => true,
+			context: async () => "",
+			refreshHeadlines: async () => {},
+			search: async () => "Search completed but returned no usable sources.",
+			isReadEnabled: () => true,
+			read: async (_chat, url) => {
+				visited.push(url);
+				return "Current official calendar";
+			},
+		},
+		-99,
+		{ query: "current calendar" },
+		["example.com"],
+	);
+	expect(result).toContain("Search completed but returned no usable sources");
+	expect(result).toContain("Current official calendar");
+	expect(visited).toEqual(["https://example.com/"]);
+});
