@@ -286,7 +286,13 @@ test("scheduled research uses fresh public terms and task sources, then renders 
 	});
 	const message = await generateScheduledMessage(task, {
 		...scheduledGenerationServices,
-		review: async () => undefined,
+		review: async (_task, _draft, trace) => {
+			expect(trace.every((m) => m.role === "user")).toBe(true);
+			expect(trace[0]?.content).toContain("Verified baseball result");
+			expect(JSON.stringify(trace)).not.toContain("Mira cómo quedó");
+			expect(JSON.stringify(trace)).not.toContain("Dile a Ejemplo");
+			return undefined;
+		},
 		store,
 		web,
 		now: () => now,

@@ -181,8 +181,12 @@ async function generateScheduledReport(
 						delivery: "scheduled",
 						maxLookups: 12,
 						onEvidence: (content) => observations.push(content),
-						reviewFinal: (draft, messages) =>
-							services.review(task, draft, messages),
+						reviewFinal: (draft) =>
+							services.review(
+								task,
+								draft,
+								observations.map((content) => ({ role: "user", content })),
+							),
 					})
 			: services.generate;
 	const response = await generate(
