@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as core from "../src/ai/core.ts";
 import { localTime } from "../src/commitments/calendar.ts";
 import {
 	deliverScheduledMessage,
@@ -581,7 +582,7 @@ test("scheduled review repairs malformed model output once without executing emb
 	expect(invalidCalls).toBe(2);
 });
 
-test("factual review keeps late source corrections and requests reasoned verification", async () => {
+test("factual review keeps late source corrections and labels the primary analysis", async () => {
 	const { reviewScheduledReport } = await import(
 		"../src/commitments/runner.ts"
 	);
@@ -593,9 +594,9 @@ test("factual review keeps late source corrections and requests reasoned verific
 		task,
 		"Current report.",
 		[{ role: "user", content: evidence }],
-		async (_system, messages, _operation, options) => {
+		async (_system, messages, operation) => {
 			invoked = true;
-			expect(options?.reasoning).toBe(true);
+			expect(operation).toBe("scheduled-report-review");
 			expect(JSON.parse(messages[0]?.content ?? "{}").trace[0].content).toBe(
 				evidence,
 			);
@@ -604,4 +605,36 @@ test("factual review keeps late source corrections and requests reasoned verific
 		},
 	);
 	expect(invoked).toBe(true);
+});
+
+test("factual review and repair use the selected main model rather than background generation", async () => {
+	const { reviewScheduledReport, repairScheduledReport } = await import(
+		"../src/commitments/runner.ts"
+	);
+	const task = (await store.read()).tasks[0];
+	if (!task) throw Error("Missing task");
+	const main = spyOn(core, "generateResponse")
+		.mockResolvedValueOnce('{"checks":[]}')
+		.mockResolvedValueOnce("Corrected complete report");
+	const background = spyOn(
+		core,
+		"generateBackgroundResponse",
+	).mockRejectedValue(
+		new Error("Background model must not decide factual correctness"),
+	);
+	try {
+		expect(
+			await reviewScheduledReport(task, "Complete report", []),
+		).toBeUndefined();
+		expect(
+			await repairScheduledReport(task, "Old report", "Update facts", [
+				"Verified facts",
+			]),
+		).toBe("Corrected complete report");
+		expect(main).toHaveBeenCalledTimes(2);
+		expect(background).not.toHaveBeenCalled();
+	} finally {
+		main.mockRestore();
+		background.mockRestore();
+	}
 });

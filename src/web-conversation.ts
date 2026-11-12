@@ -354,7 +354,7 @@ export async function generateWithWebSearch(
 			if (missing === undefined)
 				missing = await withDeadline(
 					"final factual review",
-					Math.min(30_000, remaining()),
+					Math.min(CHAT_TIMEOUT_MS, remaining()),
 					() => review(answer, messages),
 				);
 			while (missing) {
@@ -370,13 +370,13 @@ export async function generateWithWebSearch(
 				answer = finalAnswer(
 					await withDeadline(
 						"factual report repair",
-						Math.min(45_000, remaining() - 5_000),
+						Math.min(CHAT_TIMEOUT_MS, remaining() - 5_000),
 						() => repair(answer, correction),
 					),
 				);
 				missing = await withDeadline(
 					"repaired factual review",
-					Math.min(30_000, remaining()),
+					Math.min(CHAT_TIMEOUT_MS, remaining()),
 					() => review(answer, messages),
 				);
 			}
@@ -478,7 +478,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 					try {
 						missing = await withDeadline(
 							"scheduled completeness review",
-							Math.min(30_000, planningTime()),
+							Math.min(CHAT_TIMEOUT_MS, planningTime()),
 							() =>
 								input.reviewFinal?.(output, messages) ??
 								Promise.resolve(undefined),
