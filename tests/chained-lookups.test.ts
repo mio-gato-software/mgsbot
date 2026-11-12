@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { withDeadline } from "../src/operation-deadline.ts";
 import type { ChatMessage } from "../src/providers/types.ts";
+import {
+	ResearchFailure,
+	researchFailureNotice,
+} from "../src/research-failure.ts";
 import type { WeatherRequest } from "../src/weather.ts";
 import { generateWithWebSearch } from "../src/web-conversation.ts";
 
@@ -207,7 +211,7 @@ test("four mixed batches allow at most five model calls and a fifth tool request
 			search("techo del estadio"),
 			final,
 		]);
-		const answer = await generateWithWebSearch(f.input);
+		const answer = await captureResearchFailure(f.input);
 		expect(f.calls).toHaveLength(5);
 		expect(f.calls[4]?.system).toContain("Do not emit WEB_SEARCH");
 		expect(f.calls[4]?.system).toContain("no more than 4 batches");
@@ -219,7 +223,7 @@ test("four mixed batches allow at most five model calls and a fifth tool request
 		).toHaveLength(4);
 		expect(f.weatherRequests).toHaveLength(1);
 		expect(answer).not.toMatch(/WEATHER_LOOKUP|WEB_SEARCH|WEB_READ/);
-		if (final.startsWith("[")) expect(answer).toContain("No pude verificar");
+		if (final.startsWith("[")) expect(answer).toContain("proveedor");
 		else expect(answer).toBe(final);
 	}
 });
@@ -322,7 +326,7 @@ test("later malformed, disabled, mixed and oversized requests stop without execu
 			},
 		]);
 		f.input.weather.isEnabled = () => false;
-		expect(await generateWithWebSearch(f.input)).toContain("No pude verificar");
+		expect(await captureResearchFailure(f.input)).toContain("proveedor");
 		expect(
 			f.events.filter((event) => !event.startsWith("notice:")),
 		).toHaveLength(1);
@@ -481,7 +485,7 @@ test("final model failure or SILENCE yields an honest fallback instead of an emp
 			weather(),
 			final,
 		]);
-		expect(await generateWithWebSearch(f.input)).toContain("No pude verificar");
+		expect(await captureResearchFailure(f.input)).toContain("proveedor");
 		expect(f.calls).toHaveLength(5);
 	}
 });
@@ -603,19 +607,19 @@ test("completeness review cannot loop indefinitely or add a new provider call af
 	]);
 	let reviews = 0;
 	expect(
-		await generateWithWebSearch({
+		await captureResearchFailure({
 			...f.input,
 			reviewFinal: async () => {
 				reviews++;
 				return "Vuelve a verificar.";
 			},
 		}),
-	).toBe("Datos no disponibles.");
-	expect(reviews).toBe(2);
+	).toContain("revisión");
+	expect(reviews).toBe(3);
 	expect(f.calls).toHaveLength(3);
 	const exhausted = fixture([weather(), "Falta otra sede."]);
 	let budgetReviews = 0;
-	await generateWithWebSearch({
+	await captureResearchFailure({
 		...exhausted.input,
 		maxLookups: 1,
 		reviewFinal: async () => {
@@ -623,6 +627,17 @@ test("completeness review cannot loop indefinitely or add a new provider call af
 			return "Otra sede";
 		},
 	});
-	expect(budgetReviews).toBe(0);
+	expect(budgetReviews).toBe(1);
 	expect(exhausted.weatherRequests).toHaveLength(1);
 });
+
+async function captureResearchFailure(
+	...args: Parameters<typeof generateWithWebSearch>
+) {
+	try {
+		return await generateWithWebSearch(...args);
+	} catch (error) {
+		expect(error).toBeInstanceOf(ResearchFailure);
+		return researchFailureNotice(error);
+	}
+}

@@ -1,4 +1,8 @@
 import { expect, test } from "bun:test";
+import {
+	ResearchFailure,
+	researchFailureNotice,
+} from "../src/research-failure.ts";
 import type { ConversationWeatherContext } from "../src/weather.ts";
 import {
 	type ConversationWebContext,
@@ -120,7 +124,7 @@ test("malformed tool output never leaks or triggers search, and repeated request
 	service.search = async () => {
 		throw new Error("must not search");
 	};
-	const result = await generateWithWebSearch({
+	const result = await captureResearchFailure({
 		systemPrompt: "Bot",
 		messages: [{ role: "user", content: "news" }],
 		chatId: 1,
@@ -136,7 +140,7 @@ test("malformed tool output never leaks or triggers search, and repeated request
 	});
 	expect(calls).toBe(2);
 	expect(result).not.toContain("WEB_SEARCH");
-	expect(result).toContain("No pude verificar");
+	expect(result).toContain("proveedor");
 });
 
 test("historical context bypass skips cached news and an undelivered notice prevents lookup", async () => {
@@ -207,7 +211,7 @@ test("too many pages and repeated read blocks cannot escape the lookup budget", 
 		reads++;
 		return "";
 	};
-	const result = await generateWithWebSearch({
+	const result = await captureResearchFailure({
 		systemPrompt: "Persona",
 		messages: [],
 		chatId: 1,
@@ -288,7 +292,7 @@ test("invalid, mixed and disabled weather requests cannot run or leak repeated c
 		[false, '[WEATHER_LOOKUP]{"notice":"Miro"}[/WEATHER_LOOKUP]'],
 	] as const) {
 		let calls = 0;
-		const result = await generateWithWebSearch({
+		const result = await captureResearchFailure({
 			systemPrompt: "Persona",
 			messages: [],
 			chatId: 1,
@@ -312,7 +316,7 @@ test("invalid, mixed and disabled weather requests cannot run or leak repeated c
 		});
 		expect(calls).toBe(2);
 		expect(result).not.toContain("WEATHER_LOOKUP");
-		expect(result).toBe("No pude verificar eso ahora mismo.");
+		expect(result).toContain("inválida");
 	}
 });
 
@@ -386,3 +390,14 @@ test("ordinary conversation with weather available still needs only one model ca
 	expect(result).toBe("Hola");
 	expect(calls).toBe(1);
 });
+
+async function captureResearchFailure(
+	...args: Parameters<typeof generateWithWebSearch>
+) {
+	try {
+		return await generateWithWebSearch(...args);
+	} catch (error) {
+		expect(error).toBeInstanceOf(ResearchFailure);
+		return researchFailureNotice(error);
+	}
+}

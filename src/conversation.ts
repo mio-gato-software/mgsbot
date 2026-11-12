@@ -11,6 +11,7 @@ export {
 import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { describeImage } from "./ai/vision.ts";
+import { alertOwner } from "./alerts.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { checkAndSendTaskBehaviors } from "./commitments/behavior-runner.ts";
@@ -52,6 +53,7 @@ import { buildPromptContext } from "./prompt/context.ts";
 import { buildMessages } from "./prompt/history.ts";
 import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
 import type { MediaAttachment } from "./providers/types.ts";
+import { ResearchFailure, researchFailureNotice } from "./research-failure.ts";
 import { type SendResponseResult, sendResponse } from "./response-processor.ts";
 import { timeoutReply } from "./telegram-delivery.ts";
 import { isTtsAvailable } from "./tts/index.ts";
@@ -335,6 +337,14 @@ export async function processConversation(
 							userName,
 							messageId: ctx.message.message_id,
 							text: directUserText ?? "",
+							replyContext: ctx.message.reply_to_message && {
+								text: (
+									ctx.message.reply_to_message.text ??
+									ctx.message.reply_to_message.caption ??
+									""
+								).slice(0, 4000),
+								isBot: ctx.message.reply_to_message.from?.id === ctx.me.id,
+							},
 							referenceImage: reference && {
 								size: imageSize,
 								description: description?.slice(0, 1200),
@@ -373,10 +383,16 @@ export async function processConversation(
 											: delivery;
 									taskResponse = taskDelivery.text;
 									executedTask = task;
-								} catch {
+								} catch (error) {
 									currentOperationSignal()?.throwIfAborted();
-									taskResponse =
-										"No pude completar el reporte ahora. La tarea conserva su horario; puedes pedirme que lo intente de nuevo.";
+									log.error("[agenda] Manual report failed:", error);
+									await alertOwner(
+										"manual-report",
+										error instanceof Error
+											? `${error.name}: ${error.message.slice(0, 300)}`
+											: "Unknown report failure",
+									);
+									taskResponse = researchFailureNotice(error);
 								}
 							},
 						},
@@ -447,6 +463,12 @@ export async function processConversation(
 					),
 				);
 	} catch (error) {
+		if (error instanceof ResearchFailure) {
+			log.error("[conversation] Research failed:", error);
+			await alertOwner("research-failure", error.message.slice(0, 300));
+			await ctx.reply(researchFailureNotice(error));
+			return false;
+		}
 		if (!isTimeoutError(error)) throw error;
 		log.warn("[conversation] Provider deadline exceeded");
 		await ctx.reply(timeoutReply(loadConfig().language));

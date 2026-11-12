@@ -50,6 +50,7 @@ export interface RequestIdentity {
 	text: string;
 	voice?: boolean;
 	/** Bounded same-chat reference context, never authorization or evidence. */
+	replyContext?: { text: string; isBot: boolean };
 	referenceImage?: { size?: string; description?: string };
 	recentConversation?: Array<{
 		role: string;

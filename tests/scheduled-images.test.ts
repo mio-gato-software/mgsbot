@@ -204,3 +204,21 @@ test("a saved nonstandard canvas yields the requested pixel dimensions even with
 	);
 	expect(await new Bun.Image(image).metadata()).toMatchObject(dimensions);
 });
+
+test("a failed factual report never invokes the image renderer", async () => {
+	let renders = 0;
+	await expect(
+		generateScheduledDelivery(task, {
+			...services,
+			planImage: async () => ({ description: "Report illustration" }),
+			generate: async () => {
+				throw new Error("Report provider timed out");
+			},
+			image: async () => {
+				renders++;
+				return Buffer.from("wrong");
+			},
+		}),
+	).rejects.toThrow("Report provider timed out");
+	expect(renders).toBe(0);
+});

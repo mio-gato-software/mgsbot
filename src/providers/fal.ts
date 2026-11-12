@@ -1,6 +1,7 @@
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
 import { resolveChatModel } from "../provider-options.ts";
+import { ResearchFailure } from "../research-failure.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
@@ -88,12 +89,22 @@ export class FalChatProvider implements ChatProvider {
 					{ status: response.status },
 				);
 			}
-			return (await response.json()) as FalResponse;
+			const result = (await response.json()) as FalResponse;
+			if (result.error)
+				throw new ResearchFailure(
+					"generation",
+					`fal.ai model error: ${result.error}`,
+				);
+			if (!result.output?.trim() || result.partial)
+				throw Object.assign(
+					new ResearchFailure(
+						"empty_response",
+						`fal.ai returned empty or partial output for ${this.model}`,
+					),
+					{ status: 503 },
+				);
+			return result;
 		});
-
-		if (data.error) {
-			throw new Error(`fal.ai model error: ${data.error}`);
-		}
 
 		if (data.usage) {
 			log.debug(
@@ -103,10 +114,6 @@ export class FalChatProvider implements ChatProvider {
 
 		const text = data.output ?? "";
 		log.debug("[FalChatProvider] Response:", text.slice(0, 200));
-		if (!this.reasoning && (!text.trim() || data.partial))
-			throw new Error(
-				"fal.ai returned an empty or partial background response",
-			);
 		return {
 			text,
 			usage: {

@@ -108,3 +108,31 @@ test("fal background retries use one application budget instead of nested attemp
 	).rejects.toThrow("503");
 	expect(calls).toBe(3);
 });
+
+test("empty and partial chat responses are retried with a bounded budget and never accepted", async () => {
+	configure();
+	const { FalChatProvider } = await import("../src/providers/fal.ts");
+	const { withRetry } = await import("../src/utils.ts");
+	for (const invalid of [
+		{ output: "" },
+		{ output: "unfinished", partial: true },
+	]) {
+		let calls = 0;
+		mockFetch(async () => {
+			calls++;
+			return Response.json(invalid);
+		});
+		await expect(
+			withRetry(
+				() =>
+					new FalChatProvider().generateResponse("test", [
+						{ role: "user", content: "report" },
+					]),
+				2,
+				1,
+			),
+		).rejects.toMatchObject({ code: "empty_response" });
+		expect(calls).toBe(2);
+		fetchSpy?.mockRestore();
+	}
+});

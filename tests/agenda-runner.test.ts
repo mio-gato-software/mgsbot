@@ -242,7 +242,11 @@ test("generation failure and post-send history failure cannot cause duplicate de
 			throw new Error("model down");
 		},
 	});
-	expect(delivered).toHaveLength(0);
+	expect(delivered).toHaveLength(1);
+	expect(delivered[0]).toContain("Falló la preparación");
+	expect((await store.read()).tasks[0]?.lastOccurrence?.status).toBe("failed");
+	expect((await store.read()).tasks[0]?.lastMessage).toBeUndefined();
+	delivered = [];
 	expect(alerts).toHaveLength(1);
 	now = localTime("2026-10-23", "07:00");
 	await runScheduledTasks({
@@ -556,7 +560,7 @@ test("scheduled review repairs malformed model output once without executing emb
 			if (calls === 1)
 				return '[WEATHER_LOOKUP]{"location":"Santiago"}[/WEATHER_LOOKUP]';
 			expect(messages.at(-1)?.content).toContain("format validation failed");
-			return '{"missing":"Consultar el pronóstico de Santiago."}';
+			return '{"checks":[{"kind":"facts","detail":"Consultar el pronóstico de Santiago."},{"kind":"image_delivery","detail":"Falta adjuntar imagen"}]}';
 		},
 	);
 	expect(calls).toBe(2);

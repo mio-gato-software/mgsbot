@@ -451,3 +451,33 @@ test("a provider deadline sends a retry notice without recording an invented ans
 		]);
 	}
 });
+
+test("a group retry passes the replied-to bot photo caption to task interpretation", async () => {
+	const services = dependencies();
+	services.prepareImage = async () => {
+		throw new Error("Reference image is irrelevant to task execution");
+	};
+	let received = false;
+	services.commitments = async (input) => {
+		expect(input.text).toBe("Inténtalo otra vez");
+		expect(input.replyContext).toEqual({
+			text: "El reporte falló durante la revisión.",
+			isBot: true,
+		});
+		received = true;
+		return "";
+	};
+	const { ctx } = makeMockContext({
+		chatId: ++chatId,
+		chatType: "supergroup",
+		text: "Inténtalo otra vez",
+		replyToMessage: {
+			message_id: 77,
+			from: { id: 42 },
+			caption: "El reporte falló durante la revisión.",
+			photo: [{ file_id: "report", width: 100, height: 100 }],
+		},
+	});
+	await processConversation(ctx, "Inténtalo otra vez", "Ada", {}, services);
+	expect(received).toBe(true);
+});

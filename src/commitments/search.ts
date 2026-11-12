@@ -1,3 +1,4 @@
+import { log } from "../logger.ts";
 import { currentOperationSignal } from "../operation-deadline.ts";
 import type { ConversationWebContext } from "../web-conversation.ts";
 import type { WebSearchRequest } from "../web-search.ts";
@@ -36,7 +37,8 @@ async function readSources(
 		currentOperationSignal()?.throwIfAborted();
 		try {
 			pages.push(await web.read(chatId, url));
-		} catch {
+		} catch (error) {
+			log.error("[research] Preferred source lookup failed:", error);
 			currentOperationSignal()?.throwIfAborted();
 			pages.push(`Could not read ${url}; cause unknown.`);
 		}
@@ -126,7 +128,8 @@ export async function searchWithPreferences(
 				}),
 			);
 			urls.push(sources[0]?.url ?? `https://${domain}/`);
-		} catch {
+		} catch (error) {
+			log.error("[research] Preferred source lookup failed:", error);
 			currentOperationSignal()?.throwIfAborted();
 			urls.push(`https://${domain}/`);
 			results.push(
@@ -143,7 +146,8 @@ export async function searchWithPreferences(
 		results.push(
 			`General search / fallback:\n${await web.search(chatId, { ...request, query })}`,
 		);
-	} catch {
+	} catch (error) {
+		log.error("[research] General search failed:", error);
 		currentOperationSignal()?.throwIfAborted();
 		results.push("General search unavailable. Do not invent missing results.");
 	}

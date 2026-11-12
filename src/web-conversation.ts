@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { generateResponse } from "./ai/core.ts";
 import { searchWithPreferences } from "./commitments/search.ts";
+import { log } from "./logger.ts";
 import {
 	abortable,
 	CHAT_TIMEOUT_MS,
@@ -9,6 +10,7 @@ import {
 	withDeadline,
 } from "./operation-deadline.ts";
 import type { ChatMessage } from "./providers/types.ts";
+import { ResearchFailure } from "./research-failure.ts";
 import {
 	type ConversationWeatherContext,
 	weatherRequestSchema,
@@ -60,7 +62,7 @@ ${WEB_REPLY_STYLE}
 const MAX_CONTROL_CHARS = 10_000;
 
 const MAX_RESULT_CHARS = 8_000;
-const FALLBACK = "No pude verificar eso ahora mismo.";
+
 const CONTROL_MARKER = /\[\s*\/?\s*(?:WEB_SEARCH|WEB_READ|WEATHER_LOOKUP)\b/i;
 
 const LOOKUP_INSTRUCTIONS = `
@@ -226,8 +228,18 @@ function pageEvidence(text: string): string {
 
 function finalAnswer(text: string): string {
 	// Do not turn a tool request plus a promise into an apparently complete answer.
-	if (CONTROL_MARKER.test(text)) return FALLBACK;
-	return text.replace(/\[SILENCE\]/gi, "").trim() || FALLBACK;
+	if (CONTROL_MARKER.test(text))
+		throw new ResearchFailure(
+			"invalid_response",
+			"Final generation returned a lookup control block",
+		);
+	const answer = text.replace(/\[SILENCE\]/gi, "").trim();
+	if (!answer)
+		throw new ResearchFailure(
+			"empty_response",
+			"Final generation returned no answer",
+		);
+	return answer;
 }
 
 /** Provider-independent, bounded tool loop. No classifier call on ordinary turns.
@@ -284,6 +296,7 @@ export async function generateWithWebSearch(
 		let evidenceChars = 0;
 		let lookups = 0;
 		let reviews = 0;
+		let failure: unknown;
 		let announced = false;
 		let stopReason = `Lookup budget exhausted; no more than ${maxLookups} batches are allowed.`;
 		const seen = new Set<string>();
@@ -363,14 +376,23 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 				);
 			} catch (error) {
 				currentOperationSignal()?.throwIfAborted();
+				log.error("[research] Lookup planning failed:", error);
+				failure = error;
 				if (!lookups) throw error;
 				stopReason =
 					"Further planning failed or timed out. Finish using only available evidence; explain what remains unverified.";
 				break;
 			}
 			if (!CONTROL_MARKER.test(output)) {
+				let reviewed = false;
+				if (!output.trim())
+					throw new ResearchFailure(
+						"empty_response",
+						"Lookup generation returned no answer",
+					);
 				if (input.reviewFinal && reviews < 2 && planningTime() > 1000) {
 					reviews++;
+					reviewed = true;
 					let missing: string | undefined;
 					try {
 						missing = await withDeadline(
@@ -380,8 +402,13 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 								input.reviewFinal?.(output, messages) ??
 								Promise.resolve(undefined),
 						);
-					} catch {
+					} catch (error) {
 						currentOperationSignal()?.throwIfAborted();
+						throw new ResearchFailure(
+							"verification",
+							"Completeness review failed",
+							error,
+						);
 					}
 					if (missing) {
 						messages.push({ role: "assistant", content: output });
@@ -391,6 +418,10 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 						});
 						continue;
 					}
+				}
+				if (input.reviewFinal && !reviewed) {
+					const missing = await input.reviewFinal(output, messages);
+					if (missing) throw new ResearchFailure("verification", missing);
 				}
 				return lookups ? finalAnswer(output) : output;
 			}
@@ -470,9 +501,12 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 							currentOperationSignal()?.throwIfAborted();
 							try {
 								results.push(await read(input.chatId, url));
-							} catch {
+							} catch (error) {
 								currentOperationSignal()?.throwIfAborted();
-								results.push(`Page reading failed for ${url}; cause unknown.`);
+								log.error("[research] Page reading failed:", error);
+								results.push(
+									`Page reading failed for ${url}; see service diagnostics.`,
+								);
 							}
 						}
 						return results.join("\n\n");
@@ -480,6 +514,8 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 				);
 			} catch (error) {
 				currentOperationSignal()?.throwIfAborted();
+				log.error("[research] Lookup batch failed:", error);
+				failure = error;
 				timedOut = isTimeoutError(error);
 				evidence =
 					lookup.tool === "WEATHER_LOOKUP"
@@ -513,7 +549,8 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 			}
 		}
 		currentOperationSignal()?.throwIfAborted();
-		if (remaining() <= 0) return FALLBACK;
+		if (remaining() <= 0)
+			throw new ResearchFailure("generation", stopReason, failure);
 		try {
 			const final = await withDeadline(
 				"final lookup response",
@@ -524,10 +561,17 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 						messages,
 					),
 			);
-			return finalAnswer(final);
-		} catch {
+			const answer = finalAnswer(final);
+			if (input.reviewFinal) {
+				const missing = await input.reviewFinal(answer, messages);
+				if (missing) throw new ResearchFailure("verification", missing);
+			}
+			return answer;
+		} catch (error) {
 			currentOperationSignal()?.throwIfAborted();
-			return FALLBACK;
+			log.error("[research] Final generation failed:", error);
+			if (error instanceof ResearchFailure) throw error;
+			throw new ResearchFailure("generation", stopReason, error);
 		}
 	});
 }

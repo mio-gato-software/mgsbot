@@ -302,8 +302,8 @@ export class WorldContextService {
 					);
 				}
 				return this.format(entry);
-			} catch {
-				log.warn("[web-context] Search unavailable or daily limit reached.");
+			} catch (error) {
+				log.error("[web-context] Search failed:", error);
 				return "Web search could not be completed (service unavailable or daily limit reached). Say you could not verify it; do not invent results or claim to have read sources.";
 			}
 		});
