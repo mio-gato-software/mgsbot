@@ -138,8 +138,11 @@ assert.equal(new Set(files).size, files.length);
 for (const path of files) assert.equal(await Bun.file(path).exists(), false);
 
 const originalError = console.error;
+const originalWarn = console.warn;
 const errors: unknown[][] = [];
+const warnings: unknown[][] = [];
 console.error = (...args) => errors.push(args);
+console.warn = (...args) => warnings.push(args);
 try {
 	services.generate = async () => {
 		throw new Error("fal provider unavailable");
@@ -156,8 +159,12 @@ try {
 	assert(responseFailure?.[0]?.text.includes("completar la respuesta"));
 	assert(!responseFailure?.[0]?.text.includes("leer esa imagen"));
 
+	let downloadAttempts = 0;
 	globalThis.fetch = Object.assign(
-		async () => new Response("unavailable", { status: 500 }),
+		async () => {
+			downloadAttempts++;
+			return new Response("unavailable", { status: 500 });
+		},
 		{ preconnect() {} },
 	) as typeof fetch;
 	await handlePhoto(
@@ -170,8 +177,11 @@ try {
 	const readFailure = contexts.at(-1)?.spies.replies;
 	assert.equal(readFailure?.length, 1);
 	assert(readFailure?.[0]?.text.includes("leer esa imagen"));
-	assert.equal(errors.length, 2);
+	assert.equal(downloadAttempts, 3);
+	assert.equal(warnings.length, 2);
+	assert.equal(errors.length, 3);
 } finally {
 	console.error = originalError;
+	console.warn = originalWarn;
 }
 console.log("IMAGE_PROBE_OK");

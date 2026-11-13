@@ -165,6 +165,108 @@ test("image download respects declared MIME and safe extensions", async () => {
 		"No photo",
 	);
 });
+
+test.each(["metadata", "connection", "body", "server"])(
+	"image download recovers a transient %s failure before saving complete bytes",
+	async (failure) => {
+		const ctx = context("photos/image.webp");
+		const original = ctx.api.getFile.bind(ctx.api);
+		const getFile = spyOn(ctx.api, "getFile").mockImplementation(original);
+		restores.push(() => getFile.mockRestore());
+		if (failure === "metadata") {
+			getFile.mockRejectedValueOnce(
+				new HttpError("getFile failed", new Error("connection reset")),
+			);
+		}
+		let attempts = 0;
+		globalThis.fetch = (async () => {
+			attempts++;
+			if (attempts === 1) {
+				if (failure === "connection") throw new TypeError("fetch failed");
+				if (failure === "server")
+					return new Response("Unavailable", { status: 503 });
+				if (failure === "body")
+					return new Response(
+						new ReadableStream({
+							start(controller) {
+								controller.error(new Error("Connection lost"));
+							},
+						}),
+					);
+			}
+			return new Response("complete pixels");
+		}) as unknown as typeof fetch;
+		const image = await downloadImageByFileId(ctx.api, "test-token", "file");
+		files.push(image.filePath);
+		expect(getFile).toHaveBeenCalledTimes(2);
+		expect(attempts).toBe(failure === "metadata" ? 1 : 2);
+		expect(image.mimeType).toBe("image/webp");
+		expect(await Bun.file(image.filePath).text()).toBe("complete pixels");
+	},
+);
+
+test("image retries are bounded and permanent metadata errors fail immediately", async () => {
+	const ctx = context("photos/image.jpg");
+	const getFile = spyOn(ctx.api, "getFile").mockRejectedValue(
+		new HttpError("getFile failed", new Error("connection reset")),
+	);
+	restores.push(() => getFile.mockRestore());
+	await expect(
+		downloadImageByFileId(ctx.api, "test-token", "file"),
+	).rejects.toBeInstanceOf(HttpError);
+	expect(getFile).toHaveBeenCalledTimes(3);
+	getFile.mockClear();
+	getFile.mockRejectedValue(
+		new GrammyError(
+			"Rejected",
+			{ ok: false, error_code: 400, description: "Invalid file" },
+			"getFile",
+			{},
+		),
+	);
+	await expect(
+		downloadImageByFileId(ctx.api, "test-token", "file"),
+	).rejects.toBeInstanceOf(GrammyError);
+	expect(getFile).toHaveBeenCalledTimes(1);
+});
+
+test("image cancellation aborts metadata requests and Telegram rate-limit waits", async () => {
+	const ctx = context("photos/image.jpg");
+	let signal: AbortSignal | undefined;
+	const getFile = spyOn(ctx.api, "getFile").mockImplementation(
+		async (_fileId, supplied) => {
+			signal = supplied as AbortSignal;
+			return new Promise(() => {});
+		},
+	);
+	restores.push(() => getFile.mockRestore());
+	await expect(
+		withDeadline("test", 20, () =>
+			downloadImageByFileId(ctx.api, "test-token", "file"),
+		),
+	).rejects.toThrow("timed out");
+	expect(signal?.aborted).toBe(true);
+	getFile.mockClear();
+	getFile.mockRejectedValue(
+		new GrammyError(
+			"Too many requests",
+			{
+				ok: false,
+				error_code: 429,
+				description: "Rate limit",
+				parameters: { retry_after: 30 },
+			},
+			"getFile",
+			{},
+		),
+	);
+	await expect(
+		withDeadline("test", 20, () =>
+			downloadImageByFileId(ctx.api, "test-token", "file"),
+		),
+	).rejects.toThrow("timed out");
+	expect(getFile).toHaveBeenCalledTimes(1);
+});
 test("PDF download persists bytes until cleanup", async () => {
 	response("%PDF-1.7");
 	const path = await downloadPdfByFileId(

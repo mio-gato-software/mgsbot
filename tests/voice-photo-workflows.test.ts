@@ -391,6 +391,42 @@ test("non-inline photo analysis includes the question and cleans the image", asy
 	expect((await messages(ctx))[0]?.content).toContain("A blue chart");
 	expect(existsSync(describe.mock.calls[0]?.[0] ?? "")).toBe(false);
 });
+
+test("photo getFile recovery analyzes and responds once", async () => {
+	const { ctx, spies } = photo();
+	const original = ctx.api.getFile.bind(ctx.api);
+	const getFile = spyOn(ctx.api, "getFile")
+		.mockRejectedValueOnce(
+			new HttpError("getFile failed", new Error("connection reset")),
+		)
+		.mockImplementation(original);
+	restores.push(() => getFile.mockRestore());
+	await handlePhoto(ctx, "test-token");
+	expect(getFile).toHaveBeenCalledTimes(2);
+	expect(describe).toHaveBeenCalledTimes(1);
+	expect(generate).toHaveBeenCalledTimes(1);
+	expect(spies.replies).toHaveLength(1);
+	expect(spies.replies[0]?.text).toBe("Received");
+	expect(existsSync(describe.mock.calls[0]?.[0] ?? "")).toBe(false);
+});
+
+test("addressed group photo transport errors receive one nontechnical retry notice", async () => {
+	const { ctx, spies } = photo({
+		chatType: "supergroup",
+		replyToMessage: { from: { id: 42 }, text: "Send a photo" },
+	});
+	const getFile = spyOn(ctx.api, "getFile").mockRejectedValue(
+		new HttpError("getFile failed", new Error("private transport details")),
+	);
+	restores.push(() => getFile.mockRestore());
+	await handlePhoto(ctx, "test-token");
+	expect(getFile).toHaveBeenCalledTimes(3);
+	expect(describe).not.toHaveBeenCalled();
+	expect(generate).not.toHaveBeenCalled();
+	expect(spies.replies.map((r) => r.text)).toEqual([
+		"I couldn't read that image. Reply to the original image to try again.",
+	]);
+});
 test("photo edit requests preserve raw evidence without redundant analysis", async () => {
 	edit.mockResolvedValue(true);
 	const { ctx, spies } = photo({ caption: "Make it brighter" });

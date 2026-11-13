@@ -19,7 +19,6 @@ import {
 	type MediaAttachment,
 	supportsInlineImages,
 } from "../providers/types.ts";
-import { isDev } from "../utils.ts";
 import {
 	detectMentionType,
 	hasEditIntent,
@@ -126,8 +125,6 @@ export async function handlePhoto(
 						: "No pude leer esa imagen. Responde a la imagen original para intentarlo de nuevo.",
 			)
 			.catch(() => {});
-		if (isDev)
-			await ctx.reply(`[Dev] Photo handler error: ${error}`).catch(() => {});
 	} finally {
 		// Idempotent: guards against the indicator leaking on early errors.
 		receiving.stop();

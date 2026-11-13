@@ -66,7 +66,7 @@ export async function downloadAndTranscribeByFileId(
 	);
 }
 
-function audioDownloadErrorDetails(error: unknown): string {
+function mediaDownloadErrorDetails(error: unknown): string {
 	const cause = error instanceof HttpError ? error.error : error;
 	const code =
 		cause instanceof Error && "code" in cause ? String(cause.code) : undefined;
@@ -76,21 +76,18 @@ function audioDownloadErrorDetails(error: unknown): string {
 		.join(" / ");
 }
 
-async function transcribeTelegramFile(
+async function downloadTelegramMedia(
 	getFile: () => ReturnType<Context["getFile"]>,
 	botToken: string,
-	mimeType: string,
-	fileExtension: string,
-	prefix: string,
-	messageId: number | undefined,
-): Promise<string> {
-	// Retry only the read-only download. Transcription and delivery each run once.
-	const buffer = await withRetry(
+	kind: "audio" | "image",
+): Promise<{ remotePath: string; buffer: Buffer }> {
+	// Retry only metadata and bytes, never analysis, generation or delivery.
+	return withRetry(
 		() =>
-			withDeadline("Telegram audio download", 30_000, async () => {
+			withDeadline(`Telegram ${kind} download`, 30_000, async () => {
 				const file = await getFile();
 				if (!file.file_path)
-					throw new Error("Telegram did not return an audio file path");
+					throw new Error(`Telegram did not return an ${kind} file path`);
 				let response: Response;
 				let bytes: ArrayBuffer;
 				try {
@@ -101,7 +98,7 @@ async function transcribeTelegramFile(
 					if (!response.ok) {
 						await response.body?.cancel();
 						throw new GrammyError(
-							"Audio download failed",
+							`${kind} download failed`,
 							{
 								ok: false,
 								error_code: response.status,
@@ -115,9 +112,9 @@ async function transcribeTelegramFile(
 				} catch (error) {
 					currentOperationSignal()?.throwIfAborted();
 					if (error instanceof GrammyError) throw error;
-					throw new HttpError("Audio download connection failed", error);
+					throw new HttpError(`${kind} download connection failed`, error);
 				}
-				return Buffer.from(bytes);
+				return { remotePath: file.file_path, buffer: Buffer.from(bytes) };
 			}),
 		3,
 		500,
@@ -130,8 +127,8 @@ async function transcribeTelegramFile(
 						[429, 500, 502, 503, 504].includes(error.error_code));
 				if (retryable)
 					log.warn(
-						"[telegram-audio] Download failed; retrying:",
-						audioDownloadErrorDetails(error),
+						`[telegram-${kind}] Download failed; retrying:`,
+						mediaDownloadErrorDetails(error),
 					);
 				return retryable;
 			},
@@ -142,13 +139,24 @@ async function transcribeTelegramFile(
 		},
 	).catch(async (error) => {
 		// Keep the failed operation visible to the operator even during passive listening.
-		log.error("[telegram-audio] Download failed permanently:", error);
+		log.error(`[telegram-${kind}] Download failed permanently:`, error);
 		await alertOwner(
-			"telegram-audio-download",
-			`No se pudo descargar un audio de Telegram. ${audioDownloadErrorDetails(error)}. El error completo quedó registrado en el servicio.`,
+			`telegram-${kind}-download`,
+			`No se pudo descargar ${kind === "audio" ? "un audio" : "una imagen"} de Telegram. ${mediaDownloadErrorDetails(error)}. El error completo quedó registrado en el servicio.`,
 		);
 		throw error;
 	});
+}
+
+async function transcribeTelegramFile(
+	getFile: () => ReturnType<Context["getFile"]>,
+	botToken: string,
+	mimeType: string,
+	fileExtension: string,
+	prefix: string,
+	messageId: number | undefined,
+): Promise<string> {
+	const { buffer } = await downloadTelegramMedia(getFile, botToken, "audio");
 	const filePath = `./audios/${prefix}_${messageId}_${randomUUID()}.${fileExtension}`;
 	try {
 		await Bun.write(filePath, buffer);
@@ -175,20 +183,16 @@ export async function downloadImageByFileId(
 	fileId: string,
 	declaredMimeType?: string,
 ): Promise<{ filePath: string; mimeType: string }> {
-	const file = await api.getFile(fileId);
-	if (!file.file_path)
-		throw new Error("Telegram did not return an image file path");
-	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
-	log.debug("[downloadImage] Downloading file:", file.file_path);
-
-	const response = await fetch(url, { signal: requestSignal(30_000) });
-	if (!response.ok) {
-		throw new Error(
-			`Download failed: ${response.status} ${response.statusText}`,
-		);
-	}
-
-	const rawExt = file.file_path?.split(".").pop();
+	const { remotePath, buffer } = await downloadTelegramMedia(
+		() =>
+			api.getFile(
+				fileId,
+				currentOperationSignal() as Parameters<Context["api"]["getFile"]>[1],
+			),
+		botToken,
+		"image",
+	);
+	const rawExt = remotePath.split(".").pop();
 	const ext = safeMediaExtension(rawExt, "jpg");
 	const mimeType =
 		declaredMimeType ??
@@ -198,8 +202,12 @@ export async function downloadImageByFileId(
 				? "image/webp"
 				: "image/jpeg");
 	const filePath = `./audios/photo_${randomUUID()}.${ext}`;
-	const buffer = Buffer.from(await response.arrayBuffer());
-	await Bun.write(filePath, buffer);
+	try {
+		await Bun.write(filePath, buffer);
+	} catch (error) {
+		await cleanupFile(filePath);
+		throw error;
+	}
 	log.debug("[downloadImage] Saved to:", filePath, `(${buffer.length} bytes)`);
 
 	return { filePath, mimeType };
