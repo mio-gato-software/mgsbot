@@ -144,6 +144,83 @@ test("an unfinished image at eleven minutes stays claimed and its completed deli
 	expect(alerts).toHaveLength(0);
 });
 
+test("long image-only report content survives validation, persistence and restart", async () => {
+	now = localTime("2026-10-22", "07:00");
+	const text = "Verified report section. ".repeat(300);
+	let sends = 0;
+	const run: RunnerServices = {
+		...services,
+		generate: async () => ({
+			text,
+			image: Buffer.from("complete table"),
+			delivery: "image_only",
+		}),
+		deliver: (chatId, message) =>
+			deliverScheduledMessage(
+				{
+					sendPhoto: async (_chat, _photo, options) => {
+						const persisted = JSON.parse(await Bun.file(store.path).text());
+						expect(persisted.data.tasks[0].lastOccurrence.status).toBe(
+							"sending",
+						);
+						expect(options?.caption).toBeUndefined();
+						sends++;
+						return {} as never;
+					},
+					sendMessage: async () => {
+						throw new Error("Unexpected text or failure notice");
+					},
+				},
+				chatId,
+				message,
+			),
+	};
+	await runScheduledTasks(run);
+	const reopened = new CommitmentStore(store.path, () => now);
+	expect((await reopened.read()).tasks[0]).toMatchObject({
+		lastMessage: text,
+		lastOccurrence: { status: "sent" },
+	});
+	await runScheduledTasks({ ...run, store: reopened });
+	expect(sends).toBe(1);
+	expect(alerts).toHaveLength(0);
+});
+
+test("a failed later text chunk never replays a partially delivered report", async () => {
+	now = localTime("2026-10-22", "07:00");
+	let attempts = 0;
+	const deliveredChunks: string[] = [];
+	const run: RunnerServices = {
+		...services,
+		generate: async () => ({ text: "x".repeat(9500) }),
+		deliver: (chatId, message) =>
+			deliverScheduledMessage(
+				{
+					sendPhoto: async () => {
+						throw new Error("Unexpected photo");
+					},
+					sendMessage: async (_chat, chunk) => {
+						attempts++;
+						if (attempts === 2) throw new Error("Network outcome uncertain");
+						deliveredChunks.push(chunk);
+						return {} as never;
+					},
+				},
+				chatId,
+				message,
+			),
+	};
+	await runScheduledTasks(run);
+	await runScheduledTasks({
+		...run,
+		store: new CommitmentStore(store.path, () => now),
+	});
+	expect(attempts).toBe(2);
+	expect(deliveredChunks).toEqual(["x".repeat(4000)]);
+	expect((await store.read()).tasks[0]?.lastOccurrence?.status).toBe("unknown");
+	expect(alerts).toHaveLength(1);
+});
+
 test("conditional action failure leaves an already delivered report successful", async () => {
 	now = localTime("2026-10-22", "07:00");
 	await runScheduledTasks({
@@ -549,6 +626,70 @@ test("personal reminders never invoke research or weather tools", async () => {
 	});
 	expect(calls).toBe(1);
 	expect(result).toBe("Es hora de salir.");
+});
+
+test("scheduled research repairs image markers on primary and timeout recovery before factual review", async () => {
+	const { generateScheduledMessage, scheduledGenerationServices } =
+		await import("../src/commitments/runner.ts");
+	const task = (await store.read()).tasks[0];
+	if (!task) throw new Error("Missing task");
+	task.instruction =
+		"Solo una imagen de resultados y juegos de hoy, sin texto.";
+	for (const recover of [false, true]) {
+		let primaryCalls = 0;
+		let fallbackCalls = 0;
+		let reviews = 0;
+		const report = "Azul 3–2 Verde; hoy Verde–Rojo en Estadio Ejemplo.";
+		const result = await generateScheduledMessage(task, {
+			...scheduledGenerationServices,
+			store,
+			now: () => now,
+			retrieve: async () => ({
+				relevantEpisodes: [],
+				relevantFacts: [],
+				permanentFacts: [],
+				relationshipMemory: null,
+				recentChapters: [],
+				activeNames: [],
+				mentionedNames: [],
+			}),
+			assemble: async () => "Persona",
+			web: {
+				isEnabled: () => true,
+				context: async () => "",
+				refreshHeadlines: async () => {},
+				search: async () => report,
+			},
+			weather: {
+				isEnabled: () => false,
+				instructions: () => "",
+				lookup: async () => {
+					throw new Error("Unexpected weather lookup");
+				},
+			},
+			generate: async () => {
+				primaryCalls++;
+				if (recover) throw new Error("primary request timed out");
+				return primaryCalls === 1 ? "[IMAGE: Layout and results]" : report;
+			},
+			fallback: async (_system, messages) => {
+				fallbackCalls++;
+				expect(messages[0]?.content).toContain(report);
+				return fallbackCalls === 1 ? "[IMAGE: Layout and results]" : report;
+			},
+			review: async (_task, draft, trace) => {
+				reviews++;
+				expect(draft).toBe(report);
+				expect(JSON.stringify(trace)).toContain(report);
+				expect(JSON.stringify(trace)).not.toContain("Layout and results");
+				return undefined;
+			},
+		});
+		expect(result).toBe(report);
+		expect(primaryCalls).toBe(recover ? 1 : 2);
+		expect(fallbackCalls).toBe(recover ? 2 : 0);
+		expect(reviews).toBe(1);
+	}
 });
 
 test("scheduled review repairs malformed model output once without executing embedded tools", async () => {

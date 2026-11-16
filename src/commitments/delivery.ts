@@ -34,11 +34,19 @@ export async function deliverScheduledMessage(
 		if (message.delivery === "image_only" || message.text.length <= 1000)
 			return;
 	}
-	await withMarkdownFallback((parseMode) =>
-		api.sendMessage(
-			chatId,
-			message.text,
-			parseMode ? { parse_mode: parseMode } : undefined,
-		),
-	);
+	for (let offset = 0; offset < message.text.length; ) {
+		let end = Math.min(offset + 4000, message.text.length);
+		// Keep each chunk bounded without separating an emoji's surrogate pair.
+		const last = message.text.charCodeAt(end - 1);
+		if (end < message.text.length && last >= 0xd800 && last <= 0xdbff) end--;
+		const chunk = message.text.slice(offset, end);
+		await withMarkdownFallback((parseMode) =>
+			api.sendMessage(
+				chatId,
+				chunk,
+				parseMode ? { parse_mode: parseMode } : undefined,
+			),
+		);
+		offset = end;
+	}
 }

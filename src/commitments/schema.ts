@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { scheduleSchema } from "./calendar.ts";
 
+// Report content is also the image renderer's input, not a single Telegram message.
+export const MAX_SCHEDULED_REPORT_CHARS = 32_000;
+
 const text = z.string().trim().min(1).max(1200);
 const id = z.string().min(1).max(100);
 export const behaviorInputSchema = z.object({
@@ -147,7 +150,7 @@ export const taskSchema = taskInputSchema.extend({
 	nextRunAt: z.number().finite().optional(),
 	status: z.enum(["active", "cancelled", "expired", "completed"]),
 	lastOccurrence: occurrenceSchema.optional(),
-	lastMessage: z.string().max(4000).optional(),
+	lastMessage: z.string().max(MAX_SCHEDULED_REPORT_CHARS).optional(),
 	renewalTermStartedAt: z.number().finite().optional(),
 	renewalNotice: z
 		.object({
