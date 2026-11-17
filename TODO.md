@@ -16,13 +16,6 @@ Living document. Rules:
 - **Size:** Medium; the shared evaluation and receipt infrastructure is available.
 - Added 2026-11-07.
 
-### Audit remaining conversational heuristics
-
-- **Why:** task request interpretation and deferred-link routing now use the background model, but other legacy conversational routing paths may still use lexical heuristics contrary to the mandatory rule in AGENTS.md.
-- **What to do:** audit group routing, image requests and other semantic decisions; replace remaining heuristic gates with Jev or Luna while preserving deterministic permission and format validation.
-- **Size:** Medium; outside the task-detection fix.
-- Added 2026-10-24.
-
 ### Avoid inferring event delays from city weather alone
 
 - **Why:** a live model test correctly distinguished the event schedule from hourly forecasts, but separately described a delay as very likely based only on city rain forecasts. Weather evidence alone does not establish an operational decision or its probability.

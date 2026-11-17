@@ -3,7 +3,6 @@
 // src/handlers/, sharing the routing helpers from src/handlers/routing.ts
 // (re-exported here to keep existing import paths working).
 import type { Bot, Context, MiddlewareFn } from "grammy";
-import { classifyGroupMessageIntent } from "./ai/classifiers.ts";
 import { analyzeYouTube } from "./ai/vision.ts";
 import { isBotOff, isSleepingHour } from "./bot-state.ts";
 import { withChatAction } from "./chat-actions.ts";
@@ -13,7 +12,7 @@ import {
 	commitmentsEnabled,
 	isDeferredWebRequest,
 } from "./commitments/requests.ts";
-import { getBotName, isBotConfigured, loadConfig } from "./config.ts";
+import { isBotConfigured, loadConfig } from "./config.ts";
 import {
 	getUserDisplayName,
 	isGroupChat,
@@ -34,15 +33,11 @@ import { handlePhoto, registerPhotoHandler } from "./handlers/photo.ts";
 import {
 	buildGroupResponseOptions,
 	buildReplyAwareTextContent,
+	classifyGroupTurn,
 	detectMentionType,
-	detectTelegramMentionType,
-	getLastBotMessageBeforeLatest,
 	getTelegramReplyContext,
-	isIgnorableGroupMessage,
 	processConversationAndTrackGroupContinuation,
-	routeGroupNameMention,
 	sanitizeBracketText,
-	toClassifierReplyContext,
 } from "./handlers/routing.ts";
 import { registerVoiceHandlers } from "./handlers/voice.ts";
 import { log } from "./logger.ts";
@@ -50,7 +45,6 @@ import {
 	downloadAndTranscribeByFileId,
 	extractYouTubeUrl,
 } from "./media-handlers.ts";
-import { loadSensory } from "./memory/index.ts";
 import { isTimeoutError } from "./operation-deadline.ts";
 import { isSimpleAssistantMode } from "./prompt/modes.ts";
 import { processSetupConversation } from "./setup.ts";
@@ -74,10 +68,7 @@ export {
 	buildUntranscribedVoiceContent,
 	buildVoiceContent,
 	detectMentionType,
-	detectTranscribedMentionType,
-	getLastBotMessageBeforeLatest,
 	getTelegramReplyContext,
-	isIgnorableGroupMessage,
 	isUsableTranscription,
 	shouldTranscribePassiveGroupVoice,
 	type TelegramReplyContext,
@@ -145,7 +136,7 @@ export const pausedMessageMiddleware: MiddlewareFn<Context> = async (
 		await next();
 		return;
 	}
-	if (group && detectTelegramMentionType(ctx, ctx.me.id) === "none") return;
+	if (group && detectMentionType(ctx, ctx.me.id) === "none") return;
 	try {
 		await ctx.react("😴");
 	} catch {
@@ -176,16 +167,25 @@ export function registerHandlers(bot: Bot): void {
 	bot.on("message", async (ctx) => {
 		const text = ctx.message.text;
 		if (!text) return;
-		if (text.startsWith("/")) return;
+		if (
+			ctx.message.entities?.some(
+				(entity) => entity.type === "bot_command" && entity.offset === 0,
+			)
+		)
+			return;
 		const userName = getUserDisplayName(ctx);
-		const mentionType = detectMentionType(ctx, ctx.me.id);
+		const telegram = detectMentionType(ctx, ctx.me.id);
+		const groupDecision =
+			isGroupChat(ctx) && telegram === "none"
+				? await classifyGroupTurn(ctx, text, userName)
+				: null;
+		const mentionType =
+			groupDecision?.addressing === "direct" &&
+			groupDecision.action === "respond"
+				? "name"
+				: telegram;
 		const replyContext = getTelegramReplyContext(ctx, ctx.me.id);
 		const replyAwareText = buildReplyAwareTextContent(text, replyContext);
-
-		if (isGroupChat(ctx) && mentionType === "name") {
-			const route = await routeGroupNameMention(ctx, text, userName);
-			if (route === "handled") return;
-		}
 
 		// YouTube analysis disabled in simple assistant mode
 		if (
@@ -282,6 +282,7 @@ export function registerHandlers(bot: Bot): void {
 					: "Unknown";
 				const handled = await handleDocument(ctx, botToken, replyDocument, {
 					requestText: text,
+					mentionType,
 					documentSender,
 					messageId: replyMsg?.message_id,
 				});
@@ -361,7 +362,7 @@ export function registerHandlers(bot: Bot): void {
 
 			// Explicit replies can retrieve a photo even after recent context expires.
 			if (replyPhoto && replyPhoto.length > 0) {
-				await handlePhoto(ctx, botToken, text);
+				await handlePhoto(ctx, botToken, text, mentionType);
 				return;
 			}
 		}
@@ -370,51 +371,21 @@ export function registerHandlers(bot: Bot): void {
 		if (isGroupChat(ctx) && mentionType === "none") {
 			await observeConversationTurn(ctx, replyAwareText, userName);
 			if (replyContext && !replyContext.isBot) return;
-			if (isIgnorableGroupMessage(text)) return;
+			if (groupDecision?.action !== "respond") return;
 
-			const buffer = await loadSensory(ctx.chat.id);
-			const lastBotMessage = getLastBotMessageBeforeLatest(buffer.messages);
-			let canContinue = false;
-			let canStartSpontaneously = false;
-			let consideredContinuation = false;
-
-			if (claimGroupContinuationSlot(ctx.chat.id)) {
-				consideredContinuation = true;
-				const decision = await classifyGroupMessageIntent({
-					mode: "continuation",
-					botName: getBotName(),
-					currentSpeaker: userName,
-					currentMessage: text,
-					recentMessages: buffer.messages,
-					lastBotMessage,
-					replyContext: toClassifierReplyContext(replyContext),
-				});
-				canContinue = decision === "respond";
-			}
-
-			if (
-				!canContinue &&
-				!consideredContinuation &&
+			const canContinue =
+				groupDecision.addressing === "continuation" &&
+				claimGroupContinuationSlot(ctx.chat.id);
+			const canStartSpontaneously =
+				groupDecision.addressing !== "continuation" &&
 				canAutoReplyInGroup(ctx.chat.id) &&
-				canEvaluateSpontaneousReplyInGroup(ctx.chat.id)
-			) {
-				registerSpontaneousReplyEvaluation(ctx.chat.id);
-				const decision = await classifyGroupMessageIntent({
-					mode: "spontaneous",
-					botName: getBotName(),
-					currentSpeaker: userName,
-					currentMessage: text,
-					recentMessages: buffer.messages,
-					lastBotMessage,
-					replyContext: toClassifierReplyContext(replyContext),
-				});
-				canStartSpontaneously = decision === "respond";
-			}
+				canEvaluateSpontaneousReplyInGroup(ctx.chat.id);
 
 			if (canContinue || canStartSpontaneously) {
 				const botOff = isBotOff();
 				const sleeping = isSleepingHour();
 				if (canStartSpontaneously) {
+					registerSpontaneousReplyEvaluation(ctx.chat.id);
 					registerGroupAutoReply(ctx.chat.id);
 				}
 				await processConversationAndTrackGroupContinuation(

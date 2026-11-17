@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getBotName } from "../src/config.ts";
 import { isGroupChat } from "../src/conversation.ts";
 import {
 	buildGroupResponseOptions,
@@ -11,13 +10,10 @@ import {
 	buildUntranscribedVoiceContent,
 	buildVoiceContent,
 	detectMentionType,
-	getLastBotMessageBeforeLatest,
 	getTelegramReplyContext,
-	isIgnorableGroupMessage,
 	isUsableTranscription,
 	shouldTranscribePassiveGroupVoice,
 } from "../src/handlers.ts";
-import type { ConversationMessage } from "../src/types.ts";
 import { makeMockContext } from "./helpers/telegram-mock.ts";
 
 const BOT = { id: 42, username: "mgs_test_bot" };
@@ -107,17 +103,6 @@ describe("detectMentionType", () => {
 			],
 		});
 		expect(detectMentionType(ctx, BOT.id)).toBe("tag");
-	});
-
-	test("configured bot name in the text is 'name'", () => {
-		const botName = getBotName();
-		if (!botName.trim()) return;
-		const { ctx } = makeMockContext({
-			chatType: "group",
-			me: BOT,
-			text: `oye ${botName} ven`,
-		});
-		expect(detectMentionType(ctx, BOT.id)).toBe("name");
 	});
 
 	test("plain text with no mention is 'none'", () => {
@@ -279,39 +264,11 @@ describe("group response memory context", () => {
 });
 
 describe("group message helpers", () => {
-	test("isIgnorableGroupMessage", () => {
-		expect(isIgnorableGroupMessage("")).toBe(true);
-		expect(isIgnorableGroupMessage("   ")).toBe(true);
-		expect(isIgnorableGroupMessage("😂👍")).toBe(true);
-		expect(isIgnorableGroupMessage("hola")).toBe(false);
-		expect(isIgnorableGroupMessage("jaja 😂")).toBe(false);
-	});
-
 	test("isUsableTranscription", () => {
 		expect(isUsableTranscription("")).toBe(false);
 		expect(isUsableTranscription("   ")).toBe(false);
 		expect(isUsableTranscription("[transcription failed]")).toBe(false);
 		expect(isUsableTranscription("hola")).toBe(true);
-	});
-
-	test("getLastBotMessageBeforeLatest skips the latest turn", () => {
-		const msg = (role: "user" | "model", content: string) =>
-			({ role, content, timestamp: 0 }) as ConversationMessage;
-		expect(getLastBotMessageBeforeLatest([])).toBeUndefined();
-		expect(
-			getLastBotMessageBeforeLatest([msg("user", "a"), msg("user", "b")]),
-		).toBeUndefined();
-		expect(
-			getLastBotMessageBeforeLatest([
-				msg("model", "old"),
-				msg("model", "recent"),
-				msg("user", "latest"),
-			]),
-		).toBe("recent");
-		// A bot message in the latest slot is ignored
-		expect(
-			getLastBotMessageBeforeLatest([msg("user", "a"), msg("model", "last")]),
-		).toBeUndefined();
 	});
 });
 
@@ -327,13 +284,6 @@ interface ProbeResult {
 		unknownDuration: boolean;
 		untranscribedMsg: string;
 		passiveLong: string;
-	};
-	mention: {
-		plainName: string;
-		strippedDiacritics: string;
-		noName: string;
-		transcribedName: string;
-		transcribedNone: string;
 	};
 	security: {
 		allowedGroupNext: boolean;
@@ -414,14 +364,6 @@ describe("security middleware (subprocess, ALLOWED_GROUP_ID/OWNER_USER_ID set)",
 	test("GROUP_PASSIVE_VOICE_MAX_SECONDS=0 disables passive transcription", () => {
 		expect(result.gating.short).toBe(false);
 		expect(result.gating.unknownDuration).toBe(false);
-	});
-
-	test("configured bot name matches loosely (diacritics/case)", () => {
-		expect(result.mention.plainName).toBe("name");
-		expect(result.mention.strippedDiacritics).toBe("name");
-		expect(result.mention.noName).toBe("none");
-		expect(result.mention.transcribedName).toBe("name");
-		expect(result.mention.transcribedNone).toBe("none");
 	});
 });
 

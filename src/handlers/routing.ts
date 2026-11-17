@@ -1,22 +1,17 @@
 // Shared routing helpers for the message handlers: mention detection,
 // reply-context builders, passive group voice gating, and the group
-// name-mention router. Used by the core text handler plus the voice and
+// turn classifier. Used by the core text handler plus the voice and
 // photo handler modules.
 import type { Context } from "grammy";
 import {
 	classifyEditIntent,
 	classifyGroupSocialIntent,
 } from "../ai/classifiers.ts";
-import { isBotOff, isSleepingHour } from "../bot-state.ts";
 import { getBotName } from "../config.ts";
-import {
-	isGroupChat,
-	observeConversationTurn,
-	processConversation,
-} from "../conversation.ts";
+import { isGroupChat, processConversation } from "../conversation.ts";
 import { openGroupContinuationWindow } from "../group-state.ts";
 import { loadSensory } from "../memory/index.ts";
-import type { ConversationMessage, MentionType } from "../types.ts";
+import type { MentionType } from "../types.ts";
 
 const groupVoiceContextEnabled =
 	process.env.ENABLE_GROUP_VOICE_CONTEXT !== "false";
@@ -52,12 +47,6 @@ export function buildGroupResponseOptions(input: {
 		groupContinuation: input.groupContinuation,
 	};
 }
-
-/**
- * Regex fallback for edit intent detection when the LLM classifier is unavailable.
- */
-const EDIT_INTENT_REGEX =
-	/\b(edit|change|modify|add|remove|make it|turn it|turn this|transform|replace|paint|convert|crop|resize|edita|edítala|edítalo|cambia|cámbiale|modifica|modifícala|modifícalo|ponle|pónle|agrégale|agregale|añádele|añadele|quítale|quitale|hazla|hazlo|haz que|conviértela|conviertela|conviértelo|conviertelo|transforma|pinta|píntala|pintalo|reemplaza|sustituye)\b/i;
 
 // Strips brackets from user-supplied text before interpolation into
 // bracketed context strings like "[Image from ...]" so users can't
@@ -143,37 +132,12 @@ export function buildReplyAwareTextContent(
 	return `[Replying to ${replyContext.senderName}${botMarker}: "${truncateReplyContext(replyContext.content)}"]\n\n${text}`;
 }
 
-/**
- * Does the caption express intent to edit/modify the image?
- * When true, we can skip describeImage since the model will likely emit
- * [IMAGE: ...] and the edit provider uses the raw image directly.
- *
- * Uses an LLM classifier for nuance; falls back to a regex if the classifier
- * fails or is inconclusive.
- */
+/** When edit intent is uncertain, retain the ordinary image-analysis path. */
 export async function hasEditIntent(caption?: string): Promise<boolean> {
-	if (!caption) return false;
-	const classification = await classifyEditIntent(caption);
-	if (classification !== null) return classification;
-	return EDIT_INTENT_REGEX.test(caption);
+	return caption ? (await classifyEditIntent(caption)) === true : false;
 }
 
-function normalizeForLooseMatch(text: string): string {
-	return text
-		.normalize("NFD")
-		.replace(/\p{Diacritic}/gu, "")
-		.toLowerCase();
-}
-
-function textMentionsBotName(text: string): boolean {
-	const botName = normalizeForLooseMatch(getBotName());
-	if (!botName.trim()) return false;
-	const escaped = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-	const nameRegex = new RegExp(`\\b${escaped}\\b`, "i");
-	return nameRegex.test(normalizeForLooseMatch(text));
-}
-
-export function detectTelegramMentionType(
+export function detectMentionType(
 	ctx: Context,
 	botId: number,
 ): "reply" | "tag" | "none" {
@@ -195,42 +159,6 @@ export function detectTelegramMentionType(
 	}
 
 	return "none";
-}
-
-export function detectMentionType(ctx: Context, botId: number): MentionType {
-	const explicit = detectTelegramMentionType(ctx, botId);
-	if (explicit !== "none") return explicit;
-	const text = ctx.message?.text ?? ctx.message?.caption ?? "";
-	return textMentionsBotName(text) ? "name" : "none";
-}
-
-export function detectTranscribedMentionType(
-	ctx: Context,
-	botId: number,
-	transcription: string,
-): MentionType {
-	if (ctx.message?.reply_to_message?.from?.id === botId) return "reply";
-	if (textMentionsBotName(transcription)) return "name";
-	return "none";
-}
-
-export function isIgnorableGroupMessage(text: string): boolean {
-	const trimmed = text.trim();
-	if (!trimmed) return true;
-	if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u.test(trimmed)) {
-		return true;
-	}
-	return false;
-}
-
-export function getLastBotMessageBeforeLatest(
-	messages: ConversationMessage[],
-): string | undefined {
-	for (let i = messages.length - 2; i >= 0; i--) {
-		const message = messages[i];
-		if (message?.role === "model") return message.content;
-	}
-	return undefined;
 }
 
 export function isUsableTranscription(transcription: string): boolean {
@@ -292,83 +220,38 @@ export async function processConversationAndTrackGroupContinuation(
 	return didRespond;
 }
 
-export async function routeGroupNameMention(
+export async function classifyGroupTurn(
 	ctx: Context,
 	text: string,
 	userName: string,
-	options?: {
-		conversationContent?: string;
-		isVoiceMessage?: boolean;
-		directUserText?: string;
-	},
-): Promise<"full" | "handled"> {
+) {
 	const chatId = ctx.chat?.id;
-	if (!chatId) return "handled";
-	const replyContext = getTelegramReplyContext(ctx, ctx.me.id);
-	const conversationContent = buildReplyAwareTextContent(
-		options?.conversationContent ?? text,
-		replyContext,
-	);
-
+	if (!chatId || !text.trim()) return null;
 	const buffer = await loadSensory(chatId);
-	const currentTurn: ConversationMessage = {
-		role: "user",
-		name: userName,
-		content: conversationContent,
-		timestamp: Date.now(),
-	};
-	const recentMessages = [...buffer.messages, currentTurn];
-	const lastBotMessage = getLastBotMessageBeforeLatest(recentMessages);
-	const decision = await classifyGroupSocialIntent({
-		mode: "name",
+	return classifyGroupSocialIntent({
+		mode: "message",
 		botName: getBotName(),
 		currentSpeaker: userName,
 		currentMessage: text,
-		recentMessages,
-		lastBotMessage,
-		replyContext: toClassifierReplyContext(replyContext),
+		recentMessages: buffer.messages,
+		lastBotMessage: buffer.messages.findLast(
+			(message) => message.role === "model",
+		)?.content,
+		replyContext: toClassifierReplyContext(
+			getTelegramReplyContext(ctx, ctx.me.id),
+		),
 	});
+}
 
-	if (decision?.addressing === "direct") {
-		return "full";
-	}
-
-	if (replyContext && !replyContext.isBot) {
-		await observeConversationTurn(
-			ctx,
-			conversationContent,
-			userName,
-			options?.directUserText,
-		);
-		return "handled";
-	}
-
-	await observeConversationTurn(
-		ctx,
-		conversationContent,
-		userName,
-		options?.directUserText,
-	);
-	if (decision?.action !== "respond") {
-		return "handled";
-	}
-
-	await processConversationAndTrackGroupContinuation(
-		ctx,
-		conversationContent,
-		userName,
-		{
-			mentionType: "name",
-			botOff: isBotOff(),
-			isSleepingHour: isSleepingHour(),
-			isVoiceMessage: options?.isVoiceMessage,
-			directUserText: options?.directUserText,
-			...buildGroupResponseOptions({
-				groupAutoReply: decision.addressing !== "continuation",
-				groupContinuation: decision.addressing === "continuation",
-			}),
-		},
-	);
-
-	return "handled";
+export async function resolveMediaMention(
+	ctx: Context,
+	requestText: string | undefined,
+	userName: string,
+): Promise<MentionType> {
+	const telegram = detectMentionType(ctx, ctx.me.id);
+	if (telegram !== "none" || !isGroupChat(ctx) || !requestText) return telegram;
+	const decision = await classifyGroupTurn(ctx, requestText, userName);
+	return decision?.addressing === "direct" && decision.action === "respond"
+		? "name"
+		: "none";
 }

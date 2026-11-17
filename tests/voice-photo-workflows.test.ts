@@ -38,9 +38,6 @@ let originalConfig: BotConfig;
 let nextChat = 870_000;
 let transcript = "This is my question";
 let downloads = 0;
-let classify: ReturnType<
-	typeof spyOn<typeof classifiers, "classifyGroupMessageIntent">
->;
 let social: ReturnType<
 	typeof spyOn<typeof classifiers, "classifyGroupSocialIntent">
 >;
@@ -66,9 +63,6 @@ beforeEach(() => {
 	transcript = "This is my question";
 	downloads = 0;
 	audioPaths.length = 0;
-	classify = spyOn(classifiers, "classifyGroupMessageIntent").mockResolvedValue(
-		"silence",
-	);
 	social = spyOn(classifiers, "classifyGroupSocialIntent").mockResolvedValue({
 		addressing: "about_bot",
 		action: "silence",
@@ -97,7 +91,6 @@ beforeEach(() => {
 	const sleeping = spyOn(state, "isSleepingHour").mockReturnValue(false);
 	const speech = spyOn(tts, "isTtsAvailable").mockReturnValue(false);
 	restores.push(
-		() => classify.mockRestore(),
 		() => social.mockRestore(),
 		() => describe.mockRestore(),
 		() => transcribe.mockRestore(),
@@ -200,7 +193,7 @@ test("direct group voice replies retain the referenced bot message", async () =>
 	expect((await messages(ctx))[0]?.content).toContain(
 		'Replying to Mia (bot): "What happened?"',
 	);
-	expect(classify).not.toHaveBeenCalled();
+	expect(social).not.toHaveBeenCalled();
 });
 test("passive group voice is observed without visible typing or a reply", async () => {
 	const { ctx, spies } = context({
@@ -228,8 +221,8 @@ test("oversized passive voice is recorded without a download", async () => {
 		"exceeds the passive group limit",
 	);
 });
-test("a name addressed in the transcript routes to a full response", async () => {
-	transcript = "Mia, what do you think?";
+test("a direct transcript without the bot name reaches the classifier and can receive a reply", async () => {
+	transcript = "What do you think about it?";
 	social.mockResolvedValue({
 		addressing: "direct",
 		action: "respond",
@@ -269,9 +262,13 @@ test("voice continuation uses the last bot turn and records the user only once",
 	];
 	await saveSensory(buffer);
 	openGroupContinuationWindow(buffer.chatId);
-	classify.mockResolvedValue("respond");
+	social.mockResolvedValue({
+		addressing: "continuation",
+		action: "respond",
+		confidence: 1,
+	});
 	await voiceHandler()(ctx);
-	expect(classify.mock.calls[0]?.[0].lastBotMessage).toBe("Tell me more");
+	expect(social.mock.calls[0]?.[0].lastBotMessage).toBe("Tell me more");
 	expect(spies.replies).toHaveLength(1);
 	expect((await messages(ctx)).filter((m) => m.role === "user")).toHaveLength(
 		1,
@@ -287,9 +284,13 @@ test("voice replying to someone else never claims the bot continuation", async (
 		},
 	});
 	openGroupContinuationWindow(ctx.chat?.id ?? 0);
-	classify.mockResolvedValue("respond");
+	social.mockResolvedValue({
+		addressing: "continuation",
+		action: "respond",
+		confidence: 1,
+	});
 	await voiceHandler()(ctx);
-	expect(classify).not.toHaveBeenCalled();
+	expect(social.mock.calls[0]?.[0].replyContext?.isBot).toBe(false);
 	expect(spies.replies).toHaveLength(0);
 	expect((await messages(ctx))[0]?.content).toContain("Replying to Luis");
 });
@@ -300,11 +301,11 @@ test("failed passive transcription is observed without invoking classifiers", as
 		voice: { file_id: "voice", duration: 20 },
 	});
 	await voiceHandler()(ctx);
-	expect(classify).not.toHaveBeenCalled();
+	expect(social).not.toHaveBeenCalled();
 	expect(spies.replies).toHaveLength(0);
 	expect((await messages(ctx))[0]?.content).toContain("transcription failed");
 });
-test("emoji-only passive transcription cannot trigger continuation", async () => {
+test("the model can leave an emoji-only transcript silent", async () => {
 	transcript = "🙂";
 	const { ctx, spies } = context({
 		chatType: "supergroup",
@@ -312,7 +313,7 @@ test("emoji-only passive transcription cannot trigger continuation", async () =>
 	});
 	openGroupContinuationWindow(ctx.chat?.id ?? 0);
 	await voiceHandler()(ctx);
-	expect(classify).not.toHaveBeenCalled();
+	expect(social.mock.calls[0]?.[0].currentMessage).toBe("🙂");
 	expect(spies.replies).toHaveLength(0);
 });
 test("passive transcript memory is bounded while the classifier sees the full text", async () => {
@@ -325,7 +326,7 @@ test("passive transcript memory is bounded while the classifier sees the full te
 	await voiceHandler()(ctx);
 	expect((await messages(ctx))[0]?.content).toContain("[truncated]");
 	expect((await messages(ctx))[0]?.content.length).toBeLessThan(1300);
-	expect(classify.mock.calls[0]?.[0].currentMessage.length).toBe(1600);
+	expect(social.mock.calls[0]?.[0].currentMessage.length).toBe(1600);
 });
 test("addressed transcription timeouts propagate, passive timeouts stay invisible", async () => {
 	transcribe.mockRejectedValue(new OperationTimeoutError("transcription"));
@@ -525,3 +526,16 @@ test.each(["voice", "audio"] as const)(
 		expect(generate).not.toHaveBeenCalled();
 	},
 );
+
+test("uncertain edit classification keeps image analysis even when the caption has an edit word", async () => {
+	edit.mockResolvedValue(null);
+	const { ctx } = context({
+		photo: [{ file_id: "sample", width: 30, height: 40 }],
+		caption: "Can you explain why the caption uses the word change?",
+	});
+	await handlePhoto(ctx, "test-token");
+	expect(edit).toHaveBeenCalledWith(
+		"Can you explain why the caption uses the word change?",
+	);
+	expect(describe).toHaveBeenCalledTimes(1);
+});

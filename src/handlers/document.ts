@@ -18,11 +18,12 @@ import {
 } from "../media-handlers.ts";
 import { isTimeoutError } from "../operation-deadline.ts";
 import { isSimpleAssistantMode } from "../prompt/modes.ts";
+import type { MentionType } from "../types.ts";
 import { isDev } from "../utils.ts";
 import { handlePhoto } from "./photo.ts";
 import {
-	detectMentionType,
 	processConversationAndTrackGroupContinuation,
+	resolveMediaMention,
 	sanitizeBracketText,
 } from "./routing.ts";
 
@@ -98,6 +99,7 @@ export async function handleDocument(
 	document: TelegramDocument,
 	options?: {
 		requestText?: string;
+		mentionType?: MentionType;
 		documentSender?: string;
 		messageId?: number;
 	},
@@ -107,6 +109,7 @@ export async function handleDocument(
 			ctx,
 			botToken,
 			options?.requestText ?? ctx.message?.caption,
+			options?.mentionType,
 		);
 		return true;
 	}
@@ -114,10 +117,12 @@ export async function handleDocument(
 	if (!kind) return false;
 	if (isSimpleAssistantMode) return true;
 
-	const mentionType = detectMentionType(ctx, ctx.me.id);
 	const userName = getUserDisplayName(ctx);
 	const documentSender = options?.documentSender ?? userName;
 	const requestText = options?.requestText ?? ctx.message?.caption;
+	const mentionType =
+		options?.mentionType ??
+		(await resolveMediaMention(ctx, requestText, userName));
 	const safeRequestText = requestText
 		? sanitizeBracketText(requestText)
 		: undefined;
