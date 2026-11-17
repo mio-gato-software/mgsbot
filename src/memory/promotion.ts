@@ -81,7 +81,9 @@ function formatExistingFactSummary(facts: SemanticFact[]): string | undefined {
 
 function inferSemanticScope(
 	fact: Pick<SemanticFact, "category" | "subject">,
+	chatId: number,
 ): SemanticFact["scope"] {
+	if (chatId > 0) return "chat";
 	if (fact.category === "person") return "person";
 	if (fact.subject) return "person";
 	return "chat";
@@ -564,7 +566,7 @@ export async function promoteToMemory(
 			createdAt: now,
 			lastConfirmed: now,
 			lastDecayedAt: now,
-			scope: inferSemanticScope(fact),
+			scope: inferSemanticScope(fact, chatId),
 			sourceChatId: chatId,
 			supersedes: fact.supersedes,
 			...(fact.permanent ? { permanent: true } : {}),
@@ -595,6 +597,7 @@ async function applyPreparedPromotion(
 		prepared.confirmedFactIds ?? [],
 		id,
 		prepared.episode.timestamp,
+		chatId,
 	);
 	if (prepared.personalitySignals?.traitChanges.length) {
 		await applyPersonalitySignals(
