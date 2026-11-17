@@ -482,7 +482,7 @@ test("a group retry passes the replied-to bot photo caption to task interpretati
 	expect(received).toBe(true);
 });
 
-test("group auto-reply routing still interprets an authorized report retry and uses image-only delivery", async () => {
+test("group continuation routing interprets an authorized report retry and uses image-only delivery", async () => {
 	const services = dependencies();
 	const text = "Inténtalo de nuevo";
 	const { ctx, spies } = makeMockContext({
@@ -516,10 +516,36 @@ test("group auto-reply routing still interprets an authorized report retry and u
 		ctx,
 		text,
 		"Ada",
-		{ groupAutoReply: true, groupContinuation: true },
+		{ groupContinuation: true },
 		services,
 	);
 	expect(interpreted).toBe(true);
 	expect(photos).toBe(1);
 	expect(spies.replies).toHaveLength(0);
+});
+
+test("a spontaneous group reply cannot interpret or execute agenda actions", async () => {
+	const text = "Inténtalo de nuevo";
+	const { ctx, spies } = makeMockContext({
+		chatId: ++chatId,
+		chatType: "supergroup",
+		text,
+	});
+	const services = dependencies();
+	let interpreted = false;
+	services.commitments = async () => {
+		interpreted = true;
+		return "";
+	};
+
+	await processConversation(
+		ctx,
+		text,
+		"Ada",
+		{ groupAutoReply: true },
+		services,
+	);
+
+	expect(interpreted).toBe(false);
+	expect(spies.replies.map((reply) => reply.text)).toEqual(["Hola, Ana"]);
 });
