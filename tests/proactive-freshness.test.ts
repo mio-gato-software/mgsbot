@@ -10,7 +10,7 @@ function makeFollowUp(overrides: Partial<FollowUp>): FollowUp {
 	return {
 		id: "fu_test",
 		chatId: 1,
-		event: "comer camarones con Elianny",
+		event: "comer camarones con Ada",
 		followUpQuestion: "¿Qué tal los camarones?",
 		detectedAt: 0,
 		scheduledFor: 0,
@@ -20,32 +20,58 @@ function makeFollowUp(overrides: Partial<FollowUp>): FollowUp {
 	};
 }
 
-describe("isDuplicateOfRecentFollowUp", () => {
+describe("isDuplicateOfRecentFollowUp", async () => {
 	const now = Date.now();
+	const matched: Parameters<typeof isDuplicateOfRecentFollowUp>[4] = async (
+		_mode,
+		_text,
+		candidates,
+	) => new Set(candidates.map(({ id }) => id));
+	const unrelated: typeof matched = async () => new Set();
 
-	test("blocks a similar event tracked within the window", () => {
+	test("blocks a similar event tracked within the window", async () => {
 		const all = [
-			makeFollowUp({ event: "comer camarones con Elianny", detectedAt: now }),
+			makeFollowUp({ event: "comer camarones con Ada", detectedAt: now }),
 		];
 		expect(
-			isDuplicateOfRecentFollowUp(all, "los camarones que hizo Elianny", now),
+			await isDuplicateOfRecentFollowUp(
+				all,
+				1,
+				"los camarones que hizo Ada",
+				now,
+				matched,
+			),
 		).toBe(true);
 	});
 
-	test("blocks regardless of status (cancelled/expired count too)", () => {
+	test("blocks regardless of status (cancelled/expired count too)", async () => {
 		const all = [makeFollowUp({ status: "expired", detectedAt: now - 1000 })];
-		expect(isDuplicateOfRecentFollowUp(all, "comer camarones", now)).toBe(true);
+		expect(
+			await isDuplicateOfRecentFollowUp(
+				all,
+				1,
+				"comer camarones",
+				now,
+				matched,
+			),
+		).toBe(true);
 	});
 
-	test("allows the same topic once the window has passed", () => {
+	test("allows the same topic once the window has passed", async () => {
 		const stale = now - EVENT_DEDUP_WINDOW_MS - 1000;
 		const all = [makeFollowUp({ detectedAt: stale })];
 		expect(
-			isDuplicateOfRecentFollowUp(all, "comer camarones con Elianny", now),
+			await isDuplicateOfRecentFollowUp(
+				all,
+				1,
+				"comer camarones con Ada",
+				now,
+				matched,
+			),
 		).toBe(false);
 	});
 
-	test("uses sentAt when it is more recent than detectedAt", () => {
+	test("uses sentAt when it is more recent than detectedAt", async () => {
 		const all = [
 			makeFollowUp({
 				detectedAt: now - EVENT_DEDUP_WINDOW_MS - 1000,
@@ -53,14 +79,26 @@ describe("isDuplicateOfRecentFollowUp", () => {
 			}),
 		];
 		expect(
-			isDuplicateOfRecentFollowUp(all, "comer camarones con Elianny", now),
+			await isDuplicateOfRecentFollowUp(
+				all,
+				1,
+				"comer camarones con Ada",
+				now,
+				matched,
+			),
 		).toBe(true);
 	});
 
-	test("allows unrelated events", () => {
+	test("allows unrelated events", async () => {
 		const all = [makeFollowUp({ detectedAt: now })];
 		expect(
-			isDuplicateOfRecentFollowUp(all, "cita con el dentista mañana", now),
+			await isDuplicateOfRecentFollowUp(
+				all,
+				1,
+				"cita con el dentista mañana",
+				now,
+				unrelated,
+			),
 		).toBe(false);
 	});
 });

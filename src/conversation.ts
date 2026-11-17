@@ -210,24 +210,28 @@ export async function processConversation(
 		}
 
 		// Follow-up detection and cancellation (DMs only, background)
-		if (!isGroupChat(ctx)) {
+		if (!isGroupChat(ctx) && directUserText?.trim()) {
 			const sourceMessageAt =
 				buffer.messages.findLast((m) => m.role === "user")?.timestamp ??
 				Date.now();
 			trackBackground(
 				"follow-up-cancel",
-				checkAndCancelResolvedFollowUps(chatId, userContent, sourceMessageAt),
+				checkAndCancelResolvedFollowUps(
+					chatId,
+					directUserText,
+					sourceMessageAt,
+				),
 			);
 			const recentText = buffer.messages
-				.filter((m) => m.role === "user")
-				.map((m) => m.content)
+				.filter((m) => m.role === "user" && m.userTextVerified === true)
+				.map((m) => m.userText)
 				.join("\n");
 			trackBackground(
 				"follow-up-detect",
 				detectAndStoreFollowUps(
 					chatId,
 					recentText,
-					userContent,
+					directUserText,
 					sourceMessageAt,
 				),
 			);

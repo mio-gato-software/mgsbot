@@ -399,7 +399,7 @@ export async function checkAndSendCheckIns(
 			// memory_callback — it's the strategy that recycles old shared topics.
 			const avoidTopics = [
 				...(state.recentMessages ?? []).map((m) => m.text),
-				...(await getRecentFollowUpEvents()),
+				...(await getRecentFollowUpEvents(chatId)),
 			];
 			const strategy = pickStrategy(
 				state.recentStrategies,
