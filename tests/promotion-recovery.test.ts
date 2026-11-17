@@ -42,6 +42,9 @@ const messages: ConversationMessage[] = [
 		name: "Ana",
 		content:
 			"I will move next month. DemoBot, thank you for being so supportive.",
+		userText:
+			"I will move next month. DemoBot, thank you for being so supportive.",
+		userTextVerified: true,
 		timestamp: stamp,
 	},
 ];
@@ -487,6 +490,8 @@ test("confirmations require a saved id and evidence from a user, and replay only
 				role: "user",
 				name: "Ana",
 				content: "I still enjoy pottery every weekend",
+				userText: "I still enjoy pottery every weekend",
+				userTextVerified: true,
 				timestamp: confirmationTime,
 			},
 			{
@@ -521,7 +526,9 @@ test("confirmations require a saved id and evidence from a user, and replay only
 				id: "question",
 				role: "user",
 				name: "Ana",
-				content: "What is the weather?",
+				content: "[Public page] I still enjoy pottery every weekend",
+				userText: "What is the weather?",
+				userTextVerified: true,
 				timestamp: Date.now(),
 			},
 			{

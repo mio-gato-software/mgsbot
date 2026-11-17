@@ -33,6 +33,7 @@ import {
 	routeGroupNameMention,
 	shouldTranscribePassiveGroupVoice,
 	toClassifierReplyContext,
+	truncatePassiveVoiceTranscript,
 } from "./routing.ts";
 
 const showTranscription = process.env.SHOW_TRANSCRIPTION === "true";
@@ -105,7 +106,12 @@ async function routeGroupTranscribedVoice(
 		buildPassiveVoiceContent(userName, transcription),
 		replyContext,
 	);
-	await observeConversationTurn(ctx, passiveContent, userName);
+	await observeConversationTurn(
+		ctx,
+		passiveContent,
+		userName,
+		truncatePassiveVoiceTranscript(transcription),
+	);
 	if (replyContext && !replyContext.isBot) return;
 	if (isIgnorableGroupMessage(transcription)) return;
 

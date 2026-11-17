@@ -24,6 +24,7 @@ export const MAX_PROMOTION_ATTEMPTS = 10;
 export interface PreparedPromotion {
 	effectsApplied?: boolean;
 	confirmedFactIds?: string[];
+	verifiedUserEvidence?: true;
 	narrativeEpisodeIds?: string[];
 	narrative?: LongTermMemoryUpdate;
 	narrativeBase?: { relationship: string; chapter: string };
@@ -35,6 +36,7 @@ export interface PreparedPromotion {
 const preparedSchema = z.object({
 	effectsApplied: z.boolean().optional(),
 	confirmedFactIds: z.array(z.string()).optional(),
+	verifiedUserEvidence: z.literal(true).optional(),
 	narrativeEpisodeIds: z.array(z.string()).optional(),
 	narrativeBase: z
 		.object({ relationship: z.string(), chapter: z.string() })
