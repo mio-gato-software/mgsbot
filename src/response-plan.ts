@@ -51,24 +51,35 @@ export interface ResponsePlan {
 /** Parse model output without performing network or storage operations. */
 export function parseResponse(
 	responseText: string,
-	options: { allowImages: boolean; allowSpeech: boolean },
+	options: {
+		allowImages: boolean;
+		allowImageEdits: boolean;
+		allowSpeech: boolean;
+	},
 ): ResponsePlan {
 	const { responseText: unquoted, quoteReplyRequested } =
 		extractQuoteReplyMarker(responseText);
 	let text = unquoted.replaceAll(SILENCE_MARKER, "").trim();
 	const reaction = text.match(REACTION_MARKER_REGEX)?.[1]?.trim();
 	text = text.replace(/\[REACT:\s*[^\]]+\]/g, "").trim();
-	const selfMatch = text.match(IMAGE_SELF_MARKER_REGEX);
-	const editMatch = !selfMatch ? text.match(IMAGE_EDIT_MARKER_REGEX) : null;
-	const imageMatch = selfMatch ?? editMatch ?? text.match(IMAGE_MARKER_REGEX);
-	const image =
-		options.allowImages && imageMatch?.[1]?.trim()
-			? {
-					prompt: imageMatch[1].trim(),
-					self: !!selfMatch,
-					...(editMatch ? { edit: true as const } : {}),
-				}
-			: undefined;
+	const selfMatch = options.allowImages
+		? text.match(IMAGE_SELF_MARKER_REGEX)
+		: null;
+	const editMatch =
+		!selfMatch && options.allowImageEdits
+			? text.match(IMAGE_EDIT_MARKER_REGEX)
+			: null;
+	const imageMatch =
+		selfMatch ??
+		editMatch ??
+		(options.allowImages ? text.match(IMAGE_MARKER_REGEX) : null);
+	const image = imageMatch?.[1]?.trim()
+		? {
+				prompt: imageMatch[1].trim(),
+				self: !!selfMatch,
+				...(editMatch ? { edit: true as const } : {}),
+			}
+		: undefined;
 	text = text.replace(/\[IMAGE(?:_SELF|_EDIT)?:\s*[^\]]+\]/g, "").trim();
 	const speechPattern = /\[TTS\]([\s\S]+?)\[\/?TTS\]/g;
 	const speeches = [...text.matchAll(speechPattern)]

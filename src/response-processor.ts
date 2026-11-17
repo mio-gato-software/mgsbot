@@ -96,7 +96,8 @@ export async function sendResponse(
 		allowPhotoRequest,
 	} = options;
 	const plan = parseResponse(options.responseText, {
-		allowImages: shouldGenImage || allowPhotoRequest || !!userImagePath,
+		allowImages: shouldGenImage || allowPhotoRequest,
+		allowImageEdits: !!userImagePath,
 		allowSpeech: !isSimpleAssistantMode,
 	});
 	const replyOptions = buildReplyOptions({

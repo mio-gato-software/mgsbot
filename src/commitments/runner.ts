@@ -58,6 +58,7 @@ async function generateScheduledReportText(
 		const output = await generate(`${system}\n${REPORT_TEXT_CONTRACT}`, input);
 		const plan = parseResponse(output, {
 			allowImages: true,
+			allowImageEdits: true,
 			allowSpeech: false,
 		});
 		if (!plan.image) return output;
@@ -294,6 +295,7 @@ async function generateScheduledReport(
 	);
 	const clean = parseResponse(response, {
 		allowImages: false,
+		allowImageEdits: false,
 		allowSpeech: false,
 	})
 		.text.replace(/\[WEB_SEARCH\][\s\S]*?(?:\[\/WEB_SEARCH\]|$)/gi, "")
