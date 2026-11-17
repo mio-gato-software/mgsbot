@@ -27,18 +27,54 @@ function threshold(): number {
 	return process.env.NODE_ENV === "development" ? LEVELS.debug : LEVELS.info;
 }
 
+/** Summarize failure metadata without retaining request or response payloads. */
+export function summarizeError(error: unknown): string {
+	if (!(error instanceof Error)) return "Unknown error";
+	const kind = /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(error.name)
+		? error.name
+		: "Error";
+	const status =
+		"status" in error
+			? error.status
+			: "error_code" in error
+				? error.error_code
+				: undefined;
+	const parts = [kind];
+	if (
+		typeof status === "number" &&
+		Number.isInteger(status) &&
+		status >= 100 &&
+		status <= 599
+	)
+		parts.push(`HTTP ${status}`);
+	if (
+		"code" in error &&
+		typeof error.code === "string" &&
+		/^(?:E[A-Z_]{2,30}|UND_ERR_[A-Z_]{2,30})$/.test(error.code)
+	)
+		parts.push(error.code);
+	return parts.join(" / ");
+}
+
+function formatLogArgument(arg: unknown): unknown {
+	return arg instanceof Error ? summarizeError(arg) : arg;
+}
+
 /** Tiny leveled console logger. Callers keep their own `[scope]` prefixes. */
 export const log = {
 	debug: (...args: unknown[]): void => {
-		if (threshold() <= LEVELS.debug) console.log(...args);
+		if (threshold() <= LEVELS.debug)
+			console.log(...args.map(formatLogArgument));
 	},
 	info: (...args: unknown[]): void => {
-		if (threshold() <= LEVELS.info) console.log(...args);
+		if (threshold() <= LEVELS.info) console.log(...args.map(formatLogArgument));
 	},
 	warn: (...args: unknown[]): void => {
-		if (threshold() <= LEVELS.warn) console.warn(...args);
+		if (threshold() <= LEVELS.warn)
+			console.warn(...args.map(formatLogArgument));
 	},
 	error: (...args: unknown[]): void => {
-		if (threshold() <= LEVELS.error) console.error(...args);
+		if (threshold() <= LEVELS.error)
+			console.error(...args.map(formatLogArgument));
 	},
 };

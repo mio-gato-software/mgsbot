@@ -2,6 +2,8 @@
 
 The default data root is `./memory`. Set `MEMORY_DIR` before startup to use another directory. The application resolves this once after loading its environment; do not change it while the process runs. Tests force a disposable root in `tests/preload.ts`, independently of inherited configuration.
 
+Service logs and owner alerts record failure categories and available status codes. The separate `ENABLE_CHAT_LOG` option controls whether full conversations are written to the chat log.
+
 ## Persistence contract
 
 Stores accept legacy payloads without `schemaVersion` and the current v1 format. Successful writes validate both the existing file and the new payload. Missing files represent initial state; malformed JSON, invalid payloads, unreadable files, and unsupported schema versions raise an error. The damaged original remains in place. In-process locks serialize read/modify/write operations. Asynchronous atomic writes use unique temporary names, flush file contents, then rename.

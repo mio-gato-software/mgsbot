@@ -85,7 +85,6 @@ export class DeepSeekChatProvider implements ChatProvider {
 				`[tokens:deepseek] in=${response.usage.prompt_tokens} out=${response.usage.completion_tokens} total=${response.usage.total_tokens}`,
 			);
 		}
-		log.debug("[DeepSeekChatProvider] Response:", text.slice(0, 200));
 
 		return text;
 	}

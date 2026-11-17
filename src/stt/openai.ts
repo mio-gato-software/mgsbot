@@ -22,7 +22,7 @@ export class OpenAISttProvider implements SttProvider {
 		});
 
 		const text = response.text?.trim() ?? "";
-		log.debug("[STT:openai] Result:", text.slice(0, 200));
+
 		return text;
 	}
 }

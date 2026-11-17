@@ -90,3 +90,17 @@ describe("log level filtering", () => {
 		expect(logSpy).toHaveBeenCalledWith("[scope] message", { a: 1 });
 	});
 });
+
+test("service diagnostics retain status without error payloads or stack traces", () => {
+	const error = Object.assign(
+		new Error("private body", { cause: Error("private URL") }),
+		{
+			status: 429,
+		},
+	);
+	log.error("[provider] Request failed", error);
+	expect(errorSpy).toHaveBeenCalledWith(
+		"[provider] Request failed",
+		"Error / HTTP 429",
+	);
+});

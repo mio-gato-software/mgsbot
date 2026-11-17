@@ -85,7 +85,7 @@ test("Cartesia reports API errors instead of saving an invalid audio file", asyn
 		});
 
 		await expect(provider.synthesize("Hola")).rejects.toThrow(
-			"Cartesia TTS failed: 429 Too Many Requests rate limit exceeded",
+			"Cartesia TTS failed: 429",
 		);
 	} finally {
 		await rm(outputDir, { recursive: true, force: true });

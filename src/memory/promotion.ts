@@ -429,7 +429,7 @@ export async function promoteToMemory(
 		});
 		if (err instanceof ExtractionParseError) {
 			log.warn(
-				`[promote] Extraction from ${err.model} was unparseable for chat ${chatId} — spooling for retry. Raw: ${err.snippet}`,
+				`[promote] Extraction from ${err.model} was unparseable for chat ${chatId} — spooling for retry.`,
 			);
 			await alertOwner(
 				"memory-extraction",
@@ -440,7 +440,7 @@ export async function promoteToMemory(
 	}
 
 	log.debug(
-		`[promote] Summary: "${result.summary}", importance: ${result.importance}, facts: ${result.facts.length}`,
+		`[promote] Importance: ${result.importance}, facts: ${result.facts.length}`,
 	);
 
 	// Downstream gate: skip if the LLM judged the chunk uninteresting. The heuristic

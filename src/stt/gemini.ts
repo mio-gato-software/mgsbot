@@ -32,13 +32,6 @@ export class GeminiSttProvider implements SttProvider {
 		});
 
 		try {
-			log.debug("[STT:gemini] Upload result:", {
-				name: uploaded.name,
-				uri: uploaded.uri,
-				state: uploaded.state,
-				mimeType: uploaded.mimeType,
-			});
-
 			// Poll until the file is ACTIVE
 			const MAX_POLL_ATTEMPTS = 20;
 			const POLL_INTERVAL_MS = 1000;
@@ -79,7 +72,7 @@ export class GeminiSttProvider implements SttProvider {
 			);
 
 			const text = response.text ?? "";
-			log.debug("[STT:gemini] Result:", text.slice(0, 200));
+
 			return text;
 		} finally {
 			if (uploaded.name) {

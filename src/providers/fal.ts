@@ -1,5 +1,6 @@
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
+import { ProviderHttpError } from "../provider-http-error.ts";
 import { resolveChatModel } from "../provider-options.ts";
 import { ResearchFailure } from "../research-failure.ts";
 import { withRetry } from "../utils.ts";
@@ -81,19 +82,14 @@ export class FalChatProvider implements ChatProvider {
 				signal: requestSignal(60_000),
 			});
 			if (!response.ok) {
-				const errorBody = await response.text().catch(() => "");
-				throw Object.assign(
-					new Error(
-						`fal.ai API error: ${response.status} ${response.statusText} ${errorBody}`,
-					),
-					{ status: response.status },
-				);
+				await response.body?.cancel().catch(() => {});
+				throw new ProviderHttpError("fal.ai API error", response.status);
 			}
 			const result = (await response.json()) as FalResponse;
 			if (result.error)
 				throw new ResearchFailure(
 					"generation",
-					`fal.ai model error: ${result.error}`,
+					"fal.ai reported a model error",
 				);
 			if (!result.output?.trim() || result.partial)
 				throw Object.assign(
@@ -113,7 +109,7 @@ export class FalChatProvider implements ChatProvider {
 		}
 
 		const text = data.output ?? "";
-		log.debug("[FalChatProvider] Response:", text.slice(0, 200));
+
 		return {
 			text,
 			usage: {

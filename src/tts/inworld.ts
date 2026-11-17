@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
+import { ProviderHttpError } from "../provider-http-error.ts";
 import type { TtsProvider } from "./types.ts";
 
 export class InworldTtsProvider implements TtsProvider {
@@ -42,8 +43,8 @@ export class InworldTtsProvider implements TtsProvider {
 		log.debug("[TTS:inworld] Response status:", response.status);
 
 		if (!response.ok) {
-			const errorBody = await response.text().catch(() => "");
-			throw new Error(`Inworld TTS failed: ${response.status} ${errorBody}`);
+			await response.body?.cancel().catch(() => {});
+			throw new ProviderHttpError("Inworld TTS failed", response.status);
 		}
 
 		const data = (await response.json()) as {

@@ -87,7 +87,7 @@ export class GeminiChatProvider implements ChatProvider {
 		logTokenUsage("generateResponse", response);
 
 		const text = response.text ?? "";
-		log.debug("[GeminiChatProvider] Response:", text.slice(0, 200));
+
 		return text;
 	}
 }

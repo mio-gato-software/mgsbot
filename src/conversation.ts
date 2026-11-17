@@ -11,7 +11,7 @@ export {
 import type { Context } from "grammy";
 import { generateResponse } from "./ai/core.ts";
 import { describeImage } from "./ai/vision.ts";
-import { alertOwner } from "./alerts.ts";
+import { alertOwner, errorSummary } from "./alerts.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { checkAndSendTaskBehaviors } from "./commitments/behavior-runner.ts";
@@ -391,12 +391,7 @@ export async function processConversation(
 								} catch (error) {
 									currentOperationSignal()?.throwIfAborted();
 									log.error("[agenda] Manual report failed:", error);
-									await alertOwner(
-										"manual-report",
-										error instanceof Error
-											? `${error.name}: ${error.message.slice(0, 300)}`
-											: "Unknown report failure",
-									);
+									await alertOwner("manual-report", errorSummary(error));
 									taskResponse = researchFailureNotice(error);
 								}
 							},
@@ -471,7 +466,7 @@ export async function processConversation(
 	} catch (error) {
 		if (error instanceof ResearchFailure) {
 			log.error("[conversation] Research failed:", error);
-			await alertOwner("research-failure", error.message.slice(0, 300));
+			await alertOwner("research-failure", `Research failed (${error.code})`);
 			await ctx.reply(researchFailureNotice(error));
 			return false;
 		}

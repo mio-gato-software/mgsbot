@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import { downloadFalAsset } from "../fal-download.ts";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
+import { ProviderHttpError } from "../provider-http-error.ts";
 import {
 	FAL_IMAGE_MODELS,
 	resolveFalImageModelName,
@@ -78,8 +79,6 @@ export class FalImageProvider implements ImageProvider {
 		prompt: string,
 		referenceImagePath?: string,
 	): Promise<Buffer> {
-		log.debug("[image:fal] Prompt:", prompt.slice(0, 200));
-
 		const body: Record<string, unknown> = {
 			prompt,
 			num_images: 1,
@@ -124,10 +123,8 @@ export class FalImageProvider implements ImageProvider {
 				signal: requestSignal(this.generationTimeoutMs),
 			});
 			if (!response.ok) {
-				const errorBody = await response.text().catch(() => "");
-				throw new Error(
-					`fal.ai image error: ${response.status} ${response.statusText} ${errorBody}`,
-				);
+				await response.body?.cancel().catch(() => {});
+				throw new ProviderHttpError("fal.ai image error", response.status);
 			}
 			return (await response.json()) as FalImageResponse;
 		});

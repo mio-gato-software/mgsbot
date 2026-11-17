@@ -53,7 +53,7 @@ export class OpenAIImageProvider implements ImageProvider {
 					: "1536x1024"
 			: resolveOpenAIImageSize();
 		const quality = resolveOpenAIImageQuality();
-		log.debug("[image:openai] Prompt:", prompt.slice(0, 200));
+
 		log.debug(
 			"[image:openai] Model:",
 			model,
@@ -84,7 +84,6 @@ export class OpenAIImageProvider implements ImageProvider {
 	}
 
 	async editImage(prompt: string, imagePath: string): Promise<Buffer> {
-		log.debug("[image:openai:edit] Prompt:", prompt.slice(0, 200));
 		return this.requestImageEdit(
 			`${userImageEditPrompt(prompt)} ${noImageText}`,
 			imagePath,
