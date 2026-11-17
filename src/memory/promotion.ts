@@ -69,16 +69,6 @@ function uniqueNames(names: string[]): string[] {
 	return [...new Set(names.filter((name) => name.trim().length > 0))];
 }
 
-function formatExistingFactSummary(facts: SemanticFact[]): string | undefined {
-	if (facts.length === 0) return undefined;
-	return facts
-		.map(
-			(fact) =>
-				`- (${fact.id}) [${fact.subject || fact.category}] ${fact.content}`,
-		)
-		.join("\n");
-}
-
 function inferSemanticScope(
 	fact: Pick<SemanticFact, "category" | "subject">,
 	chatId: number,
@@ -394,7 +384,6 @@ export async function promoteToMemory(
 		{ content: recentText, category: "rule" as const, sourceChatId: chatId },
 		{ content: recentText, category: "event" as const, sourceChatId: chatId },
 	]);
-	const existingFactSummary = formatExistingFactSummary(existingFacts);
 
 	const defaultBar = defaultPromotionBar();
 	const minImportance = options?.minImportance ?? defaultBar;
@@ -411,7 +400,7 @@ export async function promoteToMemory(
 	// LLM: evaluate and extract
 	let result: PromotionResult;
 	try {
-		result = await dependencies.evaluate(recentText, existingFactSummary);
+		result = await dependencies.evaluate(recentText, existingFacts);
 	} catch (err) {
 		// Record the failed attempt before rethrowing: a rising parse-failure rate
 		// on the cheap background model is exactly what the metrics exist to catch.

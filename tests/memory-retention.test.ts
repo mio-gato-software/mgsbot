@@ -7,6 +7,7 @@ import {
 	getRelevantChapters,
 	saveChapterStore,
 } from "../src/memory/chapters.ts";
+import { saveWorkingMemory } from "../src/memory/episodes.ts";
 import {
 	addSemanticFacts,
 	confirmSemanticFacts,
@@ -23,6 +24,7 @@ import {
 	MEMORY_PROMPT_MAX_CHARS,
 } from "../src/prompt/assemble.ts";
 import { buildPromptContext } from "../src/prompt/context.ts";
+import { retrieveMemoryContext } from "../src/prompt/retrieval.ts";
 import { weatherCurrent } from "../src/prompt/sections/activity.ts";
 import type { SemanticFact } from "../src/types.ts";
 
@@ -124,6 +126,101 @@ test("chapter retrieval finds an older date or topic while staying within two ch
 		expect(chapters[0]?.month).toBe("2026-01");
 	}
 	expect((await getRelevantChapters(chatId, ""))[0]?.month).toBe("2026-09");
+});
+
+test("turn retrieval omits incidental memories and recalls a dated or paraphrased episode with one embedding", async () => {
+	const chatId = 918002;
+	const pottery = {
+		month: "2026-03",
+		title: "Feria de cerámica",
+		summary: "Ana vendió sus cuencos de barro",
+	};
+	const climbing = {
+		month: "2026-10",
+		title: "Escalada",
+		summary: "Ana completó la ruta del acantilado",
+	};
+	await saveChapterStore({
+		chatId,
+		chapters: [pottery, climbing].map((chapter) => ({
+			...chapter,
+			id: chapter.month,
+			chatId,
+			importance: 3,
+			participants: ["Ana"],
+			episodeIds: [],
+			updatedAt: now,
+		})),
+	});
+	await saveWorkingMemory({
+		chatId,
+		episodes: [pottery, climbing].map(({ month, summary }, index) => ({
+			id: month,
+			summary,
+			timestamp: Date.parse(`${month}-15T12:00:00Z`),
+			importance: 3,
+			participants: ["Ana"],
+			embedding: index === 0 ? [1, 0, 0] : [0, 1, 0],
+		})),
+	});
+	const query = async (
+		content: string,
+		embedding: number[],
+		relevantOnly: boolean,
+	) => {
+		const messages = [
+			{
+				role: "model" as const,
+				content: "Feria de cerámica",
+				timestamp: now - 1000,
+			},
+			{ role: "user" as const, name: "Ana", content, timestamp: now },
+		];
+		let lookups = 0;
+		const result = await retrieveMemoryContext(
+			{ chatId, messages, relevantOnly },
+			{
+				queryEmbedding: async (input, queryText) => {
+					lookups++;
+					expect(input).toEqual(messages);
+					expect(queryText).toBe(relevantOnly ? content : undefined);
+					return {
+						text: input.map((message) => message.content).join(" "),
+						embedding: queryText ? embedding : [1, 0, 0],
+					};
+				},
+			},
+		);
+		expect(lookups).toBe(1);
+		return result;
+	};
+	const unrelated = "¿Temperatura mañana?";
+	const baseline = await query(unrelated, [0, 0, 1], false);
+	const focused = await query(unrelated, [0, 0, 1], true);
+	expect(focused.relevantEpisodes).toEqual([]);
+	expect(focused.recentChapters).toEqual([]);
+	const weather = spyOn(weatherCurrent, "render").mockReturnValue(null);
+	try {
+		const before = await assembleSystemPrompt(buildPromptContext(baseline));
+		const after = await assembleSystemPrompt(buildPromptContext(focused));
+		expect(before.length - after.length).toBeGreaterThan(200);
+	} finally {
+		weather.mockRestore();
+	}
+
+	const dated = await query(
+		"¿Cómo quedó aquello que te conté en marzo?",
+		[0, 1, 0],
+		true,
+	);
+	expect(dated.relevantEpisodes.map(({ id }) => id)).toEqual(["2026-03"]);
+	expect(dated.recentChapters.map(({ month }) => month)).toEqual(["2026-03"]);
+	const paraphrased = await query(
+		"¿Al final compraron mis piezas hechas a mano?",
+		[1, 0, 0],
+		true,
+	);
+	expect(paraphrased.relevantEpisodes.map(({ id }) => id)).toEqual(["2026-03"]);
 });
 
 test("empty and partial model structures fail rather than erasing accumulated memory", () => {

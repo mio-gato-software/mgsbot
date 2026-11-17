@@ -21,6 +21,7 @@ export interface RetrievalInput {
 	factLimit?: number;
 	participantFactLimit?: number;
 	nameWindow?: number;
+	relevantOnly?: boolean;
 }
 
 /** Shared memory retrieval for user turns and proactive messages. No Telegram side effects. */
@@ -29,9 +30,14 @@ export async function retrieveMemoryContext(
 	dependencies = { queryEmbedding: getQueryEmbedding },
 ) {
 	const { chatId, messages } = input;
+	const latest = messages.findLast((message) => message.role === "user");
+	const latestText = latest?.userText || latest?.content;
 	const [{ embedding, text }, names] = await Promise.all([
 		messages.length
-			? dependencies.queryEmbedding(messages)
+			? dependencies.queryEmbedding(
+					messages,
+					input.relevantOnly ? latestText : undefined,
+				)
 			: generateEmbedding(
 					"casual greeting everyday conversation how are you",
 				).then((embedding) => ({ embedding, text: "" })),
@@ -56,7 +62,13 @@ export async function retrieveMemoryContext(
 		relationshipMemory,
 		recentChapters,
 	] = await Promise.all([
-		getRelevantEpisodes(chatId, embedding, text, input.episodeLimit ?? 3),
+		getRelevantEpisodes(
+			chatId,
+			embedding,
+			input.relevantOnly ? (latestText ?? text) : text,
+			input.episodeLimit ?? 3,
+			input.relevantOnly,
+		),
 		getRelevantFacts(embedding, {
 			queryText: text,
 			maxCount: input.factLimit ?? 8,
@@ -72,7 +84,9 @@ export async function retrieveMemoryContext(
 		loadRelationshipMemory(chatId),
 		getRelevantChapters(
 			chatId,
-			messages.findLast((message) => message.role === "user")?.content ?? text,
+			(input.relevantOnly ? latestText : latest?.content) ?? text,
+			2,
+			input.relevantOnly,
 		),
 	]);
 	const byId = new Map(facts.map((fact) => [fact.id, fact]));

@@ -30,6 +30,7 @@ const SIMPLE_ASSISTANT_PROMPT = `You are a helpful assistant. Respond clearly an
 
 export async function assembleSystemPrompt(
 	ctx: PromptContext,
+	renderedFactIds?: Set<string>,
 ): Promise<string> {
 	if (ctx.mode.simpleAssistant) return SIMPLE_ASSISTANT_PROMPT;
 
@@ -38,7 +39,10 @@ export async function assembleSystemPrompt(
 	let memoryChars = 0;
 	for (const section of PIPELINE) {
 		if (suppressed.has(section.id)) continue;
-		let out = await section.render(ctx);
+		const factEnds: Array<{ id: string; end: number }> = [];
+		let out = await section.render(ctx, (id, end) => {
+			if (renderedFactIds) factEnds.push({ id, end });
+		});
 		if (out && section.id.startsWith("memory.")) {
 			out = fitMemorySection(
 				out,
@@ -52,7 +56,11 @@ export async function assembleSystemPrompt(
 			);
 			if (out) memoryChars += out.length + 2;
 		}
-		if (out) parts.push(out);
+		if (out) {
+			parts.push(out);
+			for (const { id, end } of factEnds)
+				if (end <= out.length) renderedFactIds?.add(id);
+		}
 	}
 	await recordMemoryUsage({ operation: "prompt", status: "ok", memoryChars });
 	return parts.join("\n\n");

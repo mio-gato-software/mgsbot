@@ -6,6 +6,7 @@ import type {
 	MemoryChapter,
 	PromotionResult,
 	RelationshipMemory,
+	SemanticFact,
 } from "../types.ts";
 import { TRAIT_NAMES } from "../types.ts";
 import {
@@ -166,16 +167,28 @@ export function validatePromotionResult(
 
 export async function evaluateConversationChunk(
 	recentMessages: string,
-	existingFactSummary?: string,
+	existingFacts: Pick<
+		SemanticFact,
+		"id" | "subject" | "category" | "content"
+	>[] = [],
 ): Promise<PromotionResult> {
+	const factIds = new Map(
+		existingFacts.map((fact, index) => [`F${index + 1}`, fact.id]),
+	);
 	let contextSection = "";
-	if (existingFactSummary) {
+	if (existingFacts.length) {
+		const existingFactSummary = existingFacts
+			.map(
+				(fact, index) =>
+					`- (F${index + 1}) [${fact.subject || fact.category}] ${fact.content}`,
+			)
+			.join("\n");
 		contextSection = `
 FACTS ALREADY SAVED (do NOT duplicate):
 ${existingFactSummary}
 
 	IMPORTANT: Only add NEW information to "facts".
-	When a USER explicitly restates or confirms a saved fact, return its id in "confirmedFacts" with an exact verbatim quote from that user message as "evidence". Never use bot messages, quoted bot assertions, or the saved-fact list itself as confirmation. Do not create a duplicate fact for a confirmation.
+	When a USER explicitly restates or confirms a saved fact, return its listed reference in "confirmedFacts" with an exact verbatim quote from that user message as "evidence". Never use bot messages, quoted bot assertions, or the saved-fact list itself as confirmation. Do not create a duplicate fact for a confirmation.
 	If a new fact clearly replaces or contradicts one of these saved mutable facts, include that old fact's id in the new fact's "supersedes" array.
 	Only supersede mutable facts such as current job, current location, current plans, preferences, or opinions. NEVER supersede permanent facts.
 
@@ -256,7 +269,18 @@ ${recentMessages}`;
 	}
 	try {
 		const parsed = JSON.parse(jsonMatch[0]) as PromotionResult;
-		return validatePromotionResult(parsed, model);
+		const result = validatePromotionResult(parsed, model);
+		result.confirmedFacts = result.confirmedFacts?.flatMap((confirmation) => {
+			const id = factIds.get(confirmation.id);
+			return id === undefined ? [] : [{ ...confirmation, id }];
+		});
+		for (const fact of result.facts) {
+			fact.supersedes = fact.supersedes?.flatMap((reference) => {
+				const id = factIds.get(reference);
+				return id === undefined ? [] : [id];
+			});
+		}
+		return result;
 	} catch {
 		throw new ExtractionParseError(model);
 	}

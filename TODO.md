@@ -9,6 +9,13 @@ Living document. Rules:
 
 ## Pending
 
+### Check deduplication candidate coverage in multi-participant chats
+
+- **Why:** the first participant can fill the extractor's saved-fact list before later participants are considered. Corrections or confirmations later in the same block may lack the relevant prior facts.
+- **What to do:** compare the current selector with one that shares the existing candidate budget across participants and categories. Test paraphrased corrections, confirmations and deduplication across participants, preserving chat scope. Use representative traffic to calibrate recall and compare input usage.
+- **Size:** Small once representative examples are available.
+- Added 2026-11-17.
+
 ### Add observation sources beyond scheduled reports for conditional behaviors
 
 - **Why:** conditional behaviors now evaluate a scheduled research task's actual tool evidence and keep durable event receipts. They currently run after the parent report; they do not observe every conversation or subscribe to live event feeds.

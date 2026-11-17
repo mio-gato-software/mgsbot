@@ -35,5 +35,8 @@ export interface PromptContext {
 
 export interface PromptSection {
 	id: string;
-	render(ctx: PromptContext): Promise<string | null> | string | null;
+	render(
+		ctx: PromptContext,
+		recordFactEnd?: (id: string, end: number) => void,
+	): Promise<string | null> | string | null;
 }

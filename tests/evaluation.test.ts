@@ -48,23 +48,65 @@ const episode: Episode = {
 	embedding: [],
 };
 
-test("extraction includes saved facts and keeps model provenance with fenced JSON", async () => {
+test("extraction shortens saved references and resolves only references in the request", async () => {
+	const jobId = `fact_${"a9".repeat(32)}_0`;
+	const hobbyId = `fact_${"b7".repeat(32)}_1`;
+	const recent = "Ana: I now work as a nurse. I still enjoy pottery.";
+	const replacement = {
+		content: "Ana works as a nurse",
+		category: "person",
+		subject: "Ana",
+		importance: 3,
+	};
 	background.mockResolvedValue({
-		text: `\`\`\`json\n${JSON.stringify(extraction)}\n\`\`\``,
+		text:
+			"```json\n" +
+			JSON.stringify({
+				...extraction,
+				facts: [{ ...replacement, supersedes: ["F1", "F99", jobId] }],
+				confirmedFacts: [
+					{ id: "F2", evidence: "I still enjoy pottery" },
+					{ id: "F99", evidence: "I still enjoy pottery" },
+				],
+			}) +
+			"\n```",
 		model: "cheap-model",
 	});
-	const result = await evaluateConversationChunk(
-		"Ana: Starting a job",
-		"id=old: Ana is a teacher",
-	);
-	expect(result).toMatchObject({
-		...extraction,
-		extraction: { model: "cheap-model", droppedFacts: 0 },
+	const result = await evaluateConversationChunk(recent, [
+		{
+			id: jobId,
+			category: "person",
+			subject: "Ana",
+			content: "Ana is a teacher",
+		},
+		{
+			id: hobbyId,
+			category: "person",
+			subject: "Ana",
+			content: "Ana enjoys pottery",
+		},
+	]);
+	expect(result.facts[0]).toMatchObject({
+		...replacement,
+		supersedes: [jobId],
 	});
-	expect(background.mock.calls[0]?.[1][0]?.content).toContain(
-		"id=old: Ana is a teacher",
-	);
+	expect(result.confirmedFacts).toEqual([
+		{ id: hobbyId, evidence: "I still enjoy pottery" },
+	]);
+	expect(result.extraction).toEqual({ model: "cheap-model", droppedFacts: 0 });
+	expect(background.mock.calls).toHaveLength(1);
 	expect(background.mock.calls[0]?.[2]).toBe("extraction");
+	const prompt = background.mock.calls[0]?.[1][0]?.content ?? "";
+	const shortFacts =
+		"- (F1) [Ana] Ana is a teacher\n- (F2) [Ana] Ana enjoys pottery";
+	const fullFacts = `- (${jobId}) [Ana] Ana is a teacher\n- (${hobbyId}) [Ana] Ana enjoys pottery`;
+	expect(prompt).toContain(shortFacts);
+	expect(prompt).toContain(recent);
+	expect(prompt).not.toContain(jobId);
+	expect(prompt).not.toContain(hobbyId);
+	expect(prompt.length).toBeLessThan(
+		prompt.replace(shortFacts, fullFacts).length - 100,
+	);
 });
 
 for (const raw of [

@@ -1,7 +1,11 @@
 import { memoryPath } from "../runtime-paths.ts";
 import type { MemoryChapter } from "../types.ts";
 import { withChapterLock } from "./locks.ts";
-import { computeTextScore, normalizeName } from "./queries.ts";
+import {
+	computeTextScore,
+	hasRecallEvidence,
+	memoryMonthMatcher,
+} from "./queries.ts";
 import { chaptersSchema } from "./schemas.ts";
 import { readStore, writeStore } from "./storage.ts";
 import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
@@ -82,56 +86,38 @@ export async function upsertChapter(
 	});
 }
 
-const MONTH_NAMES = [
-	["january", "enero"],
-	["february", "febrero"],
-	["march", "marzo"],
-	["april", "abril"],
-	["may", "mayo"],
-	["june", "junio"],
-	["july", "julio"],
-	["august", "agosto"],
-	["september", "septiembre", "setiembre"],
-	["october", "octubre"],
-	["november", "noviembre"],
-	["december", "diciembre"],
-];
-
 /** Search all retained chapters locally; no model or embedding call is needed. */
 export async function getRelevantChapters(
 	chatId: number,
 	queryText: string,
 	maxCount = 2,
+	relevantOnly = false,
 ): Promise<MemoryChapter[]> {
 	const chapters = (await loadChapterStore(chatId)).chapters
 		.slice()
 		.sort((a, b) => b.month.localeCompare(a.month));
-	const query = normalizeName(queryText);
-	const words = new Set(query.split(/[^a-z0-9]+/));
-	const years: string[] = query.match(/\b(?:19|20)\d{2}\b/g) ?? [];
-	const dates: string[] = query.match(/\b\d{4}-\d{2}\b/g) ?? [];
-	const months = MONTH_NAMES.flatMap((names, index) =>
-		names.some((name) => words.has(name))
-			? [String(index + 1).padStart(2, "0")]
-			: [],
-	);
-	return chapters
+	const matchesMonth = memoryMonthMatcher(queryText);
+	const scored = chapters
 		.map((chapter, index) => {
-			const [year = "", month = ""] = chapter.month.split("-");
-			const dateMatch =
-				dates.includes(chapter.month) ||
-				(months.includes(month) && (!years.length || years.includes(year))) ||
-				(!months.length && !dates.length && years.includes(year));
+			const dateMatch = matchesMonth(chapter.month);
 			const relevance = computeTextScore(
-				query,
+				queryText,
 				`${chapter.title} ${chapter.summary}`,
 			);
 			return {
 				chapter,
+				dateMatch,
+				relevance,
 				score: (dateMatch ? 10 : 0) + relevance * 2 + 0.1 / (index + 1),
 			};
 		})
-		.sort((a, b) => b.score - a.score)
+		.sort((a, b) => b.score - a.score);
+	const dated = scored[0]?.dateMatch;
+	return scored
+		.filter(
+			({ dateMatch, relevance }) =>
+				!relevantOnly || (dated ? dateMatch : hasRecallEvidence(0, relevance)),
+		)
 		.slice(0, maxCount)
 		.map(({ chapter }) => chapter);
 }

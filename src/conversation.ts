@@ -274,52 +274,13 @@ export async function processConversation(
 			}
 		}
 
-		// Build prompt and messages
 		let shouldGenImage = false;
-		let promptCtx: Parameters<typeof assembleSystemPrompt>[0];
 		const skipHistoricalContext = options?.skipHistoricalContext === true;
 		if (!isSimpleAssistantMode) {
 			shouldGenImage = shouldGenerateImageNow(buffer);
 			if (isFullAccessActive()) {
 				shouldGenImage = true;
 			}
-		}
-
-		if (isSimpleAssistantMode || skipHistoricalContext) {
-			promptCtx = buildPromptContext({
-				relevantEpisodes: [],
-				relevantFacts: [],
-				mentionType: isGroupChat(ctx) ? mentionType : undefined,
-				groupAutoReply: options?.groupAutoReply === true,
-				groupContinuation: options?.groupContinuation === true,
-				isVoiceMessage,
-				userAttachedImage: !!userImagePath,
-				shouldGenerateImage: shouldGenImage,
-				allowPhotoRequest,
-				ttsAvailable: isTtsAvailable(),
-			});
-		} else {
-			const context = await dependencies.retrieve({
-				chatId,
-				messages: buffer.messages,
-			});
-			if (context.relevantFacts.length) {
-				trackBackground(
-					"retrieval-reinforcement",
-					reinforceRecalledFacts(context.relevantFacts.map((fact) => fact.id)),
-				);
-			}
-			promptCtx = buildPromptContext({
-				...context,
-				mentionType: isGroupChat(ctx) ? mentionType : undefined,
-				groupAutoReply: options.groupAutoReply,
-				groupContinuation: options.groupContinuation,
-				isVoiceMessage,
-				userAttachedImage: !!userImagePath,
-				shouldGenerateImage: shouldGenImage,
-				allowPhotoRequest,
-				ttsAvailable: isTtsAvailable(),
-			});
 		}
 
 		const dimensions =
@@ -402,22 +363,40 @@ export async function processConversation(
 						},
 					)
 				: "";
-		const systemPrompt =
-			(await dependencies.assemble(promptCtx)) + commitmentContext;
-		const messages = buildMessages(buffer, mediaAttachment);
-		if (imageSize || imageContextNote) {
+		let responseText = taskResponse;
+		if (responseText === undefined) {
+			const memory =
+				isSimpleAssistantMode || skipHistoricalContext
+					? { relevantEpisodes: [], relevantFacts: [] }
+					: await dependencies.retrieve({
+							chatId,
+							messages: buffer.messages,
+							relevantOnly: true,
+						});
+			const promptCtx = buildPromptContext({
+				...memory,
+				mentionType: isGroupChat(ctx) ? mentionType : undefined,
+				groupAutoReply: options.groupAutoReply,
+				groupContinuation: options.groupContinuation,
+				isVoiceMessage,
+				userAttachedImage: !!userImagePath,
+				shouldGenerateImage: shouldGenImage,
+				allowPhotoRequest,
+				ttsAvailable: isTtsAvailable(),
+			});
+			const renderedFactIds = new Set<string>();
+			const systemPrompt =
+				(await dependencies.assemble(promptCtx, renderedFactIds)) +
+				commitmentContext;
+			const messages = buildMessages(buffer, mediaAttachment);
 			const latest = messages.findLast((message) => message.role === "user");
 			if (latest) {
 				if (imageContextNote) latest.content += `\n\n${imageContextNote}`;
 				if (imageSize)
 					latest.content += `\n\n[Reference image dimensions: ${imageSize}]`;
 			}
-		}
 
-		// Generate response
-		const responseText =
-			taskResponse ??
-			(await generateWithWebSearch({
+			responseText = await generateWithWebSearch({
 				systemPrompt,
 				messages,
 				chatId,
@@ -429,7 +408,13 @@ export async function processConversation(
 					await ctx.reply(notice);
 					trackBackground("chat-log", logBotMessage(notice));
 				},
-			}));
+			});
+			if (renderedFactIds.size)
+				trackBackground(
+					"retrieval-reinforcement",
+					reinforceRecalledFacts([...renderedFactIds]),
+				);
+		}
 		// Refresh ambient news only during active use, without delaying this reply or
 		// sending a bulletin. The shared service limits this to one attempt per day.
 		if (

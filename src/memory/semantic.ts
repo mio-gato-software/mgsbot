@@ -5,7 +5,11 @@ import { log } from "../logger.ts";
 import { memoryPath } from "../runtime-paths.ts";
 import type { SemanticFact } from "../types.ts";
 import { withSemanticLock } from "./locks.ts";
-import { computeTextScore, normalizeName } from "./queries.ts";
+import {
+	computeTextScore,
+	hasRecallEvidence,
+	normalizeName,
+} from "./queries.ts";
 import { factsSchema } from "./schemas.ts";
 import { readStore, writeStore } from "./storage.ts";
 
@@ -379,7 +383,7 @@ export async function getRelevantFacts(
 		return {
 			fact,
 			score,
-			relevant: similarity >= 0.45 || keywordScore >= 0.15,
+			relevant: hasRecallEvidence(similarity, keywordScore),
 		};
 	});
 

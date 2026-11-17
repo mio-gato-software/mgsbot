@@ -7,7 +7,12 @@ import {
 	processConversation,
 } from "../src/conversation.ts";
 import { RECENT_IMAGE_MAX_AGE_MS } from "../src/image-context.ts";
+import {
+	loadSemanticStore,
+	saveSemanticStore,
+} from "../src/memory/semantic.ts";
 import { loadSensory, saveSensory } from "../src/memory/sensory.ts";
+import type { SemanticFact } from "../src/types.ts";
 import { makeMockContext } from "./helpers/telegram-mock.ts";
 
 let chatId = 810001;
@@ -103,6 +108,96 @@ test("historical-context bypass skips retrieval", async () => {
 			services,
 		),
 	).toBe(true);
+});
+
+test("a direct agenda reply skips conversational retrieval, assembly and generation", async () => {
+	const { ctx, spies } = makeMockContext({ chatId: ++chatId });
+	const services = dependencies();
+	services.commitments = async (_request, _defaults, execution) => {
+		execution?.reply("Recordatorio guardado");
+		return "";
+	};
+	services.retrieve = async () => {
+		throw new Error("unexpected retrieval");
+	};
+	services.assemble = async () => {
+		throw new Error("unexpected prompt");
+	};
+	services.generate = async () => {
+		throw new Error("unexpected generation");
+	};
+
+	expect(
+		await processConversation(ctx, "Avísame mañana", "Ana", {}, services),
+	).toBe(true);
+	expect(spies.replies.map((reply) => reply.text)).toEqual([
+		"Recordatorio guardado",
+	]);
+});
+
+test("generation reinforces only the complete facts that survived filtering and budgeting", async () => {
+	const { ctx, spies } = makeMockContext({ chatId: ++chatId });
+	const services = dependencies();
+	const retrieve = services.retrieve;
+	const yesterday = Date.now() - 86_400_000;
+	const visible: SemanticFact = {
+		id: "shown",
+		category: "person",
+		subject: "Ana",
+		content: "Ana hace cerámica",
+		importance: 3,
+		confidence: 0.35,
+		embedding: [],
+		createdAt: yesterday,
+		lastConfirmed: yesterday,
+	};
+	const facts = [
+		visible,
+		{
+			...visible,
+			id: "other-person",
+			subject: "Bea",
+			content: "Bea estudia astronomía",
+		},
+		{ ...visible, id: "too-long", content: "Detalle ".repeat(240) },
+	];
+	const previous = await loadSemanticStore();
+	await saveSemanticStore(facts);
+	try {
+		services.retrieve = async (input) => {
+			expect(input.relevantOnly).toBe(true);
+			return {
+				...(await retrieve(input)),
+				relevantFacts: facts,
+				activeNames: ["Ana"],
+			};
+		};
+		services.assemble = defaultConversationDependencies.assemble;
+		services.generate = async (system) => {
+			expect(system).toContain(visible.content);
+			expect(system).not.toContain("Bea estudia");
+			expect(system).not.toContain("Detalle");
+			return "Me habías contado que haces cerámica.";
+		};
+		await processConversation(
+			ctx,
+			"¿Cuál era mi afición?",
+			"Ana",
+			{},
+			services,
+		);
+		await backgroundTasks.drain();
+		expect(spies.replies.map(({ text }) => text)).toEqual([
+			"Me habías contado que haces cerámica.",
+		]);
+		const stored = await loadSemanticStore();
+		expect(
+			stored.filter((fact) => fact.lastRecalledAt).map((fact) => fact.id),
+		).toEqual(["shown"]);
+		expect(stored[0]?.lastConfirmed).toBe(yesterday);
+	} finally {
+		await saveSemanticStore(previous);
+	}
 });
 
 test("a searched reply sends a notice first and keeps raw references out of sensory memory", async () => {

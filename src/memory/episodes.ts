@@ -1,8 +1,13 @@
+import { botNow } from "../bot-time.ts";
 import { cosineSimilarity } from "../embeddings.ts";
 import { memoryPath } from "../runtime-paths.ts";
 import type { Episode, WorkingMemory } from "../types.ts";
 import { withEpisodeLock } from "./locks.ts";
-import { computeTextScore } from "./queries.ts";
+import {
+	computeTextScore,
+	hasRecallEvidence,
+	memoryMonthMatcher,
+} from "./queries.ts";
 import { episodesSchema } from "./schemas.ts";
 import { readStore, writeStore } from "./storage.ts";
 import { CURRENT_SCHEMA_VERSION } from "./versioning.ts";
@@ -62,11 +67,15 @@ export async function getRelevantEpisodes(
 	queryEmbedding: number[],
 	queryText?: string,
 	maxCount = 5,
+	relevantOnly = false,
 ): Promise<Episode[]> {
 	const wm = await loadWorkingMemory(chatId);
 	if (wm.episodes.length === 0) return [];
 
 	const now = Date.now();
+	const matchesMonth = memoryMonthMatcher(
+		relevantOnly ? (queryText ?? "") : "",
+	);
 
 	const scored = wm.episodes.map((episode) => {
 		const similarity =
@@ -86,9 +95,23 @@ export async function getRelevantEpisodes(
 			0.15 * keywordScore +
 			0.25 * importanceScore +
 			0.2 * recencyScore;
-		return { episode, score };
+		return {
+			episode,
+			score,
+			dateMatch:
+				relevantOnly &&
+				matchesMonth(botNow(episode.timestamp).format("YYYY-MM")),
+			relevant: hasRecallEvidence(similarity, keywordScore),
+		};
 	});
 
 	scored.sort((a, b) => b.score - a.score);
-	return scored.slice(0, maxCount).map((s) => s.episode);
+	const dated = scored.filter(({ dateMatch }) => dateMatch);
+	return (
+		dated.length
+			? dated
+			: scored.filter(({ relevant }) => !relevantOnly || relevant)
+	)
+		.slice(0, maxCount)
+		.map(({ episode }) => episode);
 }

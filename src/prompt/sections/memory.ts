@@ -136,7 +136,7 @@ export const memoryPermanentOther: PromptSection = {
 
 export const memoryPersons: PromptSection = {
 	id: "memory.persons",
-	render(ctx: PromptContext) {
+	render(ctx: PromptContext, recordFactEnd) {
 		const personFacts = ctx.relevantFacts.filter(
 			(f) => f.category === "person",
 		);
@@ -163,6 +163,7 @@ export const memoryPersons: PromptSection = {
 			section += `\n### ${displayName}`;
 			for (const fact of facts) {
 				section += `\n  - ${fact.content}${formatFactAge(fact)}`;
+				recordFactEnd?.(fact.id, section.length);
 			}
 		}
 		return section;
@@ -171,14 +172,17 @@ export const memoryPersons: PromptSection = {
 
 export const memoryGeneralFacts: PromptSection = {
 	id: "memory.generalFacts",
-	render(ctx: PromptContext) {
+	render(ctx: PromptContext, recordFactEnd) {
 		const generalFacts = ctx.relevantFacts.filter(
 			(f) => f.category !== "person",
 		);
 		if (generalFacts.length === 0) return null;
-		const text = generalFacts
-			.map((f) => `- ${f.content}${formatFactAge(f)}`)
-			.join("\n");
-		return `## General facts\nEach fact is annotated with when you heard it — older items may be stale. Only mention these facts if they're relevant to the current conversation topic.\n${text}`;
+		let section =
+			"## General facts\nEach fact is annotated with when you heard it — older items may be stale. Only mention these facts if they're relevant to the current conversation topic.";
+		for (const fact of generalFacts) {
+			section += `\n- ${fact.content}${formatFactAge(fact)}`;
+			recordFactEnd?.(fact.id, section.length);
+		}
+		return section;
 	},
 };
