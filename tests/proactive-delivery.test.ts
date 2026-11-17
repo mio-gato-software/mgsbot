@@ -259,3 +259,51 @@ for (const kind of ["follow-up", "check-in"] as const) {
 		});
 	}
 }
+
+test("scheduled follow-ups skip a former owner and still deliver to the current owner", async () => {
+	await saveFollowUps([
+		followUp({ id: "former", chatId: chatId + 1 }),
+		followUp(),
+	]);
+	const { api, calls } = apiWithFailure();
+	const recipients: number[] = [];
+	await checkAndSendFollowUps(
+		api,
+		() => false,
+		() => false,
+		{
+			...services,
+			generate: async (entry) => {
+				recipients.push(entry.chatId);
+				return services.generate();
+			},
+		},
+	);
+	expect(recipients).toEqual([chatId]);
+	expect(calls).toHaveLength(1);
+	expect(
+		(await loadFollowUps()).find((entry) => entry.id === "former")?.attempts,
+	).toBe(0);
+});
+
+test("revoking the recipient while a follow-up is being generated prevents typing and sending", async () => {
+	await saveFollowUps([followUp()]);
+	const { api, calls } = apiWithFailure();
+	let pulses = 0;
+	await checkAndSendFollowUps(
+		api,
+		() => false,
+		() => false,
+		{
+			generate: async () => {
+				delete process.env.OWNER_USER_ID;
+				return services.generate();
+			},
+			pulse: async () => {
+				pulses++;
+			},
+		},
+	);
+	expect(pulses).toBe(0);
+	expect(calls).toHaveLength(0);
+});

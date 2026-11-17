@@ -55,8 +55,11 @@ function validateInputs(data: WizardData): ValidationResult {
 	return { valid: Object.keys(errors).length === 0, errors };
 }
 
-function writeEnvFile(data: WizardData): void {
-	const existing = parseEnvFile();
+export function buildWizardEnv(
+	data: WizardData,
+	current: Record<string, string>,
+): string {
+	const existing = { ...current };
 
 	// Wizard-managed keys
 	existing.BOT_TOKEN = data.botToken.trim();
@@ -68,9 +71,8 @@ function writeEnvFile(data: WizardData): void {
 	}
 	existing.OWNER_USER_ID = data.ownerUserId.trim();
 
-	if (data.allowedGroupId && data.allowedGroupId.trim() !== "") {
-		existing.ALLOWED_GROUP_ID = data.allowedGroupId.trim();
-	}
+	// An explicit blank also overrides a group inherited from the environment.
+	existing.ALLOWED_GROUP_ID = data.allowedGroupId?.trim() ?? "";
 
 	if (data.geminiModel.trim()) {
 		existing.GEMINI_MODEL = data.geminiModel.trim();
@@ -96,7 +98,11 @@ function writeEnvFile(data: WizardData): void {
 		lines.push(`${key}=${value}`);
 	}
 
-	atomicWriteFileSync("./.env", `${lines.join("\n")}\n`, 0o600);
+	return `${lines.join("\n")}\n`;
+}
+
+function writeEnvFile(data: WizardData): void {
+	atomicWriteFileSync("./.env", buildWizardEnv(data, parseEnvFile()), 0o600);
 
 	// Save language to bot config
 	const currentConfig = loadConfig();
