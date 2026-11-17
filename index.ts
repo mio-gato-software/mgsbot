@@ -9,7 +9,6 @@ import {
 	validateProviderConfiguration,
 } from "./src/provider-options.ts";
 import { loadEnvIntoProcess, parseEnvFile } from "./src/utils.ts";
-import { isBrowserbaseEnabled } from "./src/web-content.ts";
 
 // --- Load .env manually (compiled binaries may not auto-load it) ---
 
@@ -133,15 +132,14 @@ if (needsSetup) {
 
 // --- Bot imports (after env vars are confirmed present) ---
 
-const { rename, unlink } = await import("node:fs/promises");
+const { isBrowserbaseEnabled } = await import("./src/web-content.ts");
 const { Bot } = await import("grammy");
 const { cancelActiveOperations } = await import("./src/operation-deadline.ts");
 const { registerUpdateProcessing, startBotRunner } = await import(
 	"./src/update-processing.ts"
 );
-const { HEARTBEAT_FILE, RuntimeHealth } = await import(
-	"./src/runtime-health.ts"
-);
+const { removeRuntimeHeartbeat, RuntimeHealth, writeRuntimeHeartbeat } =
+	await import("./src/runtime-health.ts");
 const { flushEmbeddingCache, initEmbeddingCache } = await import(
 	"./src/embeddings.ts"
 );
@@ -246,9 +244,7 @@ backgroundTasks.every(
 	"heartbeat",
 	30_000,
 	async () => {
-		const staging = `${HEARTBEAT_FILE}.tmp`;
-		await Bun.write(staging, JSON.stringify(health.snapshot(runner.size())));
-		await rename(staging, HEARTBEAT_FILE);
+		await writeRuntimeHeartbeat(health.snapshot(runner.size()));
 	},
 	true,
 );
@@ -322,7 +318,7 @@ async function shutdown(signal: string): Promise<void> {
 		await runner.stop();
 		await backgroundTasks.close();
 		await flushEmbeddingCache();
-		await unlink(HEARTBEAT_FILE).catch(() => {});
+		await removeRuntimeHeartbeat();
 		log.info("[shutdown] Embedding cache flushed. Goodbye.");
 		clearTimeout(watchdog);
 		process.exit(0);

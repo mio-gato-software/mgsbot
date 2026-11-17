@@ -38,4 +38,4 @@ Pushing source to `main` does not publish a release. The tag-triggered release w
 
 An instance-local `update.sh`, when provided by the operator, may automate downloading and replacing the executable. Inspect its repository, asset selection and rollback behavior before use. Such a script is not distributed as a repository-managed updater here and is not a substitute for a verified stopped-state backup. Publishing a release does not itself restart or replace a running bot.
 
-The shared `/tmp/mgsbot-heartbeat` contains no instance identity and is insufficient as the sole health signal when several bots run on one host. Another instance can overwrite or remove it. Correlate polling observations with the intended service and executable, and see the pending isolation work in [TODO.md](../TODO.md).
+Read `runtime-health.json` from the instance’s `MEMORY_DIR` (default `./memory`). Older releases write to a shared path under `/tmp`. Update any external monitor when upgrading, and correlate polling with the intended service and executable.

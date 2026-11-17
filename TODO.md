@@ -30,12 +30,6 @@ Living document. Rules:
 - **Size:** Small.
 - Added 2026-10-23.
 
-### Isolate runtime health files for multiple bot instances on one host
-
-- **Why:** multiple bot instances on one host share `/tmp/mgsbot-heartbeat`. An older instance can overwrite the JSON health snapshot with a timestamp; shutdown can also remove another instance's heartbeat. Health verification must correlate the intended service, executable and polling progress rather than rely on the shared file alone.
-- **What to do:** namespace health files by instance/runtime directory (or provide a configurable path), update the Docker health check consistently, and test two instances writing/stopping independently. Preserve existing service configuration during rollout.
-- **Size:** Small.
-
 ### Evaluate adaptive personality against actual conversation quality
 
 - **Why:** earlier adaptive updates could saturate traits and learn from interactions between other people. The implementation now requires direct, verbatim user evidence, uses bounded smoothing with 30-day half-life toward neutral, and keeps configured identity/context above adaptive tendencies. Unit tests establish these mechanics, not whether responses feel noticeably better. Keep any evaluation conversations and deployment-specific results private.

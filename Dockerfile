@@ -25,6 +25,6 @@ USER bun
 
 # Verify heartbeat freshness, successful polling, and bounded active turns.
 HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=1m \
-    CMD bun -e "import { isRuntimeHealthy, HEARTBEAT_FILE } from './src/runtime-health.ts'; process.exit(isRuntimeHealthy(JSON.parse(await Bun.file(HEARTBEAT_FILE).text())) ? 0 : 1)"
+    CMD bun -e "import { loadEnvIntoProcess } from './src/utils.ts'; loadEnvIntoProcess(); const { isRuntimeHealthy, HEARTBEAT_FILE } = await import('./src/runtime-health.ts'); process.exit(isRuntimeHealthy(JSON.parse(await Bun.file(HEARTBEAT_FILE).text())) ? 0 : 1)"
 
 CMD ["bun", "run", "index.ts"]

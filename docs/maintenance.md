@@ -27,7 +27,7 @@ Do not delete a prepared entry to retry its messages as a new chunk: that discar
 
 ## Backups and restoration
 
-Startup awaits a verified daily snapshot before embedding or personality migrations and before confidence decay. Subsequent backup checks run hourly. Snapshots live in `backups/YYYY-MM-DD/`; `.complete.json` records content hashes. Temporary files and the regenerable embedding cache are excluded. Snapshot copying coordinates with asynchronous persistence in the bot so a journal and its stores are captured at one persistence boundary.
+Startup awaits a verified daily snapshot before embedding or personality migrations and before confidence decay. Subsequent backup checks run hourly. Snapshots live in `backups/YYYY-MM-DD/`; `.complete.json` records content hashes. Temporary files, the health snapshot and the regenerable embedding cache are excluded. Snapshot copying coordinates with asynchronous persistence in the bot so a journal and its stores are captured at one persistence boundary.
 
 Only verified staging copies are renamed into the dated location. Interrupted staging directories are not completed backups. Legacy or incomplete dated directories are preserved under a hidden `.incomplete` name when replaced. Seven dated snapshots are retained; preserved incomplete directories are for manual inspection and cleanup.
 
@@ -39,9 +39,9 @@ For actual recovery, stop the bot, preserve the damaged data root, and restore a
 
 Updates enter a queue capped at 100 accepted turns, with at most four chats executing concurrently and FIFO ordering within each chat. Waiting turns do not occupy execution slots. When the queue is full, polling applies backpressure. Chat generation has a 60-second total deadline, embeddings 20 seconds, background generation 120 seconds, and each update six minutes (including longer media operations). OpenAI and Gemini SDK requests default to 30 seconds with SDK retries disabled; image generation retains a five-minute request allowance. Nested application retries share the outer retry budget, and network requests inherit operation cancellation. Timeouts produce a brief retry notice; expired turns cannot later send their reply.
 
-The JSON heartbeat at `/tmp/mgsbot-heartbeat` records heartbeat freshness, successful polling, completed turns, and the oldest active turn. The Docker health check rejects stalled polling even while the event loop is alive, permits polling to pause under queue backpressure, and rejects overdue active turns.
+The `runtime-health.json` heartbeat under the resolved `MEMORY_DIR` records heartbeat freshness, successful polling, completed turns, and the oldest active turn. The Docker health check rejects stalled polling even while the event loop is alive, permits polling to pause under queue backpressure, and rejects overdue active turns.
 
-That path is currently shared by all instances on a host and contains no instance identity. An older bot can overwrite it with a legacy timestamp; another instance can also replace or remove it. It is therefore insufficient as a standalone health signal for a multi-instance deployment. Correlate a fresh polling snapshot with the expected service PID, `/proc/<PID>/exe` hash, restart count and journal. Instance-specific health paths remain pending in [TODO.md](../TODO.md); see the generic [deployment checks](deployment.md). Keep actual service identifiers, hashes, hostnames and verification logs in private operator records.
+Use a separate `MEMORY_DIR` for each instance. External monitors should read `runtime-health.json` from the intended instance’s data directory and correlate polling with the service PID, executable hash, restart count and journal. Keep actual service identifiers and verification logs in private operator records.
 
 The direct public-page reader resolves and validates every destination before connecting to the checked numeric address. HTTP Host and TLS server name preserve the original hostname; redirects and Browserbase fallback use the same connection policy.
 
