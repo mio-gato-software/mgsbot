@@ -65,6 +65,7 @@ export function nextOccurrence(
 			: undefined;
 	}
 	const localDate = dayjs.utc(after).tz(timezone).format("YYYY-MM-DD");
+	// biome-ignore lint/complexity/useMathMinMax: ISO dates are ordered as strings.
 	const first = localDate > schedule.startDate ? localDate : schedule.startDate;
 	for (let offset = 0; offset <= 32; offset++) {
 		const date = dayjs.utc(first).add(offset, "day");
