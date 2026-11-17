@@ -6,8 +6,6 @@
 import {
 	buildPassiveVoiceContent,
 	buildUntranscribedVoiceContent,
-	detectMentionType,
-	detectTranscribedMentionType,
 	securityMiddleware,
 	shouldTranscribePassiveGroupVoice,
 } from "../../src/handlers.ts";
@@ -31,25 +29,6 @@ const gating = {
 	unknownDuration: shouldTranscribePassiveGroupVoice(undefined),
 	untranscribedMsg: buildUntranscribedVoiceContent("Juan", 200),
 	passiveLong: buildPassiveVoiceContent("Juan", "x".repeat(100)),
-};
-
-// --- Name mention detection against the configured bot name ---
-const nameCtx = (text: string) =>
-	makeMockContext({ chatType: "group", me: BOT, text }).ctx;
-const mention = {
-	plainName: detectMentionType(nameCtx("Niña ven acá"), BOT.id),
-	strippedDiacritics: detectMentionType(nameCtx("oye nina que tal"), BOT.id),
-	noName: detectMentionType(nameCtx("hola a todos"), BOT.id),
-	transcribedName: detectTranscribedMentionType(
-		nameCtx("dile a nina que venga"),
-		BOT.id,
-		"dile a nina que venga",
-	),
-	transcribedNone: detectTranscribedMentionType(
-		nameCtx("hola a todos"),
-		BOT.id,
-		"hola a todos",
-	),
 };
 
 // --- Security middleware (ALLOWED_GROUP_ID=-100500, OWNER_USER_ID=777) ---
@@ -98,7 +77,7 @@ const security = {
 	strangerDmReplies: strangerDm.spies.replies,
 };
 
-console.log(JSON.stringify({ gating, mention, security }));
+console.log(JSON.stringify({ gating, security }));
 // Imported modules start interval timers (e.g. embedding cache persistence),
 // which would keep the probe process alive forever.
 process.exit(0);

@@ -19,10 +19,11 @@ import {
 	type MediaAttachment,
 	supportsInlineImages,
 } from "../providers/types.ts";
+import type { MentionType } from "../types.ts";
 import {
-	detectMentionType,
 	hasEditIntent,
 	processConversationAndTrackGroupContinuation,
+	resolveMediaMention,
 	sanitizeBracketText,
 } from "./routing.ts";
 
@@ -30,12 +31,14 @@ export async function handlePhoto(
 	ctx: Context,
 	botToken: string,
 	requestText = ctx.message?.caption,
+	knownMentionType?: MentionType,
 ): Promise<void> {
 	if (isSimpleAssistantMode) return;
-	const mentionType = detectMentionType(ctx, ctx.me.id);
-	const userName = getUserDisplayName(ctx);
 	const image = getMessageImage(ctx);
 	if (!image) return;
+	const userName = getUserDisplayName(ctx);
+	const mentionType =
+		knownMentionType ?? (await resolveMediaMention(ctx, requestText, userName));
 	const source =
 		image.messageId === ctx.message?.message_id
 			? ctx.message

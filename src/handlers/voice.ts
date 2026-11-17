@@ -1,10 +1,9 @@
 // Voice and audio message handlers, including the group router for
 // transcribed voice notes.
 import type { Bot, Context } from "grammy";
-import { classifyGroupMessageIntent } from "../ai/classifiers.ts";
 import { isBotOff, isSleepingHour } from "../bot-state.ts";
 import { withChatAction } from "../chat-actions.ts";
-import { getBotName, loadConfig } from "../config.ts";
+import { loadConfig } from "../config.ts";
 import {
 	getUserDisplayName,
 	isGroupChat,
@@ -13,7 +12,6 @@ import {
 import { claimGroupContinuationSlot } from "../group-state.ts";
 import { log } from "../logger.ts";
 import { downloadAndTranscribe } from "../media-handlers.ts";
-import { loadSensory } from "../memory/index.ts";
 import { isTimeoutError } from "../operation-deadline.ts";
 import { audioFailureReply } from "../telegram-delivery.ts";
 import type { MentionType } from "../types.ts";
@@ -23,16 +21,12 @@ import {
 	buildReplyAwareTextContent,
 	buildUntranscribedVoiceContent,
 	buildVoiceContent,
-	detectMentionType,
-	detectTranscribedMentionType,
-	getLastBotMessageBeforeLatest,
+	classifyGroupTurn,
 	getTelegramReplyContext,
-	isIgnorableGroupMessage,
 	isUsableTranscription,
 	processConversationAndTrackGroupContinuation,
-	routeGroupNameMention,
+	resolveMediaMention,
 	shouldTranscribePassiveGroupVoice,
-	toClassifierReplyContext,
 	truncatePassiveVoiceTranscript,
 } from "./routing.ts";
 
@@ -74,19 +68,8 @@ async function routeGroupTranscribedVoice(
 		return;
 	}
 
-	const transcribedMentionType = detectTranscribedMentionType(
-		ctx,
-		ctx.me.id,
-		transcription,
-	);
-	if (transcribedMentionType === "name") {
-		const route = await routeGroupNameMention(ctx, transcription, userName, {
-			conversationContent: content,
-			isVoiceMessage: true,
-			directUserText: transcription,
-		});
-		if (route === "handled") return;
-
+	const decision = await classifyGroupTurn(ctx, transcription, userName);
+	if (decision?.addressing === "direct" && decision.action === "respond") {
 		await processConversationAndTrackGroupContinuation(
 			ctx,
 			buildReplyAwareTextContent(content, replyContext),
@@ -113,23 +96,9 @@ async function routeGroupTranscribedVoice(
 		truncatePassiveVoiceTranscript(transcription),
 	);
 	if (replyContext && !replyContext.isBot) return;
-	if (isIgnorableGroupMessage(transcription)) return;
-
+	if (decision?.addressing !== "continuation" || decision.action !== "respond")
+		return;
 	if (!claimGroupContinuationSlot(chatId)) return;
-
-	const buffer = await loadSensory(chatId);
-	const lastBotMessage = getLastBotMessageBeforeLatest(buffer.messages);
-	const decision = await classifyGroupMessageIntent({
-		mode: "continuation",
-		botName: getBotName(),
-		currentSpeaker: userName,
-		currentMessage: transcription,
-		recentMessages: buffer.messages,
-		lastBotMessage,
-		replyContext: toClassifierReplyContext(replyContext),
-	});
-
-	if (decision !== "respond") return;
 
 	await processConversationAndTrackGroupContinuation(
 		ctx,
@@ -151,8 +120,12 @@ async function routeGroupTranscribedVoice(
 export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 	// Voice messages
 	bot.on("message:voice", async (ctx) => {
-		const mentionType = detectMentionType(ctx, ctx.me.id);
 		const userName = getUserDisplayName(ctx);
+		const mentionType = await resolveMediaMention(
+			ctx,
+			ctx.message.caption,
+			userName,
+		);
 		const isGroup = isGroupChat(ctx);
 		const duration = ctx.message.voice.duration;
 		if (
@@ -223,8 +196,12 @@ export function registerVoiceHandlers(bot: Bot, botToken: string): void {
 
 	// Audio files
 	bot.on("message:audio", async (ctx) => {
-		const mentionType = detectMentionType(ctx, ctx.me.id);
 		const userName = getUserDisplayName(ctx);
+		const mentionType = await resolveMediaMention(
+			ctx,
+			ctx.message.caption,
+			userName,
+		);
 		if (isGroupChat(ctx) && mentionType === "none") {
 			await observeConversationTurn(
 				ctx,

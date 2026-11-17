@@ -39,7 +39,7 @@ Decide: is the user asking to EDIT, MODIFY, TRANSFORM, or GENERATE A NEW VERSION
 Answer with a single word: "yes" or "no".`;
 
 export interface GroupMessageIntentInput {
-	mode: "name" | "spontaneous" | "continuation";
+	mode: "message" | "name" | "spontaneous" | "continuation";
 	botName: string;
 	currentSpeaker: string;
 	currentMessage: string;
@@ -140,6 +140,7 @@ Action rules:
 - This must work across languages. Do not rely on language-specific keywords.
 
 Mode-specific guidance:
+- message: Interpret any group message with the supplied context. A direct request can address the bot without its name. Choose respond for a direct request or clear continuation, or when an ambient invitation makes participation natural.
 - name: The latest message contains the bot's name. Classify whether it is direct, about_bot, continuation, or ambient.
 - spontaneous: The bot has not been directly addressed. Allow a reply only if the latest message creates a clear opening where a normal group member could add value.
 - continuation: The bot recently spoke. Allow a reply only when the latest message likely engages with the bot's last message, answers a question the bot asked, shares a reciprocal status/activity after the bot shared one, or asks the bot to continue. If it best fits the immediately previous non-bot message, or people are talking among themselves, choose silence.
@@ -280,8 +281,8 @@ export async function classifyEditIntent(
 			.trim()
 			.toLowerCase();
 
-		if (text.startsWith("yes")) return true;
-		if (text.startsWith("no")) return false;
+		if (text === "yes") return true;
+		if (text === "no") return false;
 		return null;
 	} catch (error) {
 		log.error("[classifyEditIntent] Error:", error);

@@ -45,7 +45,7 @@ DM the bot to configure its name, language, and personality, or use the [profile
 
 [`.env.sample`](.env.sample) lists credentials, model variables, defaults, and optional settings. Restart after editing `.env`.
 
-`OWNER_USER_ID` permits the owner's DMs; `ALLOWED_GROUP_ID` optionally permits one group. The group router supports direct mentions, replies, natural continuations, and spontaneous responses. Unaddressed messages can contribute to memory; `ENABLE_GROUP_VOICE_CONTEXT=false` disables passive voice-note transcription.
+`OWNER_USER_ID` permits the owner's DMs; `ALLOWED_GROUP_ID` optionally permits one group. The group router uses Telegram metadata for explicit mentions and replies. A model interprets other messages, captions and transcriptions for direct requests, continuations and spontaneous responses. Unaddressed messages can contribute to memory; `ENABLE_GROUP_VOICE_CONTEXT=false` disables passive voice-note transcription.
 
 `AI_PLATFORM` supplies defaults: Gemini when a Google key exists, otherwise OpenAI. Services are independently configurable:
 
