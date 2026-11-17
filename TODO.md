@@ -44,12 +44,12 @@ Living document. Rules:
 - **Size:** Small.
 - Added 2026-07-24.
 
-### Verify production backups outside the runtime volume
+### Confirm recurring storage of external production snapshots
 
-- **Why:** repository backups now verify every snapshot and publish it before startup migrations, but copies inside `memory/backups/` share the runtime disk's failure domain. Repository changes cannot establish whether an external backup already exists on the running server.
-- **What to do:** inspect the deployment's existing backup configuration and retention, then restore an external snapshot into a disposable directory and validate its stores. The recovery procedure is in `docs/maintenance.md`. Do not replace live memory during the drill.
-- **Size:** Small if an external backup already exists; otherwise assess the deployment first.
-- Added 2026-09-04.
+- **Why:** an external recovery drill verified snapshot contents. Continued protection depends on copying newly verified snapshots outside the runtime volume on a recurring basis.
+- **What to do:** confirm the off-volume destination, schedule, retention and monitoring for every production instance. Run `bun run backup:verify` against a fresh external copy and keep instance details in private operational records.
+- **Size:** Small once the external destination is known.
+- Added 2026-11-17.
 
 ## Time-sensitive
 

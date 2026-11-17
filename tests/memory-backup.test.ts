@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { verifyRestoredMemoryBackup } from "../scripts/verify-memory-backup.ts";
 import { factsSchema } from "../src/memory/schemas.ts";
 import { readStore } from "../src/memory/storage.ts";
 import { runMemoryBackup, verifyMemoryBackup } from "../src/memory-backup.ts";
@@ -109,4 +110,18 @@ test("snapshot copying holds off asynchronous state writes until the copy comple
 		await readFile(join(memoryDir, "backups/2040-02-01/semantic.json"), "utf8"),
 	).toBe("[]");
 	expect(await readFile(join(memoryDir, "semantic.json"), "utf8")).toBe("[1]");
+});
+
+test("a restored snapshot requires intact contents and valid memory schemas", async () => {
+	const memoryDir = await fixture();
+	await runMemoryBackup({ memoryDir, date: "2040-03-01" });
+	expect(
+		await verifyRestoredMemoryBackup(join(memoryDir, "backups/2040-03-01")),
+	).toBe(1);
+
+	await writeFile(join(memoryDir, "semantic.json"), '{"invalid":true}');
+	await runMemoryBackup({ memoryDir, date: "2040-03-02" });
+	await expect(
+		verifyRestoredMemoryBackup(join(memoryDir, "backups/2040-03-02")),
+	).rejects.toThrow("Invalid memory store in semantic.json");
 });
