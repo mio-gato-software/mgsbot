@@ -10,6 +10,7 @@ import {
 	requestPinnedWebPage,
 	WEB_REQUEST_HEADERS,
 } from "./pinned-web-request.ts";
+import { isPublicLookupUrl } from "./web-privacy.ts";
 import { reserveWebQuota } from "./web-quota.ts";
 
 const MAX_REDIRECTS = 5;
@@ -164,6 +165,8 @@ export async function assertPublicUrl(
 	if (url.username || url.password) {
 		throw new Error("URL credentials are not allowed");
 	}
+	if (!isPublicLookupUrl(url.href))
+		throw new Error("URL contains potentially private parameters");
 	const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
 	if (
 		!hostname ||

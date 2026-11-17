@@ -205,11 +205,15 @@ test("page snapshots and read budget survive restart; failed visits consume budg
 	};
 	try {
 		const service = new WorldContextService(options);
-		expect(await service.read(1, "https://example.com/")).toContain(
-			"DOM scores",
-		);
 		expect(
-			await new WorldContextService(options).read(1, "https://example.com/"),
+			await service.read(1, "https://example.com/", "shared-link"),
+		).toContain("DOM scores");
+		expect(
+			await new WorldContextService(options).read(
+				1,
+				"https://example.com/",
+				"shared-link",
+			),
 		).toContain("reused");
 		expect(await service.read(1, "https://example.com/failed")).toContain(
 			"Could not read",
@@ -222,4 +226,43 @@ test("page snapshots and read budget survive restart; failed visits consume budg
 		if (old === undefined) delete process.env.WEB_READ_DAILY_LIMIT;
 		else process.env.WEB_READ_DAILY_LIMIT = old;
 	}
+});
+
+test("sensitive search terms and shared URLs never reach the configured readers", async () => {
+	const f = await fixture();
+	let reads = 0;
+	const service = new WorldContextService({
+		...f.options,
+		readEnabled: () => true,
+		read: async (url) => {
+			reads++;
+			return {
+				url,
+				content: "Public text",
+				method: "static page text",
+				checkedAt: new Date().toISOString(),
+				limitation: "Static page",
+			};
+		},
+	});
+	expect(await service.search(1, { query: "person@example.com" })).toContain(
+		"blocked",
+	);
+	expect(
+		await service.read(
+			1,
+			"https://example.com/report?signature=example",
+			"shared-link",
+		),
+	).toContain("blocked");
+	expect(f.requests).toHaveLength(0);
+	expect(reads).toBe(0);
+	expect(await readdir(f.directory)).toEqual([]);
+	const disabled = new WorldContextService({
+		...f.options,
+		readEnabled: () => false,
+	});
+	expect(
+		await disabled.read(1, "https://example.com/", "shared-link"),
+	).toContain("disabled");
 });
