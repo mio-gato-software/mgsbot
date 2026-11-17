@@ -97,8 +97,8 @@ describe("OpenAiCompatibleChatProvider", () => {
 				}),
 		);
 		const provider = makeProvider();
-		expect(provider.generateResponse("sys", [])).rejects.toThrow(
-			/TestProv API error: 400 Bad Request rate limited/,
+		await expect(provider.generateResponse("sys", [])).rejects.toThrow(
+			/^TestProv API error: 400$/,
 		);
 	});
 });

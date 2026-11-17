@@ -92,9 +92,7 @@ export async function addFollowUp(
 		}
 
 		if (isDuplicateOfRecentFollowUp(all, followUp.event)) {
-			log.debug(
-				`[follow-ups] Skipping duplicate of recent topic: "${followUp.event}"`,
-			);
+			log.debug("[follow-ups] Skipping duplicate of recent topic");
 			return false;
 		}
 
@@ -130,7 +128,7 @@ function expireStaleFollowUps(all: FollowUp[]): boolean {
 		if (fu.status === "pending" && now - fu.scheduledFor > EXPIRATION_MS) {
 			fu.status = "expired";
 			changed = true;
-			log.debug(`[follow-ups] Expired: "${fu.event}"`);
+			log.debug(`[follow-ups] Expired: ${fu.id}`);
 		}
 	}
 
@@ -188,7 +186,7 @@ export async function checkAndCancelResolvedFollowUps(
 				fu.status = "cancelled";
 				changed = true;
 				log.debug(
-					`[follow-ups] Cancelled (user mentioned topic, score=${score.toFixed(2)}): "${fu.event}"`,
+					`[follow-ups] Cancelled (user mentioned topic, score=${score.toFixed(2)}): ${fu.id}`,
 				);
 			}
 		}
@@ -288,7 +286,7 @@ export async function checkAndSendFollowUps(
 			followUp.status = "cancelled";
 			await saveFollowUps(all);
 			log.debug(
-				`[follow-ups] Cancelled (topic already discussed): "${followUp.event}"`,
+				`[follow-ups] Cancelled (topic already discussed): ${followUp.id}`,
 			);
 			return;
 		}
@@ -338,7 +336,7 @@ export async function checkAndSendFollowUps(
 
 			followUp.status = "sent";
 			followUp.sentAt = Date.now();
-			log.debug(`[follow-ups] Sent follow-up for: "${followUp.event}"`);
+			log.debug(`[follow-ups] Sent follow-up for: ${followUp.id}`);
 
 			// Save bot message to sensory buffer for conversational continuity
 			const botMessage: ConversationMessage = {
@@ -374,7 +372,7 @@ export async function checkAndSendFollowUps(
 				followUp.attempts >= MAX_ATTEMPTS
 			) {
 				followUp.status = "expired";
-				log.debug(`[follow-ups] Max attempts reached for: "${followUp.event}"`);
+				log.debug(`[follow-ups] Max attempts reached for: ${followUp.id}`);
 			}
 		}
 
@@ -408,7 +406,7 @@ export async function detectAndStoreFollowUps(
 
 		// Don't schedule in the past
 		if (scheduledFor <= Date.now()) {
-			log.debug(`[follow-ups] Skipping past follow-up: "${fu.event}"`);
+			log.debug("[follow-ups] Skipping past follow-up");
 			continue;
 		}
 

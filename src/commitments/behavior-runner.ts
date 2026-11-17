@@ -7,7 +7,11 @@ import { logBotMessage } from "../chat-logger.ts";
 import { log } from "../logger.ts";
 import { withChatLock } from "../memory/locks.ts";
 import { addMessageToSensory, loadSensory } from "../memory/sensory.ts";
-import { evaluateBehavior, renderBehavior } from "./behavior-evaluation.ts";
+import {
+	evaluateBehavior,
+	renderBehavior,
+	UnverifiableBehaviorEvidence,
+} from "./behavior-evaluation.ts";
 import { deliverScheduledMessage, type ScheduledMessage } from "./delivery.ts";
 import { allowedCommitmentChat, commitmentsEnabled } from "./requests.ts";
 import type { ConditionalBehavior, ScheduledTask } from "./schema.ts";
@@ -253,7 +257,10 @@ export async function runTaskBehaviors(
 				}
 			}
 		} catch (error) {
-			const reason = errorSummary(error);
+			const reason =
+				error instanceof UnverifiableBehaviorEvidence
+					? error.message
+					: errorSummary(error);
 			log.warn(`[behaviors] ${behavior.id}: ${stage} failed: ${reason}`);
 			await services
 				.alert(

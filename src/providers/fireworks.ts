@@ -57,7 +57,7 @@ export class FireworksChatProvider extends OpenAiCompatibleChatProvider {
 			[{ role: "user", content }],
 			":vision",
 		);
-		log.debug("[fireworks] describeImage result:", text.slice(0, 200));
+
 		return text;
 	}
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
+import { ProviderHttpError } from "../provider-http-error.ts";
 import type { TtsProvider } from "./types.ts";
 
 export class LemonFoxTtsProvider implements TtsProvider {
@@ -33,8 +34,8 @@ export class LemonFoxTtsProvider implements TtsProvider {
 		log.debug("[TTS:lemonfox] Response status:", response.status);
 
 		if (!response.ok) {
-			const errorBody = await response.text().catch(() => "");
-			throw new Error(`LemonFox TTS failed: ${response.status} ${errorBody}`);
+			await response.body?.cancel().catch(() => {});
+			throw new ProviderHttpError("LemonFox TTS failed", response.status);
 		}
 
 		const filePath = `./audios/tts_${Date.now()}_${randomUUID()}.mp3`;

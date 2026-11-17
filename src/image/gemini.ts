@@ -36,7 +36,6 @@ export class GeminiImageProvider implements ImageProvider {
 		if (!hasGoogleApiKey) {
 			throw new Error("GOOGLE_API_KEY is required for Gemini image generation");
 		}
-		log.debug("[image:gemini] Prompt:", prompt.slice(0, 200));
 
 		// Without a reference (full-access subject-only images), generate from
 		// the prompt alone instead of crashing on the missing path.
@@ -88,7 +87,6 @@ export class GeminiImageProvider implements ImageProvider {
 		if (!hasGoogleApiKey) {
 			throw new Error("GOOGLE_API_KEY is required for Gemini image editing");
 		}
-		log.debug("[image:gemini:edit] Prompt:", prompt.slice(0, 200));
 
 		const ext = imagePath.split(".").pop() ?? "jpg";
 		const mimeType = ext === "png" ? "image/png" : "image/jpeg";

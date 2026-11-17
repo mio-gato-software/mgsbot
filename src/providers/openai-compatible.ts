@@ -1,6 +1,7 @@
 import { alertOwner, errorSummary } from "../alerts.ts";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
+import { ProviderHttpError } from "../provider-http-error.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
 
@@ -114,9 +115,10 @@ export class OpenAiCompatibleChatProvider implements ChatProvider {
 			signal: requestSignal(this.timeoutMs),
 		});
 		if (!response.ok) {
-			const errorBody = await response.text().catch(() => "");
-			throw new Error(
-				`${this.errorLabel}${logContext} API error: ${response.status} ${response.statusText} ${errorBody}`,
+			await response.body?.cancel().catch(() => {});
+			throw new ProviderHttpError(
+				`${this.errorLabel}${logContext} API error`,
+				response.status,
 			);
 		}
 		return (await response.json()) as OpenAiCompatibleResponse;
@@ -143,7 +145,7 @@ export class OpenAiCompatibleChatProvider implements ChatProvider {
 		);
 
 		const text = await this.chatCompletion(converted);
-		log.debug(`[${this.name}] Response:`, text.slice(0, 200));
+
 		return text;
 	}
 }

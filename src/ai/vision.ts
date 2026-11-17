@@ -119,7 +119,7 @@ export async function describeImage(
 				visionProvider === "openai"
 					? await describeImageWithOpenAI(base64Data, mimeType, caption)
 					: await describeImageWithGemini(base64Data, mimeType, caption);
-			log.debug("[describeImage] Result:", text.slice(0, 200));
+
 			return text;
 		}
 
@@ -152,8 +152,6 @@ export async function analyzeYouTube(
 			{ text: prompt },
 		];
 
-		log.debug("[analyzeYouTube] URL:", videoUrl);
-
 		const response = await getAI().models.generateContent({
 			model: resolveGeminiVisionModel(),
 			contents: createUserContent(parts),
@@ -161,7 +159,7 @@ export async function analyzeYouTube(
 
 		logTokenUsage("analyzeYouTube", response);
 		const text = response.text ?? "[video analysis failed]";
-		log.debug("[analyzeYouTube] Result:", text.slice(0, 200));
+
 		return text;
 	} catch (error) {
 		log.error("[analyzeYouTube] Error:", error);

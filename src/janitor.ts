@@ -81,9 +81,7 @@ export function applyFactRetirements(
 		fact.validUntil = now;
 		fact.confidence = Math.min(fact.confidence, 0.2);
 		retired++;
-		log.debug(
-			`[janitor] Retired fact ${fact.id} (${retirement.reason || "no reason"}): "${fact.content.slice(0, 60)}"`,
-		);
+		log.debug(`[janitor] Retired fact ${fact.id}`);
 	}
 	return retired;
 }

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
+import { ProviderHttpError } from "../provider-http-error.ts";
 import type { TtsProvider } from "./types.ts";
 
 const CARTESIA_TTS_URL = "https://api.cartesia.ai/tts/bytes";
@@ -88,10 +89,8 @@ export class CartesiaTtsProvider implements TtsProvider {
 		});
 
 		if (!response.ok) {
-			const errorBody = (await response.text().catch(() => "")).slice(0, 1000);
-			throw new Error(
-				`Cartesia TTS failed: ${response.status} ${response.statusText} ${errorBody}`.trim(),
-			);
+			await response.body?.cancel().catch(() => {});
+			throw new ProviderHttpError("Cartesia TTS failed", response.status);
 		}
 
 		const buffer = Buffer.from(await response.arrayBuffer());

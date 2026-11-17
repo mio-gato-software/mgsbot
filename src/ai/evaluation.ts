@@ -16,7 +16,6 @@ import {
 } from "./core.ts";
 
 const VALID_CATEGORIES = new Set(["person", "group", "rule", "event"]);
-const PARSE_ERROR_SNIPPET_CHARS = 300;
 
 /**
  * The extractor answered, but not with usable JSON. Carries the model so the
@@ -25,16 +24,13 @@ const PARSE_ERROR_SNIPPET_CHARS = 300;
  */
 export class ExtractionParseError extends Error {
 	readonly model: string;
-	readonly snippet: string;
 
-	constructor(model: string, rawText: string, cause?: unknown) {
+	constructor(model: string) {
 		super(
 			`Extraction returned unparseable output from ${model || "unknown model"}`,
-			cause === undefined ? undefined : { cause },
 		);
 		this.name = "ExtractionParseError";
 		this.model = model;
-		this.snippet = rawText.slice(0, PARSE_ERROR_SNIPPET_CHARS);
 	}
 }
 const VALID_TRAIT_NAMES = new Set<string>(TRAIT_NAMES);
@@ -257,13 +253,13 @@ ${recentMessages}`;
 	// and in the extraction-quality metrics.
 	const jsonMatch = text.match(/\{[\s\S]*\}/);
 	if (!jsonMatch) {
-		throw new ExtractionParseError(model, text);
+		throw new ExtractionParseError(model);
 	}
 	try {
 		const parsed = JSON.parse(jsonMatch[0]) as PromotionResult;
 		return validatePromotionResult(parsed, model);
-	} catch (error) {
-		throw new ExtractionParseError(model, text, error);
+	} catch {
+		throw new ExtractionParseError(model);
 	}
 }
 
@@ -366,12 +362,12 @@ Respond ONLY with JSON:
 	);
 	const jsonMatch = text.match(/\{[\s\S]*\}/);
 	if (!jsonMatch) {
-		throw new ExtractionParseError(model, text);
+		throw new ExtractionParseError(model);
 	}
 	try {
 		return validateLongTermMemoryUpdate(JSON.parse(jsonMatch[0]));
-	} catch (error) {
-		throw new ExtractionParseError(model, text, error);
+	} catch {
+		throw new ExtractionParseError(model);
 	}
 }
 
@@ -460,8 +456,8 @@ If nothing should be retired: {"retire": []}`;
 						: undefined,
 				reason: typeof entry.reason === "string" ? entry.reason.trim() : "",
 			}));
-	} catch (error) {
-		throw new ExtractionParseError("janitor", text, error);
+	} catch {
+		throw new ExtractionParseError("janitor");
 	}
 }
 

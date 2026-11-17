@@ -139,6 +139,6 @@ export async function analyzePdf(
 		provider === "openai"
 			? await analyzePdfWithOpenAI(filePath, userRequest)
 			: await analyzePdfWithGemini(filePath, userRequest);
-	log.debug("[analyzePdf] Result:", text.slice(0, 200));
+
 	return text;
 }

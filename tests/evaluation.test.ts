@@ -80,7 +80,7 @@ for (const raw of [
 		} catch (error) {
 			expect(error).toBeInstanceOf(ExtractionParseError);
 			expect((error as ExtractionParseError).model).toBe("model-a");
-			expect((error as ExtractionParseError).snippet).toBe(raw);
+			expect((error as Error).message).not.toContain(raw);
 		}
 	});
 }

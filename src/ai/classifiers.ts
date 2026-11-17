@@ -280,7 +280,6 @@ export async function classifyEditIntent(
 			.trim()
 			.toLowerCase();
 
-		log.debug(`[classifyEditIntent] "${trimmed}" → ${text}`);
 		if (text.startsWith("yes")) return true;
 		if (text.startsWith("no")) return false;
 		return null;
@@ -345,7 +344,7 @@ export async function classifyGroupSocialIntent(
 		const decision = parseGroupSocialDecision(text);
 
 		log.debug(
-			`[classifyGroupSocialIntent] ${input.mode} "${currentMessage}" → ${text.trim()}`,
+			`[classifyGroupSocialIntent] ${input.mode}: ${decision?.addressing ?? "unclassified"}`,
 		);
 		return decision;
 	} catch (error) {

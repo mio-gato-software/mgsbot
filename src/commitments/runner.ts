@@ -1,7 +1,7 @@
 import type { Api } from "grammy";
 import { z } from "zod";
 import { generateBackgroundResponse, generateResponse } from "../ai/core.ts";
-import { alertOwner } from "../alerts.ts";
+import { alertOwner, errorSummary } from "../alerts.ts";
 import { BOT_TZ } from "../bot-time.ts";
 import { logBotMessage } from "../chat-logger.ts";
 import { log } from "../logger.ts";
@@ -515,7 +515,7 @@ export async function runScheduledTasks(
 					);
 			await services
 				.alert(
-					`Scheduled task ${claimed.id}: ${error instanceof Error ? `${error.name}: ${error.message.slice(0, 300)}` : "unknown error"}. ${attempted ? "delivery outcome uncertain; not retried to avoid duplicate messages" : "could not generate or persist this occurrence"}.`,
+					`Scheduled task ${claimed.id}: ${errorSummary(error)}. ${attempted ? "delivery outcome uncertain; not retried to avoid duplicate messages" : "could not generate or persist this occurrence"}.`,
 				)
 				.catch(() => {});
 		}

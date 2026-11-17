@@ -1,6 +1,7 @@
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
 import { isTutorActive } from "../prompt/modes.ts";
+import { ProviderHttpError } from "../provider-http-error.ts";
 import type { SttProvider } from "./types.ts";
 
 export class LemonFoxSttProvider implements SttProvider {
@@ -39,14 +40,14 @@ export class LemonFoxSttProvider implements SttProvider {
 		);
 
 		if (!response.ok) {
-			const errorBody = await response.text().catch(() => "");
-			throw new Error(`LemonFox STT failed: ${response.status} ${errorBody}`);
+			await response.body?.cancel().catch(() => {});
+			throw new ProviderHttpError("LemonFox STT failed", response.status);
 		}
 
 		const data = (await response.json()) as { text?: string };
 		const text = data.text?.trim();
 		if (!text) throw new Error("LemonFox STT returned empty text");
-		log.debug("[STT:lemonfox] Result:", text.slice(0, 200));
+
 		return text;
 	}
 }

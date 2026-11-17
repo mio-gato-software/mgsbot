@@ -1,5 +1,6 @@
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
+import { ProviderHttpError } from "../provider-http-error.ts";
 import { resolveChatModel } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import type { ChatMessage, ChatProvider } from "./types.ts";
@@ -71,10 +72,8 @@ export class AnthropicChatProvider implements ChatProvider {
 				signal: requestSignal(30_000),
 			});
 			if (!response.ok) {
-				const errorBody = await response.text().catch(() => "");
-				throw new Error(
-					`Anthropic API error: ${response.status} ${response.statusText} ${errorBody}`,
-				);
+				await response.body?.cancel().catch(() => {});
+				throw new ProviderHttpError("Anthropic API error", response.status);
 			}
 			return (await response.json()) as AnthropicResponse;
 		});
@@ -86,7 +85,7 @@ export class AnthropicChatProvider implements ChatProvider {
 		}
 
 		const text = data.content?.[0]?.text ?? "";
-		log.debug("[AnthropicChatProvider] Response:", text.slice(0, 200));
+
 		return text;
 	}
 }

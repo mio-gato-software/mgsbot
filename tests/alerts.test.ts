@@ -67,13 +67,13 @@ describe("alertOwner", () => {
 });
 
 describe("errorSummary", () => {
-	test("formats Error as name: message without stack", () => {
+	test("keeps only the error name and safe status", () => {
 		const summary = errorSummary(new TypeError("bad input"));
-		expect(summary).toBe("TypeError: bad input");
+		expect(summary).toBe("TypeError");
 	});
 
-	test("stringifies non-Error values", () => {
-		expect(errorSummary("plain failure")).toBe("plain failure");
+	test("suppresses non-Error values", () => {
+		expect(errorSummary("plain failure")).toBe("Unknown error");
 	});
 
 	test("truncates very long messages", () => {

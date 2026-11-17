@@ -4,7 +4,6 @@ type AlertSink = (text: string) => Promise<void>;
 
 const DEFAULT_COOLDOWN_MS = 30 * 60 * 1000;
 const MAX_TRACKED_KEYS = 100;
-const MAX_MESSAGE_CHARS = 400;
 
 let sink: AlertSink | null = null;
 const lastSentAt = new Map<string, number>();
@@ -19,14 +18,7 @@ export function resetAlertState(): void {
 	lastSentAt.clear();
 }
 
-/** Short, key-safe summary of an unknown error: name + message, no stack. */
-export function errorSummary(error: unknown): string {
-	const text =
-		error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-	return text.length > MAX_MESSAGE_CHARS
-		? `${text.slice(0, MAX_MESSAGE_CHARS)}…`
-		: text;
-}
+export { summarizeError as errorSummary } from "./logger.ts";
 
 /**
  * Send an owner alert through the configured sink, rate-limited per key.

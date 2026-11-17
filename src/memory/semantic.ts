@@ -244,7 +244,7 @@ export async function addSemanticFacts(
 					delete existing.archivedAt;
 					merged = true;
 					log.debug(
-						`[semantic] Merged duplicate (similarity=${similarity.toFixed(2)}): "${newFact.content.slice(0, 60)}"`,
+						`[semantic] Merged duplicate (similarity=${similarity.toFixed(2)})`,
 					);
 					break;
 				}
@@ -254,7 +254,7 @@ export async function addSemanticFacts(
 				store.push(newFact);
 				applySupersession(store, newFact, newFact.id, now);
 				log.debug(
-					`[semantic] Added new ${newFact.permanent ? "permanent " : ""}fact: "${newFact.content.slice(0, 60)}"`,
+					`[semantic] Added new ${newFact.permanent ? "permanent " : ""}fact`,
 				);
 			}
 		}

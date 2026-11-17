@@ -69,7 +69,6 @@ export class OpenAIChatProvider implements ChatProvider {
 				`[tokens:openai] in=${response.usage.input_tokens} out=${response.usage.output_tokens}`,
 			);
 		}
-		log.debug("[OpenAIChatProvider] Response:", text.slice(0, 200));
 
 		return text;
 	}
@@ -105,7 +104,7 @@ export class OpenAIChatProvider implements ChatProvider {
 		});
 
 		const text = response.output_text ?? "";
-		log.debug("[OpenAIChatProvider] describeImage result:", text.slice(0, 200));
+
 		return text;
 	}
 }

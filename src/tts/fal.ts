@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { downloadFalAsset } from "../fal-download.ts";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
+import { ProviderHttpError } from "../provider-http-error.ts";
 import type { TtsProvider } from "./types.ts";
 
 interface FalTtsResponse {
@@ -44,10 +45,8 @@ export class FalTtsProvider implements TtsProvider {
 		);
 
 		if (!response.ok) {
-			const errorBody = await response.text().catch(() => "");
-			throw new Error(
-				`fal.ai TTS error: ${response.status} ${response.statusText} ${errorBody}`,
-			);
+			await response.body?.cancel().catch(() => {});
+			throw new ProviderHttpError("fal.ai TTS error", response.status);
 		}
 
 		const data = (await response.json()) as FalTtsResponse;
