@@ -25,7 +25,12 @@ const envKeys = [
 let env: Array<string | undefined>;
 let previousFollowUps: FollowUp[];
 let previousCheckIns: string | undefined;
+const resolveTopic: NonNullable<
+	Parameters<typeof checkAndSendFollowUps>[3]
+>["match"] = async (_mode, _text, candidates) =>
+	new Set(candidates.map(({ id }) => id));
 const services = {
+	match: resolveTopic,
 	generate: async () => "How was your appointment?",
 	pulse: async () => {},
 };
@@ -54,7 +59,12 @@ async function history(
 		memoryPath(`sensory/${chatId}.json`),
 		JSON.stringify({
 			chatId,
-			messages,
+			messages: messages.map((message) => ({
+				...message,
+				...(message.role === "user"
+					? { userText: message.content, userTextVerified: true }
+					: {}),
+			})),
 			lastActivity: now - 3_600_000,
 			messageCountSincePromotion: messages.length,
 		}),
@@ -160,12 +170,14 @@ test("cancellation cannot race with extraction and resolve the source turn", asy
 		chatId,
 		"dentist appointment",
 		sourceAt,
+		resolveTopic,
 	);
 	expect((await loadFollowUps())[0]?.status).toBe("pending");
 	await checkAndCancelResolvedFollowUps(
 		chatId,
-		"dentist appointment went well",
+		"Me atendieron y salió todo bien",
 		sourceAt + 60_000,
+		resolveTopic,
 	);
 	expect((await loadFollowUps())[0]?.status).toBe("cancelled");
 });

@@ -1,13 +1,12 @@
 import type { Api } from "grammy";
 import { generateResponse } from "./ai/core.ts";
-import { extractFollowUps } from "./ai/evaluation.ts";
+import { extractFollowUps, matchFollowUpTopics } from "./ai/evaluation.ts";
 import { trackBackground } from "./background-tasks.ts";
-import { botNow, clampToReasonableHours, formatDateTime } from "./bot-time.ts";
+import { BOT_TZ, botNow, clampToReasonableHours } from "./bot-time.ts";
 import { pulseTypingBeforeSend } from "./chat-actions.ts";
 import { log } from "./logger.ts";
 import {
 	addMessageToSensory,
-	computeTextScore,
 	loadSensory,
 	withChatLock,
 	withFollowUpsLock,
@@ -31,7 +30,6 @@ const COOLDOWN_BETWEEN_SENDS_MS = 2 * 60 * 60 * 1000; // 2 hours
 const EXPIRATION_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 const MAX_ATTEMPTS = 3;
 export const ACTIVE_CONVERSATION_MS = 15 * 60 * 1000; // 15 minutes
-const TOPIC_RESOLVED_THRESHOLD = 0.3;
 // A detected event similar to any follow-up tracked within this window is a
 // rehash, not news — without this the same topic gets re-detected from memory
 // for weeks (e.g. the same dinner plan resurfacing in every conversation).
@@ -52,17 +50,21 @@ export async function saveFollowUps(followUps: FollowUp[]): Promise<void> {
  * regardless of status — a sent, cancelled, or expired follow-up on the same
  * topic means bringing it up again would feel like nagging, not interest.
  */
-export function isDuplicateOfRecentFollowUp(
+export async function isDuplicateOfRecentFollowUp(
 	all: FollowUp[],
+	chatId: number,
 	event: string,
 	now = Date.now(),
-): boolean {
+	match = matchFollowUpTopics,
+): Promise<boolean | null> {
 	const cutoff = now - EVENT_DEDUP_WINDOW_MS;
-	return all.some(
+	const candidates = all.filter(
 		(fu) =>
-			Math.max(fu.detectedAt, fu.sentAt ?? 0) >= cutoff &&
-			computeTextScore(fu.event, event) >= TOPIC_RESOLVED_THRESHOLD,
+			fu.chatId === chatId && Math.max(fu.detectedAt, fu.sentAt ?? 0) >= cutoff,
 	);
+	if (!candidates.length) return false;
+	const matches = await match("duplicate", event, candidates);
+	return matches === null ? null : matches.size > 0;
 }
 
 /**
@@ -70,12 +72,17 @@ export function isDuplicateOfRecentFollowUp(
  * stale topics the proactive generator must not bring up again.
  */
 export async function getRecentFollowUpEvents(
+	chatId: number,
 	windowMs = EVENT_DEDUP_WINDOW_MS,
 ): Promise<string[]> {
 	const all = await loadFollowUps();
 	const cutoff = Date.now() - windowMs;
 	return all
-		.filter((fu) => Math.max(fu.detectedAt, fu.sentAt ?? 0) >= cutoff)
+		.filter(
+			(fu) =>
+				fu.chatId === chatId &&
+				Math.max(fu.detectedAt, fu.sentAt ?? 0) >= cutoff,
+		)
 		.map((fu) => fu.event);
 }
 
@@ -91,10 +98,12 @@ export async function addFollowUp(
 			return false;
 		}
 
-		if (isDuplicateOfRecentFollowUp(all, followUp.event)) {
-			log.debug("[follow-ups] Skipping duplicate of recent topic");
-			return false;
-		}
+		const duplicate = await isDuplicateOfRecentFollowUp(
+			all,
+			followUp.chatId,
+			followUp.event,
+		);
+		if (duplicate !== false) return false;
 
 		const newFollowUp: FollowUp = {
 			...followUp,
@@ -107,7 +116,7 @@ export async function addFollowUp(
 		await saveFollowUps(all);
 
 		log.debug(
-			`[follow-ups] Added: "${newFollowUp.event}" scheduled for ${new Date(newFollowUp.scheduledFor).toISOString()}`,
+			`[follow-ups] Added: ${newFollowUp.id} scheduled for ${new Date(newFollowUp.scheduledFor).toISOString()}`,
 		);
 		return true;
 	});
@@ -169,29 +178,26 @@ export async function checkAndCancelResolvedFollowUps(
 	chatId: number,
 	userContent: string,
 	messageAt = Date.now(),
+	match = matchFollowUpTopics,
 ): Promise<void> {
+	if (process.env.ENABLE_FOLLOW_UPS !== "true") return;
 	await withFollowUpsLock(async () => {
 		const all = await loadFollowUps();
 		const pending = all.filter(
-			(fu) => fu.status === "pending" && fu.chatId === chatId,
+			(fu) =>
+				fu.status === "pending" &&
+				fu.chatId === chatId &&
+				messageAt > (fu.sourceMessageAt ?? fu.detectedAt),
 		);
 
 		if (pending.length === 0) return;
 
-		let changed = false;
+		const matched = await match("resolved", userContent, pending);
+		if (!matched?.size) return;
 		for (const fu of pending) {
-			if (messageAt <= (fu.sourceMessageAt ?? fu.detectedAt)) continue;
-			const score = computeTextScore(fu.event, userContent);
-			if (score >= TOPIC_RESOLVED_THRESHOLD) {
-				fu.status = "cancelled";
-				changed = true;
-				log.debug(
-					`[follow-ups] Cancelled (user mentioned topic, score=${score.toFixed(2)}): ${fu.id}`,
-				);
-			}
+			if (matched.has(fu.id)) fu.status = "cancelled";
 		}
-
-		if (changed) await saveFollowUps(all);
+		await saveFollowUps(all);
 	});
 }
 
@@ -220,7 +226,11 @@ export async function checkAndSendFollowUps(
 	api: Api,
 	isBotOff: () => boolean,
 	isSleepingHour: () => boolean,
-	dependencies = {
+	dependencies: {
+		generate: typeof generateFollowUpMessage;
+		pulse: typeof pulseTypingBeforeSend;
+		match?: typeof matchFollowUpTopics;
+	} = {
 		generate: generateFollowUpMessage,
 		pulse: pulseTypingBeforeSend,
 	},
@@ -276,13 +286,23 @@ export async function checkAndSendFollowUps(
 			.filter(
 				(m) =>
 					m.role === "user" &&
+					m.userTextVerified === true &&
 					m.timestamp > (followUp.sourceMessageAt ?? followUp.detectedAt),
 			)
-			.map((m) => m.content)
-			.join(" ");
-		if (
-			computeTextScore(followUp.event, recentText) >= TOPIC_RESOLVED_THRESHOLD
-		) {
+			.map((m) => m.userText)
+			.join("\n");
+		const matched = recentText.trim()
+			? await (dependencies.match ?? matchFollowUpTopics)(
+					"resolved",
+					recentText,
+					[followUp],
+				)
+			: new Set<string>();
+		if (matched === null) {
+			if (expired) await saveFollowUps(all);
+			return;
+		}
+		if (matched.has(followUp.id)) {
 			followUp.status = "cancelled";
 			await saveFollowUps(all);
 			log.debug(
@@ -390,11 +410,11 @@ export async function detectAndStoreFollowUps(
 ): Promise<void> {
 	if (process.env.ENABLE_FOLLOW_UPS !== "true") return;
 
-	const currentDateDR = formatDateTime();
+	const currentDate = `${botNow().format()} (${BOT_TZ})`;
 
 	const extracted = await extractFollowUps(
 		recentMessages,
-		currentDateDR,
+		currentDate,
 		latestMessage,
 	);
 

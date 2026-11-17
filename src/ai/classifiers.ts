@@ -352,20 +352,3 @@ export async function classifyGroupSocialIntent(
 		return null;
 	}
 }
-
-// Spanish heuristic: matches user-language content (users typically write in Spanish).
-const FOLLOW_UP_INTENT_PATTERNS = [
-	/\b(voy a|iré a|vamos a|tengo que|me toca|tengo una?)\b/i,
-	/\b(esta noche|mañana|esta tarde|hoy|el lunes|el martes|el miércoles|el jueves|el viernes|el sábado|el domingo|este fin de semana)\b/i,
-	/\b(cita|reunión|entrevista|examen|viaje|cine|película|doctor|fiesta|concierto|clase|gym|gimnasio|salón|peluquería)\b/i,
-	/\b(a las \d{1,2}|pm|am)\b/i,
-];
-
-export function hasFollowUpIntent(text: string): boolean {
-	let matchCount = 0;
-	for (const pattern of FOLLOW_UP_INTENT_PATTERNS) {
-		if (pattern.test(text)) matchCount++;
-	}
-	// Require at least 2 pattern matches to reduce false positives
-	return matchCount >= 2;
-}

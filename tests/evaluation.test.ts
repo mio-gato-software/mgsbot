@@ -5,6 +5,7 @@ import {
 	evaluateConversationChunk,
 	extractFollowUps,
 	generateLongTermMemoryUpdate,
+	matchFollowUpTopics,
 	reviewFactCluster,
 	summarizeConversation,
 	validatePromotionResult,
@@ -269,9 +270,13 @@ for (const raw of ["not JSON", "{bad}", "{}", '{"retire":null}']) {
 	});
 }
 
-test("follow-up extraction skips casual messages without a model call", async () => {
+test("follow-up extraction sends ordinary and indirect wording to the model", async () => {
+	plain.mockResolvedValue('{"followUps":[]}');
 	expect(await extractFollowUps("Hello", "2026-10-06", "Hello")).toEqual([]);
-	expect(plain).not.toHaveBeenCalled();
+	expect(plain).toHaveBeenCalledTimes(1);
+	expect(plain.mock.calls[0]?.[1][0]?.content).toContain(
+		'"latestMessage":"Hello"',
+	);
 });
 test("follow-up extraction keeps valid plans beside malformed candidates", async () => {
 	const plan = {
@@ -284,17 +289,18 @@ test("follow-up extraction keeps valid plans beside malformed candidates", async
 		JSON.stringify({
 			followUps: [
 				null,
-				plan,
-				{ ...plan, when: "invalid" },
-				{ ...plan, followUpDelayHours: -1 },
+				{ ...plan, evidence: "Sí, está confirmado" },
+				{ ...plan, evidence: "The appointment is tomorrow" },
+				{ ...plan, when: "invalid", evidence: "Sí, está confirmado" },
+				{ ...plan, followUpDelayHours: -1, evidence: "Sí, está confirmado" },
 			],
 		}),
 	);
 	expect(
 		await extractFollowUps(
-			"Tomorrow doctor",
+			"The appointment is tomorrow",
 			"2026-10-06",
-			"Mañana voy a visitar al doctor",
+			"Sí, está confirmado",
 		),
 	).toEqual([plan]);
 });
@@ -306,6 +312,25 @@ for (const raw of ["not JSON", "{bad}", "{}", '{"followUps":42}']) {
 		).toEqual([]);
 	});
 }
+test("follow-up matching accepts a paraphrase and rejects unknown state IDs", async () => {
+	const candidates = [{ id: "appointment", event: "Dentist appointment" }];
+	plain.mockResolvedValueOnce('{"matchedIds":["appointment"]}');
+	plain.mockResolvedValueOnce('{"matchedIds":["other"]}');
+	expect(
+		await matchFollowUpTopics(
+			"resolved",
+			"La consulta terminó bien",
+			candidates,
+		),
+	).toEqual(new Set(["appointment"]));
+	expect(
+		await matchFollowUpTopics(
+			"resolved",
+			"La consulta terminó bien",
+			candidates,
+		),
+	).toBeNull();
+});
 test("summary preserves previous episode context", async () => {
 	chat.mockResolvedValue("Summary");
 	expect(
