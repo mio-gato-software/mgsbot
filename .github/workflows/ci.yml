@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - run: sh scripts/check-private-files.sh
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
