@@ -28,7 +28,7 @@ function options(text: string): SendResponseOptions {
 test("combined markers produce a delivery plan without exposing markers", () => {
 	const plan = parseResponse(
 		"[QUOTE_REPLY][REACT:🔥][IMAGE:cat] Mira [TTS]hola[/TTS]",
-		{ allowImages: true, allowSpeech: true },
+		{ allowImages: true, allowImageEdits: false, allowSpeech: true },
 	);
 	expect(plan).toEqual({
 		quoteReplyRequested: true,
@@ -197,13 +197,15 @@ test("a self image without a character reference never substitutes a user photo 
 test("explicit edit markers are parsed and stripped even when image delivery is disabled", () => {
 	expect(
 		parseResponse("Aquí [IMAGE_EDIT: add a hat]", {
-			allowImages: true,
+			allowImages: false,
+			allowImageEdits: true,
 			allowSpeech: false,
 		}).image,
 	).toEqual({ prompt: "add a hat", self: false, edit: true });
 	expect(
 		parseResponse("Aquí [IMAGE_EDIT: add a hat]", {
-			allowImages: false,
+			allowImages: true,
+			allowImageEdits: false,
 			allowSpeech: false,
 		}),
 	).toMatchObject({ text: "Aquí", image: undefined });
@@ -229,4 +231,30 @@ test("manual image-only delivery suppresses short and long captions while retain
 		expect(result?.cleanedText).toBe(text.trim());
 		expect(photos).toBe(1);
 	}
+});
+
+test("a user image permits an edit without authorizing a new character photo", async () => {
+	const calls: string[] = [];
+	const deps = {
+		...defaultResponseDependencies,
+		baseImage: () => "character.jpg",
+		fullAccess: () => false,
+		generateImage: async () => {
+			calls.push("generate");
+			return Buffer.from("unused");
+		},
+		editImage: async (_prompt: string, reference: string) => {
+			calls.push(reference);
+			return Buffer.from("edited");
+		},
+	};
+	for (const marker of ["IMAGE_SELF", "IMAGE", "IMAGE_EDIT"]) {
+		const input = {
+			...options(`Aquí [${marker}: garden]`),
+			userImagePath: "user.jpg",
+		};
+		input.ctx.replyWithPhoto = async () => ({}) as never;
+		await sendResponse(input, deps);
+	}
+	expect(calls).toEqual(["user.jpg"]);
 });
