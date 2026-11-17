@@ -87,6 +87,11 @@ function getUserInfo(ctx: Context): {
 	return { userId: user.id, username: user.username };
 }
 
+function ownTurnText(ctx: Context, transcription?: string): string | undefined {
+	if (!ctx.message || ctx.message.forward_origin) return undefined;
+	return transcription ?? ctx.message.text ?? ctx.message.caption;
+}
+
 export interface ConversationOptions {
 	mentionType?: MentionType;
 	botOff?: boolean;
@@ -163,8 +168,7 @@ export async function processConversation(
 	try {
 		// Register identity for this user
 		const { userId, username } = getUserInfo(ctx);
-		const directUserText =
-			options.directUserText ?? ctx.message?.text ?? ctx.message?.caption;
+		const directUserText = ownTurnText(ctx, options.directUserText);
 		if (userId) {
 			await registerIdentity(userId, userName, username);
 		}
@@ -188,6 +192,7 @@ export async function processConversation(
 					userId,
 					content: userContent,
 					userText: directUserText,
+					userTextVerified: directUserText === undefined ? undefined : true,
 					timestamp: Date.now(),
 					image: incomingImage,
 				};
@@ -509,11 +514,13 @@ export async function observeConversationTurn(
 	ctx: Context,
 	userContent: string,
 	userName: string,
+	transcription?: string,
 ): Promise<void> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
 
 	const { userId, username } = getUserInfo(ctx);
+	const userText = ownTurnText(ctx, transcription);
 	if (userId) {
 		await registerIdentity(userId, userName, username);
 	}
@@ -525,9 +532,8 @@ export async function observeConversationTurn(
 			name: userName,
 			userId,
 			content: userContent,
-			userText: ctx.message?.forward_origin
-				? undefined
-				: (ctx.message?.text ?? ctx.message?.caption),
+			userText,
+			userTextVerified: userText === undefined ? undefined : true,
 			timestamp: Date.now(),
 			image: getMessageImage(ctx),
 		};

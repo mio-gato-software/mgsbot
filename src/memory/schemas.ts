@@ -9,6 +9,7 @@ export const messageSchema = z
 		role: z.enum(["user", "model"]),
 		content: z.string(),
 		userText: z.string().optional(),
+		userTextVerified: z.literal(true).optional(),
 		timestamp,
 		name: z.string().optional(),
 		userId: z.number().optional(),

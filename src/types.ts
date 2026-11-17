@@ -10,6 +10,8 @@ export type MentionType = "none" | "reply" | "tag" | "name";
 export interface ConversationMessage {
 	/** Original user instruction kept separate from fetched/transcribed reference material. */
 	userText?: string;
+	/** Set at intake when this text belongs to the current speaker. */
+	userTextVerified?: true;
 	id?: string; // stable identity across durable promotion retries
 	role: "user" | "model";
 	name?: string;

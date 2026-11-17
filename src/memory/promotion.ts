@@ -449,44 +449,32 @@ export async function promoteToMemory(
 	// pollute episodes with "casual conversation" placeholders. Bars live in
 	// promotion-policy.ts and every decision is recorded, so the passive bar can
 	// be calibrated against what it actually dropped (`bun run promote:stats`).
+	const hasUserEvidence = (quote: string | undefined): boolean =>
+		typeof quote === "string" &&
+		quote.trim().length >= 8 &&
+		overflow.some(
+			(message) =>
+				message.role === "user" &&
+				message.userTextVerified === true &&
+				message.userText?.includes(quote),
+		);
 	const confirmedFactIds = [
 		...new Set(
 			(result.confirmedFacts ?? [])
 				.filter(
-					(confirmation) =>
-						existingFacts.some((fact) => fact.id === confirmation.id) &&
-						confirmation.evidence.trim().length >= 8 &&
-						overflow.some(
-							(message) =>
-								message.role === "user" &&
-								message.content.includes(confirmation.evidence),
-						),
+					({ id, evidence }) =>
+						existingFacts.some((fact) => fact.id === id) &&
+						hasUserEvidence(evidence),
 				)
-				.map((confirmation) => confirmation.id),
+				.map(({ id }) => id),
 		),
 	];
 	const factImportances = result.facts.map((f) => f.importance);
-	// An extractor's interpretation alone is insufficient: require the quoted
-	// evidence in a user's own text, never in a bot reply or fetched page body.
 	if (result.personalitySignals) {
 		result.personalitySignals.traitChanges =
 			result.personalitySignals.traitChanges.filter(
 				(change) =>
-					change.directToBot === true &&
-					typeof change.evidence === "string" &&
-					change.evidence.length >= 8 &&
-					overflow.some((message) => {
-						if (message.role !== "user") return false;
-						const own =
-							message.userText ??
-							(message.content.startsWith("[Public web page")
-								? ""
-								: message.content.replace(
-										/^\[Replying to [\s\S]*?\]\s*\n\n/,
-										"",
-									));
-						return own.includes(change.evidence ?? "");
-					}),
+					change.directToBot === true && hasUserEvidence(change.evidence),
 			);
 	}
 	const confirmationImportances = existingFacts
@@ -574,6 +562,7 @@ export async function promoteToMemory(
 	}
 
 	const prepared: PreparedPromotion = {
+		verifiedUserEvidence: true,
 		confirmedFactIds,
 		episode,
 		facts: semanticFacts,
@@ -593,18 +582,21 @@ async function applyPreparedPromotion(
 	if (prepared.effectsApplied) return;
 	await dependencies.saveEpisode(chatId, prepared.episode);
 	await dependencies.saveFacts(prepared.facts);
-	await confirmSemanticFacts(
-		prepared.confirmedFactIds ?? [],
-		id,
-		prepared.episode.timestamp,
-		chatId,
-	);
-	if (prepared.personalitySignals?.traitChanges.length) {
-		await applyPersonalitySignals(
-			prepared.personalitySignals,
-			prepared.recentText,
+	// Old checkpoints did not record that evidence was verified against the authored text.
+	if (prepared.verifiedUserEvidence) {
+		await confirmSemanticFacts(
+			prepared.confirmedFactIds ?? [],
 			id,
+			prepared.episode.timestamp,
+			chatId,
 		);
+		if (prepared.personalitySignals?.traitChanges.length) {
+			await applyPersonalitySignals(
+				prepared.personalitySignals,
+				prepared.recentText,
+				id,
+			);
+		}
 	}
 	prepared.effectsApplied = true;
 	await savePreparedPromotion(chatId, id, prepared);

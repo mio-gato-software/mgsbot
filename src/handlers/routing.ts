@@ -242,7 +242,7 @@ function formatVoiceDuration(duration?: number): string {
 	return `, ${duration}s`;
 }
 
-function truncateForPassiveVoiceContext(text: string): string {
+export function truncatePassiveVoiceTranscript(text: string): string {
 	if (text.length <= GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS) return text;
 	return `${text
 		.slice(0, GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS)
@@ -260,7 +260,7 @@ export function buildPassiveVoiceContent(
 	userName: string,
 	transcription: string,
 ): string {
-	return `[Voice message from ${userName}]: ${truncateForPassiveVoiceContext(transcription)}`;
+	return `[Voice message from ${userName}]: ${truncatePassiveVoiceTranscript(transcription)}`;
 }
 
 export function buildUntranscribedVoiceContent(
@@ -327,11 +327,21 @@ export async function routeGroupNameMention(
 	}
 
 	if (replyContext && !replyContext.isBot) {
-		await observeConversationTurn(ctx, conversationContent, userName);
+		await observeConversationTurn(
+			ctx,
+			conversationContent,
+			userName,
+			options?.directUserText,
+		);
 		return "handled";
 	}
 
-	await observeConversationTurn(ctx, conversationContent, userName);
+	await observeConversationTurn(
+		ctx,
+		conversationContent,
+		userName,
+		options?.directUserText,
+	);
 	if (decision?.action !== "respond") {
 		return "handled";
 	}
