@@ -6,6 +6,8 @@ Run `sh scripts/check-private-files.sh` from the repository root after staging c
 
 ## Installation layout
 
+Docker excludes local dotenv files and private runtime and deployment directories from its build context. Provide configuration and state through runtime mounts.
+
 Run the executable from the installation directory containing its `.env` and persistent data. Relative paths resolve from that working directory. `MEMORY_DIR` can select a separate data root. Save an empty allowed group in the setup wizard to disable group access on restart. Give each instance its own directory, credentials, data and service; in-process locks do not coordinate multiple bot processes against one store.
 
 A headless installation can use `memory/bot_profile.json` and `memory/bot_rules.json`; absence of `bot_config.json` is normal in that configuration. Preserve existing profiles and memory during upgrades instead of initializing replacements. See the [README](../README.md#profile-rules-and-character-image) for first-time setup and [maintenance guide](maintenance.md) for recovery.
