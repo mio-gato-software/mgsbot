@@ -8,6 +8,7 @@ import {
 	withDeadline,
 } from "../src/operation-deadline.ts";
 import { processSetupConversation } from "../src/setup.ts";
+import { buildWizardEnv } from "../src/wizard.ts";
 import { makeMockContext } from "./helpers/telegram-mock.ts";
 
 let originalConfig: BotConfig;
@@ -211,4 +212,23 @@ test("setup confirmation failure cannot cause a raw JSON reply", async () => {
 	).rejects.toThrow("connection reset");
 	expect(replies).toHaveLength(1);
 	expect(replies[0]).not.toContain('"botName"');
+});
+
+test("clearing the group in the wizard saves an explicit disabled value", () => {
+	const values = buildWizardEnv(
+		{
+			botToken: "123456789:example-token",
+			googleApiKey: "",
+			openaiApiKey: "example-key",
+			geminiModel: "",
+			openaiModel: "",
+			ownerUserId: "123456789",
+			allowedGroupId: " ",
+			language: "en",
+		},
+		{ ALLOWED_GROUP_ID: "-1001234567890", LOG_LEVEL: "warn" },
+	);
+
+	expect(values.split("\n")).toContain("ALLOWED_GROUP_ID=");
+	expect(values.split("\n")).toContain("LOG_LEVEL=warn");
 });

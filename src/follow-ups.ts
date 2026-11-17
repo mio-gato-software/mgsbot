@@ -210,6 +210,14 @@ async function generateFollowUpMessage(followUp: FollowUp): Promise<string> {
 
 // --- Main checker (called from setInterval) ---
 
+function isCurrentOwnerChat(chatId: number): boolean {
+	return (
+		Number.isSafeInteger(chatId) &&
+		chatId > 0 &&
+		chatId === Number(process.env.OWNER_USER_ID)
+	);
+}
+
 export async function checkAndSendFollowUps(
 	api: Api,
 	isBotOff: () => boolean,
@@ -244,7 +252,10 @@ export async function checkAndSendFollowUps(
 
 		// Find pending follow-ups ready to send
 		const ready = all.filter(
-			(fu) => fu.status === "pending" && fu.scheduledFor <= now,
+			(fu) =>
+				fu.status === "pending" &&
+				fu.scheduledFor <= now &&
+				isCurrentOwnerChat(fu.chatId),
 		);
 
 		// Process first ready follow-up
@@ -282,6 +293,11 @@ export async function checkAndSendFollowUps(
 			return;
 		}
 
+		if (!isCurrentOwnerChat(followUp.chatId)) {
+			if (expired) await saveFollowUps(all);
+			return;
+		}
+
 		// Generate and send
 		followUp.attempts++;
 		expired = false; // any expirations get persisted by the saves below
@@ -289,6 +305,11 @@ export async function checkAndSendFollowUps(
 
 		try {
 			const message = await dependencies.generate(followUp);
+
+			if (!isCurrentOwnerChat(followUp.chatId)) {
+				await saveFollowUps(all);
+				return;
+			}
 
 			if (!message.trim()) {
 				log.debug("[follow-ups] Empty message generated, skipping");
@@ -302,6 +323,10 @@ export async function checkAndSendFollowUps(
 			// Send the message (brief typing pulse first — receipt feedback and
 			// a more human cadence for proactive messages)
 			await dependencies.pulse(api, followUp.chatId);
+			if (!isCurrentOwnerChat(followUp.chatId)) {
+				await saveFollowUps(all);
+				return;
+			}
 			deliveryAttempted = true;
 			await withMarkdownFallback((parseMode) =>
 				api.sendMessage(
