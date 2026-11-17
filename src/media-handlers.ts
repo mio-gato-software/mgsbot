@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { unlink } from "node:fs/promises";
 import { type Context, GrammyError, HttpError } from "grammy";
 import { alertOwner } from "./alerts.ts";
+import { DownloadSizeError, readBoundedDownload } from "./bounded-download.ts";
 import { log } from "./logger.ts";
 import {
 	currentOperationSignal,
@@ -13,6 +14,7 @@ import { transcribeAudio } from "./stt/index.ts";
 import { safeMediaExtension, withRetry } from "./utils.ts";
 
 export const MAX_TEXT_ATTACHMENT_BYTES = 1_000_000;
+const MAX_TELEGRAM_MEDIA_BYTES = 20 * 1024 * 1024;
 
 async function cleanupFile(filePath: string): Promise<void> {
 	try {
@@ -88,12 +90,12 @@ async function downloadTelegramMedia(
 				const file = await getFile();
 				if (!file.file_path)
 					throw new Error(`Telegram did not return an ${kind} file path`);
-				let response: Response;
-				let bytes: ArrayBuffer;
+				if ((file.file_size ?? 0) > MAX_TELEGRAM_MEDIA_BYTES)
+					throw new DownloadSizeError(`Telegram ${kind}`);
 				try {
-					response = await fetch(
+					const response = await fetch(
 						`https://api.telegram.org/file/bot${botToken}/${file.file_path}`,
-						{ signal: requestSignal() },
+						{ signal: requestSignal(), redirect: "error" },
 					);
 					if (!response.ok) {
 						await response.body?.cancel();
@@ -108,13 +110,21 @@ async function downloadTelegramMedia(
 							{},
 						);
 					}
-					bytes = await response.arrayBuffer();
+					const buffer = await readBoundedDownload(
+						response,
+						MAX_TELEGRAM_MEDIA_BYTES,
+						`Telegram ${kind}`,
+					);
+					return { remotePath: file.file_path, buffer };
 				} catch (error) {
 					currentOperationSignal()?.throwIfAborted();
-					if (error instanceof GrammyError) throw error;
+					if (
+						error instanceof GrammyError ||
+						error instanceof DownloadSizeError
+					)
+						throw error;
 					throw new HttpError(`${kind} download connection failed`, error);
 				}
-				return { remotePath: file.file_path, buffer: Buffer.from(bytes) };
 			}),
 		3,
 		500,
@@ -219,22 +229,40 @@ export async function downloadPdfByFileId(
 	fileId: string,
 	messageId: number,
 ): Promise<string> {
-	const file = await api.getFile(fileId);
+	const file = await api.getFile(
+		fileId,
+		currentOperationSignal() as Parameters<Context["api"]["getFile"]>[1],
+	);
 	if (!file.file_path)
 		throw new Error("Telegram did not return a PDF file path");
+	if ((file.file_size ?? 0) > MAX_TELEGRAM_MEDIA_BYTES)
+		throw new DownloadSizeError("PDF attachment");
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
 	log.debug("[downloadPdf] Downloading file:", file.file_path);
 
-	const response = await fetch(url, { signal: requestSignal(60_000) });
+	const response = await fetch(url, {
+		signal: requestSignal(60_000),
+		redirect: "error",
+	});
 	if (!response.ok) {
+		await response.body?.cancel().catch(() => {});
 		throw new Error(
 			`Download failed: ${response.status} ${response.statusText}`,
 		);
 	}
 
 	const filePath = `./audios/pdf_${messageId}_${randomUUID()}.pdf`;
-	const buffer = Buffer.from(await response.arrayBuffer());
-	await Bun.write(filePath, buffer);
+	const buffer = await readBoundedDownload(
+		response,
+		MAX_TELEGRAM_MEDIA_BYTES,
+		"PDF attachment",
+	);
+	try {
+		await Bun.write(filePath, buffer);
+	} catch (error) {
+		await cleanupFile(filePath);
+		throw error;
+	}
 	log.debug("[downloadPdf] Saved to:", filePath, `(${buffer.length} bytes)`);
 	return filePath;
 }
@@ -288,61 +316,38 @@ export function readTextAttachmentBytes(buffer: Uint8Array): string {
 	return decodeTextBytes(buffer);
 }
 
-async function readLimitedTextResponse(
-	response: Response,
-): Promise<Uint8Array> {
-	const contentLength = Number(response.headers.get("content-length"));
-	if (
-		Number.isFinite(contentLength) &&
-		contentLength > MAX_TEXT_ATTACHMENT_BYTES
-	) {
-		throw new Error("Text attachment is too large");
-	}
-
-	if (!response.body) return new Uint8Array();
-	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let totalBytes = 0;
-
-	while (true) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		totalBytes += value.byteLength;
-		if (totalBytes > MAX_TEXT_ATTACHMENT_BYTES) {
-			await reader.cancel().catch(() => {});
-			throw new Error("Text attachment is too large");
-		}
-		chunks.push(value);
-	}
-
-	const buffer = new Uint8Array(totalBytes);
-	let offset = 0;
-	for (const chunk of chunks) {
-		buffer.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return buffer;
-}
-
 export async function downloadTextByFileId(
 	api: Context["api"],
 	botToken: string,
 	fileId: string,
 ): Promise<string> {
-	const file = await api.getFile(fileId);
+	const file = await api.getFile(
+		fileId,
+		currentOperationSignal() as Parameters<Context["api"]["getFile"]>[1],
+	);
 	if (!file.file_path)
 		throw new Error("Telegram did not return a text file path");
+	if ((file.file_size ?? 0) > MAX_TEXT_ATTACHMENT_BYTES)
+		throw new DownloadSizeError("Text attachment");
 	const url = `https://api.telegram.org/file/bot${botToken}/${file.file_path}`;
 	log.debug("[downloadText] Downloading file:", file.file_path);
 
-	const response = await fetch(url, { signal: requestSignal(30_000) });
+	const response = await fetch(url, {
+		signal: requestSignal(30_000),
+		redirect: "error",
+	});
 	if (!response.ok) {
+		await response.body?.cancel().catch(() => {});
 		throw new Error(
 			`Download failed: ${response.status} ${response.statusText}`,
 		);
 	}
 
-	const buffer = await readLimitedTextResponse(response);
+	const buffer = await readBoundedDownload(
+		response,
+		MAX_TEXT_ATTACHMENT_BYTES,
+		"Text attachment",
+	);
 	log.debug("[downloadText] Read text attachment:", `(${buffer.length} bytes)`);
 	return readTextAttachmentBytes(buffer);
 }

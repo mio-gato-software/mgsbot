@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { type Context, GrammyError, HttpError } from "grammy";
 import * as documents from "../src/ai/documents.ts";
 import { resetAlertState, setAlertSink } from "../src/alerts.ts";
+import { readBoundedDownload } from "../src/bounded-download.ts";
 import { handleDocument } from "../src/handlers/document.ts";
 import * as routing from "../src/handlers/routing.ts";
 import {
@@ -645,4 +646,23 @@ test("audio cancellation interrupts metadata and retry-after waits", async () =>
 		),
 	).rejects.toThrow("timed out");
 	expect(getFile).toHaveBeenCalledTimes(1);
+});
+
+test("a media body larger than the byte budget is cancelled even without a content length", async () => {
+	let reads = 0;
+	let cancelled = false;
+	const body = new ReadableStream<Uint8Array>({
+		pull(controller) {
+			reads++;
+			controller.enqueue(new Uint8Array(3));
+		},
+		cancel() {
+			cancelled = true;
+		},
+	});
+	await expect(
+		readBoundedDownload(new Response(body), 4, "Test media"),
+	).rejects.toThrow("too large");
+	expect(cancelled).toBe(true);
+	expect(reads).toBeLessThanOrEqual(3);
 });
