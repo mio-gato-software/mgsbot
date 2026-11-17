@@ -44,10 +44,23 @@ function canCompareEmbedding(
 }
 
 function inferDefaultScope(fact: SemanticFact): SemanticFact["scope"] {
+	if ((fact.sourceChatId ?? 0) > 0) return "chat";
 	if (fact.scope) return fact.scope;
 	if (fact.category === "person") return "person";
 	if (fact.sourceChatId !== undefined) return "chat";
 	return "global";
+}
+
+// Keep facts with unknown provenance apart from facts observed in a chat.
+export function semanticFactPartition(fact: SemanticFact): string {
+	if (inferDefaultScope(fact) === "chat") return `chat:${fact.sourceChatId}`;
+	return fact.sourceChatId === undefined ? "legacy" : "shared";
+}
+
+function factVisibleToChat(fact: SemanticFact, chatId?: number): boolean {
+	if (inferDefaultScope(fact) === "chat")
+		return chatId !== undefined && fact.sourceChatId === chatId;
+	return fact.sourceChatId !== undefined || (chatId ?? 0) >= 0;
 }
 
 function normalizeFactShape(fact: SemanticFact): SemanticFact {
@@ -162,8 +175,12 @@ export async function addSemanticFacts(
 				)
 			)
 				continue;
+			const partition = semanticFactPartition(newFact);
+			const comparable = store.filter(
+				(existing) => semanticFactPartition(existing) === partition,
+			);
 			const requestedReplacements = new Set(newFact.supersedes ?? []);
-			newFact.supersedes = store
+			newFact.supersedes = comparable
 				.filter(
 					(existing) =>
 						requestedReplacements.has(existing.id) &&
@@ -172,20 +189,17 @@ export async function addSemanticFacts(
 						isFactActive(existing) &&
 						existing.category === newFact.category &&
 						normalizeName(existing.subject ?? "") ===
-							normalizeName(newFact.subject ?? "") &&
-						(existing.scope !== "chat" ||
-							existing.sourceChatId === newFact.sourceChatId),
+							normalizeName(newFact.subject ?? ""),
 				)
 				.map((fact) => fact.id);
 			newFact.embeddingModel ??= getEmbeddingModel();
 			newFact.embeddingDim = newFact.embedding.length;
-			newFact.scope = inferDefaultScope(newFact);
 
 			// Find similar existing facts by embedding
 			let merged = false;
 			for (const existing of newFact.supersedes.length
 				? []
-				: findDedupCandidates(store, newFact)) {
+				: findDedupCandidates(comparable, newFact)) {
 				if (requestedReplacements.has(existing.id)) continue;
 				if (
 					normalizeName(existing.subject ?? "") !==
@@ -276,7 +290,7 @@ export async function getRelevantExistingFactsForDedup(
 		};
 
 		for (const fact of findDedupCandidates(
-			store,
+			store.filter((fact) => factVisibleToChat(fact, draft.sourceChatId)),
 			draftFact,
 			draft.content,
 		).sort(
@@ -292,7 +306,13 @@ export async function getRelevantExistingFactsForDedup(
 
 	if (selected.size === 0) {
 		return store
-			.slice()
+			.filter(
+				(fact) =>
+					isFactActive(fact) &&
+					newFactDrafts.some(({ sourceChatId }) =>
+						factVisibleToChat(fact, sourceChatId),
+					),
+			)
 			.sort((a, b) => b.importance - a.importance)
 			.slice(0, Math.min(10, maxCount));
 	}
@@ -317,14 +337,12 @@ export async function getRelevantFacts(
 	const now = Date.now();
 
 	// Exclude permanent facts (they are always included separately)
-	let candidates = store.filter((f) => !f.permanent);
-	candidates = candidates.filter((f) => isFactActive(f, now));
-
-	if (options?.chatId !== undefined) {
-		candidates = candidates.filter(
-			(f) => f.scope !== "chat" || f.sourceChatId === options.chatId,
-		);
-	}
+	let candidates = store.filter(
+		(f) =>
+			!f.permanent &&
+			isFactActive(f, now) &&
+			factVisibleToChat(f, options?.chatId),
+	);
 
 	// Filter by category if specified
 	if (options?.category) {
@@ -395,8 +413,7 @@ export async function getFactsForSubjects(
 	const matching = store.filter(
 		(f) =>
 			isFactActive(f) &&
-			(f.scope !== "chat" ||
-				(chatId !== undefined && f.sourceChatId === chatId)) &&
+			factVisibleToChat(f, chatId) &&
 			!f.permanent &&
 			!f.archivedAt &&
 			f.category === "person" &&
@@ -507,9 +524,7 @@ export async function getPermanentFacts(
 	return (await loadSemanticStore())
 		.filter(
 			(f) =>
-				f.permanent &&
-				isFactActive(f) &&
-				(f.scope !== "chat" || f.sourceChatId === options.chatId),
+				f.permanent && isFactActive(f) && factVisibleToChat(f, options.chatId),
 		)
 		.map((fact) => ({ fact, score: score(fact) }))
 		.sort((a, b) => b.score - a.score)
@@ -522,6 +537,7 @@ export async function confirmSemanticFacts(
 	ids: string[],
 	promotionId: string,
 	confirmedAt: number,
+	chatId?: number,
 ): Promise<void> {
 	if (!ids.length) return;
 	await withSemanticLock(async () => {
@@ -530,6 +546,7 @@ export async function confirmSemanticFacts(
 		for (const fact of store) {
 			if (
 				!ids.includes(fact.id) ||
+				!factVisibleToChat(fact, chatId) ||
 				!isFactActive(fact) ||
 				fact.appliedFactIds?.includes(receipt)
 			)

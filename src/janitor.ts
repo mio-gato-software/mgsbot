@@ -8,6 +8,7 @@ import {
 	isFactActive,
 	loadSemanticStore,
 	saveSemanticStore,
+	semanticFactPartition,
 } from "./memory/semantic.ts";
 import { readStore, writeStore } from "./memory/storage.ts";
 import { memoryPath } from "./runtime-paths.ts";
@@ -41,7 +42,7 @@ export function clusterFactsBySubject(
 			!isFactActive(fact, now)
 		)
 			continue;
-		const key = `${fact.category}:${normalizeName(fact.subject)}`;
+		const key = `${semanticFactPartition(fact)}:${fact.category}:${normalizeName(fact.subject)}`;
 		const list = clusters.get(key) ?? [];
 		list.push(fact);
 		clusters.set(key, list);
@@ -71,7 +72,11 @@ export function applyFactRetirements(
 			? byId.get(retirement.supersededBy)
 			: undefined;
 		const hasValidSuccessor =
-			!!successor && successor.id !== fact.id && isFactActive(successor, now);
+			!!successor &&
+			reviewedIds.has(successor.id) &&
+			successor.id !== fact.id &&
+			semanticFactPartition(successor) === semanticFactPartition(fact) &&
+			isFactActive(successor, now);
 		fact.supersededBy = hasValidSuccessor ? successor.id : JANITOR_RETIRED;
 		fact.validUntil = now;
 		fact.confidence = Math.min(fact.confidence, 0.2);

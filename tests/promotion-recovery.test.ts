@@ -25,6 +25,7 @@ import {
 	SENSORY_DIR,
 	saveSensory,
 } from "../src/memory/sensory.ts";
+import { retrieveMemoryContext } from "../src/prompt/retrieval.ts";
 import { memoryPath } from "../src/runtime-paths.ts";
 import type { ConversationMessage } from "../src/types.ts";
 
@@ -102,6 +103,24 @@ afterEach(async () => {
 async function queue() {
 	await spoolChunk({ chatId, messages, reason: "overflow" });
 }
+
+test("a promoted fact from a private conversation never enters the group context", async () => {
+	await queue();
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
+	expect(await loadSemanticStore()).toEqual([
+		expect.objectContaining({ scope: "chat", sourceChatId: chatId }),
+	]);
+	const deps = {
+		queryEmbedding: async () => ({ embedding: [1, 0, 0], text: "Ana plans" }),
+	};
+	expect(
+		(await retrieveMemoryContext({ chatId, messages }, deps)).relevantFacts,
+	).toHaveLength(1);
+	expect(
+		(await retrieveMemoryContext({ chatId: -chatId, messages }, deps))
+			.relevantFacts,
+	).toHaveLength(0);
+});
 
 test("failure before all embeddings finish leaves a durable chunk and no partial episode", async () => {
 	await queue();
