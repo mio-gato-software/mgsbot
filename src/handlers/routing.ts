@@ -173,7 +173,10 @@ function textMentionsBotName(text: string): boolean {
 	return nameRegex.test(normalizeForLooseMatch(text));
 }
 
-export function detectMentionType(ctx: Context, botId: number): MentionType {
+export function detectTelegramMentionType(
+	ctx: Context,
+	botId: number,
+): "reply" | "tag" | "none" {
 	// Check if replied to the bot - always respond
 	if (ctx.message?.reply_to_message?.from?.id === botId) return "reply";
 
@@ -191,10 +194,14 @@ export function detectMentionType(ctx: Context, botId: number): MentionType {
 		}
 	}
 
-	// Check if called by name - AI decides if addressed or just mentioned
-	if (textMentionsBotName(text)) return "name";
-
 	return "none";
+}
+
+export function detectMentionType(ctx: Context, botId: number): MentionType {
+	const explicit = detectTelegramMentionType(ctx, botId);
+	if (explicit !== "none") return explicit;
+	const text = ctx.message?.text ?? ctx.message?.caption ?? "";
+	return textMentionsBotName(text) ? "name" : "none";
 }
 
 export function detectTranscribedMentionType(
