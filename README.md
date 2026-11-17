@@ -98,7 +98,7 @@ Send commands in the owner's DM.
 | `/help` | List commands |
 | `/provider [name] [model]` | Inspect configuration or change chat until restart; other services stay independently configured |
 | `/allowphotorequest [group]` | Authorize one photo request in the DM or allowed group |
-| `/off` / `/on` | Disable / enable responses without stopping the process |
+| `/off` / `/on` | Pause / resume message processing without stopping the process |
 | `/optimize` | Check memory-confidence decay and report statistics |
 
 ## Deployment and data

@@ -100,3 +100,36 @@ describe("atomicWriteFile", () => {
 		await unlink(testPath).catch(() => {});
 	});
 });
+
+test("paused messages stop before handlers that download or analyze media", async () => {
+	const { setBotOff } = await import("../src/bot-state.ts");
+	const { pausedMessageMiddleware } = await import("../src/handlers.ts");
+	const { makeMockContext } = await import("./helpers/telegram-mock.ts");
+	setBotOff(true);
+	try {
+		for (const message of [
+			{ voice: { file_id: "voice" } },
+			{ document: { file_id: "pdf", mime_type: "application/pdf" } },
+			{ photo: [{ file_id: "photo", width: 32, height: 32 }] },
+		]) {
+			const { ctx, spies } = makeMockContext(message);
+			await pausedMessageMiddleware(ctx, async () => {
+				throw Error("Paused content reached a media handler");
+			});
+			expect(spies.reactions).toHaveLength(1);
+		}
+		const group = makeMockContext({ chatType: "group", text: "Hola a todos" });
+		await pausedMessageMiddleware(group.ctx, async () => {
+			throw Error("Paused content reached a group handler");
+		});
+		expect(group.spies.reactions).toHaveLength(0);
+	} finally {
+		setBotOff(false);
+	}
+	const { ctx } = makeMockContext({ text: "Hola" });
+	let resumed = false;
+	await pausedMessageMiddleware(ctx, async () => {
+		resumed = true;
+	});
+	expect(resumed).toBe(true);
+});

@@ -35,6 +35,7 @@ import {
 	buildGroupResponseOptions,
 	buildReplyAwareTextContent,
 	detectMentionType,
+	detectTelegramMentionType,
 	getLastBotMessageBeforeLatest,
 	getTelegramReplyContext,
 	isIgnorableGroupMessage,
@@ -135,6 +136,23 @@ export const securityMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
 	await next();
 };
 
+export const pausedMessageMiddleware: MiddlewareFn<Context> = async (
+	ctx,
+	next,
+) => {
+	const group = isGroupChat(ctx);
+	if (!ctx.message || (!isBotOff() && !(group && isSleepingHour()))) {
+		await next();
+		return;
+	}
+	if (group && detectTelegramMentionType(ctx, ctx.me.id) === "none") return;
+	try {
+		await ctx.react("😴");
+	} catch {
+		log.debug("[off] Could not send paused reaction");
+	}
+};
+
 export function registerHandlers(bot: Bot): void {
 	const botToken = bot.token;
 
@@ -143,6 +161,7 @@ export function registerHandlers(bot: Bot): void {
 
 	// Slash commands
 	registerCommands(bot);
+	bot.use(pausedMessageMiddleware);
 
 	// Voice messages and audio files
 	registerVoiceHandlers(bot, botToken);
