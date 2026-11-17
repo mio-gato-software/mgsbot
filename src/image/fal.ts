@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import { downloadFalAsset } from "../fal-download.ts";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
 import {
@@ -136,17 +137,12 @@ export class FalImageProvider implements ImageProvider {
 			throw new Error("No image URL in fal.ai response");
 		}
 
-		// Download the generated image
-		const imageResponse = await fetch(imageUrl, {
-			signal: requestSignal(this.downloadTimeoutMs),
-		});
-		if (!imageResponse.ok) {
-			throw new Error(
-				`Failed to download fal.ai image: ${imageResponse.status}`,
-			);
-		}
-
+		const image = await downloadFalAsset(
+			imageUrl,
+			"image",
+			requestSignal(this.downloadTimeoutMs),
+		);
 		log.debug("[image:fal] Image generated successfully");
-		return Buffer.from(await imageResponse.arrayBuffer());
+		return image;
 	}
 }

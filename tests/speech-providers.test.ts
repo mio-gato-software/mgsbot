@@ -239,7 +239,9 @@ for (const Provider of [
 	test(`${Provider.name} sends the selected voice and writes returned audio`, async () => {
 		intercept((request) =>
 			request.url.startsWith("https://fal.run/")
-				? Response.json({ audio: { url: "https://audio.test/fal.mp3" } })
+				? Response.json({
+						audio: { url: "https://fal.media/files/example/fal.mp3" },
+					})
 				: request.url.startsWith("https://api.inworld.ai/")
 					? Response.json({
 							audioContent: Buffer.from("mp3 bytes").toString("base64"),
@@ -278,7 +280,7 @@ for (const Provider of [
 		}
 		if (Provider === FalTtsProvider) {
 			expect(body).toMatchObject({ text: "Hello", voice: "Sarah" });
-			expect(requests[1]?.url).toBe("https://audio.test/fal.mp3");
+			expect(requests[1]?.url).toBe("https://fal.media/files/example/fal.mp3");
 		}
 	});
 	test(`${Provider.name} propagates service failure without saving error bytes`, async () => {
@@ -289,7 +291,9 @@ for (const Provider of [
 	test(`${Provider.name} concurrent replies get distinct files even in the same millisecond`, async () => {
 		intercept((request) =>
 			request.url.startsWith("https://fal.run/")
-				? Response.json({ audio: { url: "https://audio.test/fal.mp3" } })
+				? Response.json({
+						audio: { url: "https://fal.media/files/example/fal.mp3" },
+					})
 				: request.url.startsWith("https://api.inworld.ai/")
 					? Response.json({
 							audioContent: Buffer.from("mp3 bytes").toString("base64"),
@@ -319,7 +323,9 @@ test("fal TTS rejects a missing audio URL and a failed download", async () => {
 	);
 	intercept((request) =>
 		request.url.startsWith("https://fal.run/")
-			? Response.json({ audio: { url: "https://audio.test/file" } })
+			? Response.json({
+					audio: { url: "https://fal.media/files/example/file" },
+				})
 			: new Response("bad", { status: 503 }),
 	);
 	await expect(new FalTtsProvider().synthesize("Hello")).rejects.toThrow("503");
@@ -458,4 +464,21 @@ test("Gemini upload failure cannot start generation or delete an unknown file", 
 	);
 	expect(generate).not.toHaveBeenCalled();
 	expect(remove).not.toHaveBeenCalled();
+});
+
+test("fal asset redirects stay on the provider media CDN", async () => {
+	intercept((request) =>
+		request.url.startsWith("https://fal.run/")
+			? Response.json({
+					audio: { url: "https://fal.media/files/example/start.mp3" },
+				})
+			: new Response(null, {
+					status: 302,
+					headers: { Location: "https://example.org/file.mp3" },
+				}),
+	);
+	await expect(new FalTtsProvider().synthesize("Hello")).rejects.toThrow(
+		"Unexpected fal media destination",
+	);
+	expect(requests).toHaveLength(2);
 });

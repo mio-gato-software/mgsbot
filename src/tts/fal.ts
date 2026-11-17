@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { downloadFalAsset } from "../fal-download.ts";
 import { log } from "../logger.ts";
 import { requestSignal } from "../operation-deadline.ts";
 import type { TtsProvider } from "./types.ts";
@@ -55,18 +56,12 @@ export class FalTtsProvider implements TtsProvider {
 			throw new Error("fal.ai TTS returned no audio URL");
 		}
 
-		// Download the audio file
-		const audioResponse = await fetch(audioUrl, {
-			signal: requestSignal(60_000),
-		});
-		if (!audioResponse.ok) {
-			throw new Error(
-				`Failed to download fal.ai TTS audio: ${audioResponse.status}`,
-			);
-		}
-
+		const buffer = await downloadFalAsset(
+			audioUrl,
+			"audio",
+			requestSignal(60_000),
+		);
 		const filePath = `./audios/tts_fal_${Date.now()}_${randomUUID()}.mp3`;
-		const buffer = Buffer.from(await audioResponse.arrayBuffer());
 		log.debug("[TTS:fal] Received bytes:", buffer.byteLength);
 		await Bun.write(filePath, buffer);
 		return filePath;

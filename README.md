@@ -7,7 +7,7 @@
 A conversational Telegram bot with persistent memory, a configurable personality, voice replies, and image generation. Built with Bun, TypeScript, and grammY, for one owner in DMs and optionally one allowed group.
 
 - Remembers facts, conversation summaries, relationships, and monthly chapters; adaptive personality learns gradually from direct user feedback.
-- Handles text, `.txt` files, voice notes, audio, photos, PDFs, public web pages, and YouTube links.
+- Handles text, `.txt` files, voice notes, audio, photos, PDFs, public web pages, and YouTube links. Telegram audio, images, and PDFs have a 20 MiB download cap, and text files have a 1 MB cap. Generated fal assets use its media CDN and a 32 MiB cap.
 - Generates character photos, edits user images, and creates illustrations for scheduled reports.
 - Supports natural-language reminders, recurring research, source/style preferences, and conditional actions such as a celebration meme after a confirmed win.
 - Searches the web, reads public pages, and checks current/hourly weather with any chat provider.

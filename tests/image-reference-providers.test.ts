@@ -20,11 +20,11 @@ test("reference requests carry the original image and composition guidance for t
 				requests.push({ provider: 'openai', endpoint: new URL(request.url).pathname, prompt: form.get('prompt'), bytes: await image.text() });
 				return Response.json({ data: [{ b64_json: 'cGl4ZWxz' }] });
 			}
-			if (request.url === 'https://example.com/result.png') return new Response('pixels');
+			if (request.url === 'https://fal.media/files/example/result.png') return new Response('pixels');
 			const body = await request.json();
 			if (new URL(request.url).hostname === 'fal.run') {
 				requests.push({ provider: 'fal', prompt: body.prompt, bytes: Buffer.from(body.image_urls[0].split(',')[1], 'base64').toString() });
-				return Response.json({ images: [{ url: 'https://example.com/result.png' }] });
+				return Response.json({ images: [{ url: 'https://fal.media/files/example/result.png' }] });
 			}
 			const parts = body.contents[0].parts;
 			requests.push({ provider: 'gemini', prompt: parts.find(p => p.text).text, bytes: Buffer.from(parts.find(p => p.inlineData).inlineData.data, 'base64').toString() });
