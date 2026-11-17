@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
 	evaluateBehavior,
 	renderBehavior,
+	UnverifiableBehaviorEvidence,
 } from "../src/commitments/behavior-evaluation.ts";
 import {
 	type BehaviorServices,
@@ -518,7 +519,7 @@ test("evaluation alerts identify the failing stage and reason without attempting
 	await runTaskBehaviors(task, observation(), {
 		...services,
 		evaluate: async () => {
-			throw new Error("Unverifiable event evidence at index 2");
+			throw new UnverifiableBehaviorEvidence(2);
 		},
 		render: async () => {
 			renders++;

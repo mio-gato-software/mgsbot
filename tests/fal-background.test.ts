@@ -79,7 +79,7 @@ test("failed background response never falls back to Astra when disabled", async
 		generateBackgroundResponseWithModel("", [
 			{ role: "user", content: "Test" },
 		]),
-	).rejects.toThrow("injected failure");
+	).rejects.toThrow(/^fal\.ai reported a model error$/);
 	expect(models).toEqual(["openai/gpt-6-luna"]);
 });
 test("missing background key does not invoke chat when fallback is disabled", async () => {
@@ -152,7 +152,7 @@ test("research recovery cannot return to the failed chat model even when global 
 			"scheduled-research-recovery",
 			{ allowChatFallback: false },
 		),
-	).rejects.toThrow("recovery provider failed");
+	).rejects.toThrow(/^fal\.ai reported a model error$/);
 	expect(models).toEqual(["openai/gpt-6-luna"]);
 });
 

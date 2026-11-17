@@ -53,6 +53,13 @@ function groundedQuote(
 }
 
 /** No draft/report text is accepted as evidence of the trigger. */
+export class UnverifiableBehaviorEvidence extends Error {
+	constructor(index: number) {
+		super(`Unverifiable event evidence at index ${index}`);
+		this.name = "UnverifiableBehaviorEvidence";
+	}
+}
+
 export async function evaluateBehavior(
 	behavior: ConditionalBehavior,
 	evidence: string[],
@@ -94,9 +101,7 @@ export async function evaluateBehavior(
 							proof.quote,
 						);
 						if (verified === null)
-							throw new Error(
-								`Unverifiable event evidence at index ${proof.index}`,
-							);
+							throw new UnverifiableBehaviorEvidence(proof.index);
 						proof.quote = verified;
 					}
 				if (
