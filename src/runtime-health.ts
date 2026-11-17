@@ -1,6 +1,21 @@
+import { rm } from "node:fs/promises";
 import { UPDATE_TIMEOUT_MS } from "./operation-deadline.ts";
 
-export const HEARTBEAT_FILE = "/tmp/mgsbot-heartbeat";
+import { memoryPath } from "./runtime-paths.ts";
+import { atomicWriteFile } from "./utils.ts";
+
+export const HEARTBEAT_FILENAME = "runtime-health.json";
+export const HEARTBEAT_FILE = memoryPath(HEARTBEAT_FILENAME);
+
+export function writeRuntimeHeartbeat(
+	state: RuntimeHealthSnapshot,
+): Promise<void> {
+	return atomicWriteFile(HEARTBEAT_FILE, JSON.stringify(state));
+}
+
+export function removeRuntimeHeartbeat(): Promise<void> {
+	return rm(HEARTBEAT_FILE, { force: true });
+}
 export const UPDATE_CONCURRENCY = 4;
 const HEALTH_FRESHNESS_MS = 120_000;
 

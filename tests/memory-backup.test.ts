@@ -50,8 +50,11 @@ test("incomplete copies are replaced, temporary files excluded, restored data va
 	const dest = join(memoryDir, "backups/2040-01-02");
 	await mkdir(dest, { recursive: true });
 	await writeFile(join(memoryDir, "semantic.failed.tmp"), "partial");
+	await writeFile(join(memoryDir, "runtime-health.json"), "{}");
 	await runMemoryBackup({ memoryDir, date: "2040-01-02" });
-	expect(await readdir(dest)).not.toContain("semantic.failed.tmp");
+	const files = await readdir(dest);
+	expect(files).not.toContain("semantic.failed.tmp");
+	expect(files).not.toContain("runtime-health.json");
 	const restore = await fixture();
 	await cp(dest, restore, { recursive: true });
 	expect(

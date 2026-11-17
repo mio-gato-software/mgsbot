@@ -212,3 +212,50 @@ test("shutdown cancels active work and drains queued turns without starting them
 	expect(events).toEqual(["slow"]);
 	expect(health.snapshot(0).oldestTurnStartedAt).toBeNull();
 });
+
+test("the heartbeat and shutdown cleanup use the instance memory directory", async () => {
+	const { mkdtemp, rm } = await import("node:fs/promises");
+	const { join } = await import("node:path");
+	const { memoryPath } = await import("../src/runtime-paths.ts");
+	const root = await mkdtemp(memoryPath("heartbeats-"));
+	const first = join(root, "first");
+	const second = join(root, "second");
+	async function run(instance: string, command: string) {
+		const child = Bun.spawn(
+			[
+				process.execPath,
+				"--eval",
+				`
+				import { RuntimeHealth, writeRuntimeHeartbeat, removeRuntimeHeartbeat } from "./src/runtime-health.ts";
+				await ${command};
+			`,
+			],
+			{
+				env: { ...process.env, MEMORY_DIR: instance },
+				stdout: "ignore",
+				stderr: "pipe",
+			},
+		);
+		const [exit, stderr] = await Promise.all([
+			child.exited,
+			new Response(child.stderr).text(),
+		]);
+		expect(stderr).toBe("");
+		expect(exit).toBe(0);
+	}
+	try {
+		await Promise.all([
+			run(first, "writeRuntimeHeartbeat(new RuntimeHealth().snapshot(1))"),
+			run(second, "writeRuntimeHeartbeat(new RuntimeHealth().snapshot(2))"),
+		]);
+		const firstFile = Bun.file(join(first, "runtime-health.json"));
+		const secondFile = Bun.file(join(second, "runtime-health.json"));
+		expect(await firstFile.json()).toMatchObject({ inFlightUpdates: 1 });
+		expect(await secondFile.json()).toMatchObject({ inFlightUpdates: 2 });
+		await run(first, "removeRuntimeHeartbeat()");
+		expect(await firstFile.exists()).toBe(false);
+		expect(await secondFile.exists()).toBe(true);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

@@ -13,6 +13,7 @@ import { basename, join, resolve } from "node:path";
 import { getDateString } from "./bot-time.ts";
 import { log } from "./logger.ts";
 import { withPersistenceLock } from "./persistence-coordination.ts";
+import { HEARTBEAT_FILENAME } from "./runtime-health.ts";
 import { MEMORY_DIR, memoryPath } from "./runtime-paths.ts";
 import { atomicWriteFile } from "./utils.ts";
 
@@ -20,7 +21,11 @@ export const BACKUPS_DIR = memoryPath("backups");
 const RETENTION_DAYS = 7;
 const BACKUP_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const MANIFEST = ".complete.json";
-const EXCLUDED_FILES = new Set(["embedding-cache.json", MANIFEST]);
+const EXCLUDED_FILES = new Set([
+	"embedding-cache.json",
+	HEARTBEAT_FILENAME,
+	MANIFEST,
+]);
 const inProgress = new Map<string, Promise<void>>();
 
 type Manifest = Record<string, string>;
