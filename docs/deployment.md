@@ -2,6 +2,8 @@
 
 The public repository documents the application, not a particular operator's infrastructure. Host addresses, SSH aliases, account names, instance names, backup inventories, process IDs and production conversations belong in private operator records outside version control. The root `deploy-notes/` and `deploy-backups/` directories are ignored for that purpose.
 
+Run `sh scripts/check-private-files.sh` from the repository root after staging changes and before pushing. It checks the Git index against the repository ignore rules. CI runs the same check. Review outgoing diffs for personal information and credentials in tracked files.
+
 ## Installation layout
 
 Run the executable from the installation directory containing its `.env` and persistent data. Relative paths resolve from that working directory. `MEMORY_DIR` can select a separate data root. Give each instance its own directory, credentials, data and service; in-process locks do not coordinate multiple bot processes against one store.
