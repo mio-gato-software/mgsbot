@@ -5,6 +5,8 @@ import { readPublicPage } from "./browser-reader.ts";
 import { log } from "./logger.ts";
 import { readStore, writeStore } from "./memory/storage.ts";
 import { memoryPath } from "./runtime-paths.ts";
+import { fetchPublicWebPage } from "./web-content.ts";
+import { hasPrivateQueryData, isPublicLookupUrl } from "./web-privacy.ts";
 import {
 	isWebSearchEnabled,
 	searchBrave,
@@ -67,12 +69,20 @@ export class WorldContextService {
 	}
 
 	/** Public page evidence stays transient and separate from personal memory. */
-	async read(_chatId: number, url: string): Promise<string> {
+	async read(
+		chatId: number,
+		url: string,
+		source: "lookup" | "shared-link" = "lookup",
+	): Promise<string> {
 		if (!this.isReadEnabled())
 			return "Page reading is disabled. No page was opened.";
+		if (!isPublicLookupUrl(url))
+			return "Page reading was blocked because the URL may contain private data. Do not repeat the URL.";
 		return this.serialized(async () => {
 			try {
-				const key = createHash("sha256").update(url).digest("hex");
+				const key = createHash("sha256")
+					.update(JSON.stringify([chatId, source, url]))
+					.digest("hex");
 				const path = join(this.directory, "pages.json");
 				const schema = z
 					.array(
@@ -108,7 +118,10 @@ export class WorldContextService {
 					return "Daily page-reading limit reached. No new page was opened.";
 				budget.attempts++;
 				await writeStore(budgetPath, budget, budgetSchema, true);
-				const page = await (this.options.read ?? readPublicPage)(url);
+				const read =
+					this.options.read ??
+					(source === "shared-link" ? fetchPublicWebPage : readPublicPage);
+				const page = await read(url);
 				const evidence = JSON.stringify(page);
 				await writeStore(
 					path,
@@ -135,7 +148,10 @@ export class WorldContextService {
 			lastAttemptAt: 0,
 			entries: [],
 		}));
-		const live = cache.entries.filter((entry) => entry.expiresAt > this.now());
+		const live = cache.entries.filter(
+			(entry) =>
+				entry.expiresAt > this.now() && !hasPrivateQueryData(entry.query),
+		);
 		if (live.length !== cache.entries.length) {
 			cache.entries = live;
 			await writeStore(path, cache, cacheSchema, true);
@@ -144,6 +160,8 @@ export class WorldContextService {
 	}
 
 	private async request(request: WebSearchRequest) {
+		if (hasPrivateQueryData(request.query))
+			throw new Error("Search terms may contain private data");
 		const path = join(this.directory, "budget.json");
 		const day = new Date(this.now()).toISOString().slice(0, 10);
 		const budget = await readStore(path, budgetSchema, () => ({
@@ -256,6 +274,8 @@ export class WorldContextService {
 	async search(chatId: number, request: WebSearchRequest): Promise<string> {
 		if (!this.isEnabled())
 			return "Web search is disabled. No search was performed.";
+		if (hasPrivateQueryData(request.query))
+			return "Web search was blocked because the query may contain private data. Do not repeat the query.";
 		return this.serialized(async () => {
 			try {
 				const file = `chats/${chatId}.json`;
