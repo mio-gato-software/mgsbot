@@ -42,7 +42,12 @@ function applyFormat(
 			change?.description ??
 			current?.description ??
 			"Illustrate the complete current report.",
-		canvas: change?.canvas ?? current?.canvas ?? "auto",
+		canvas:
+			change?.canvas === "mobile" &&
+			typeof current?.canvas === "object" &&
+			current.canvas.width < current.canvas.height
+				? current.canvas
+				: (change?.canvas ?? current?.canvas ?? "auto"),
 	};
 }
 

@@ -301,6 +301,7 @@ test("a saved nonstandard canvas yields the requested pixel dimensions even with
 				.png()
 				.buffer();
 		},
+		async () => null,
 	);
 	expect(await new Bun.Image(image).metadata()).toMatchObject(dimensions);
 });
@@ -416,5 +417,47 @@ test("mobile and exact portrait canvases reject square and landscape source imag
 				),
 			).rejects.toThrow("non-portrait");
 		}
+	}
+});
+
+test("a framed report is redrawn once and only a readable edge-to-edge portrait is released", async () => {
+	const pixel = Buffer.from(
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",
+		"base64",
+	);
+	const portrait = await new Bun.Image(pixel).resize(100, 160).png().buffer();
+	const dimensions = { width: 808, height: 1280 };
+	for (const accepted of [true, false]) {
+		let reviews = 0;
+		const prompts: string[] = [];
+		const result = generateScheduledImage(
+			{
+				description: "Una tabla sin marco",
+				canvas: dimensions,
+				delivery: "image_only",
+			},
+			"Azul 3–2 Verde",
+			async (prompt) => {
+				prompts.push(prompt);
+				return portrait;
+			},
+			async (image, visual, report) => {
+				expect(await new Bun.Image(image).metadata()).toMatchObject(dimensions);
+				expect(visual.description).toBe("Una tabla sin marco");
+				expect(report).toBe("Azul 3–2 Verde");
+				reviews++;
+				return reviews === 2 && accepted
+					? null
+					: "Remove the decorative frame and enlarge the team names.";
+			},
+		);
+		if (accepted)
+			expect(await new Bun.Image(await result).metadata()).toMatchObject(
+				dimensions,
+			);
+		else await expect(result).rejects.toThrow("failed validation");
+		expect(prompts).toHaveLength(2);
+		expect(prompts[1]).toContain("Remove the decorative frame");
+		expect(prompts[1]).toContain("Azul 3–2 Verde");
 	}
 });

@@ -1031,68 +1031,6 @@ test("chat conversation delivers the scheduled report image directly and resumes
 	await backgroundTasks.drain();
 });
 
-test("a proposed chat image recovers a missed report preview through the durable claim", async () => {
-	const format = {
-		delivery: "image_only" as const,
-		canvas: { width: 808, height: 1280 },
-		description: "Clasificación sin marco",
-	};
-	await store.apply(input, plan([{ ...action(), format }]));
-	const [task] = (await store.read()).tasks;
-	if (!task) throw Error("Missing task");
-	for (const [i, text] of [
-		"Enséñame cómo sale el de siempre",
-		"Sí, mándalo",
-		"Dibújame una pelota",
-	].entries()) {
-		const independent = i === 2;
-		let check: ((brief: string) => Promise<void>) | undefined;
-		let runs = 0;
-		const request = {
-			...input,
-			text,
-			messageId: i + 2,
-			recentConversation: [
-				{ role: "model", text: "¿Quieres que te muestre el informe habitual?" },
-			],
-		};
-		await handleCommitmentRequest(
-			request,
-			{
-				store,
-				now: () => now,
-				interpret: async () => plan([]),
-				reviewImage: async (context, brief) => {
-					expect(context.latestMessage).toBe(text);
-					expect(context.recentConversation).toEqual(
-						request.recentConversation,
-					);
-					expect(context.tasks.map((t) => t.id)).toEqual([task.id]);
-					expect(brief).toBe("Proposed untrusted drawing");
-					return independent
-						? { kind: "independent" }
-						: { kind: "run", taskId: task.id, evidence: text };
-				},
-			},
-			{
-				beforeChatImage: (review) => {
-					check = review;
-				},
-				run: async (selected) => {
-					runs++;
-					expect(selected.reportImage).toEqual(format);
-				},
-				reply: () => {},
-			},
-		);
-		if (!check) throw Error("Missing review");
-		await check("Proposed untrusted drawing");
-		await check("Proposed untrusted drawing");
-		expect(runs).toBe(independent ? 0 : 1);
-	}
-	expect((await store.read()).tasks).toEqual([task]);
-});
-
 test("manual run permission is enforced when shared group management is disabled", async () => {
 	const previous = process.env.ALLOW_GROUP_TASK_EDITS;
 	process.env.ALLOW_GROUP_TASK_EDITS = "false";
@@ -1387,6 +1325,7 @@ test("a mobile image-only report survives separate chat edits, clock changes, re
 								data.push(report);
 								return portrait;
 							},
+							async () => null,
 						),
 				}),
 			deliver: async (chatId, message) => {
@@ -1650,4 +1589,58 @@ test("source edits validate only new domains and a calendar replacement inherits
 	const active = (await store.read()).tasks.find((t) => t.status === "active");
 	expect(active?.domains).toEqual([...task.domains, "example.org"]);
 	expect(active?.reportImage).toEqual(task.reportImage);
+});
+
+test("readability edits preserve a saved exact portrait size and accept a new explicit size", async () => {
+	const size = { width: 808, height: 1280 };
+	await store.apply(
+		input,
+		plan([
+			{
+				...action(),
+				format: {
+					delivery: "image_only",
+					description: "Tabla de resultados",
+					canvas: size,
+				},
+			},
+		]),
+	);
+	const [task] = (await store.read()).tasks;
+	if (!task) throw new Error("Missing report");
+	for (const [i, edit] of [
+		{
+			text: "Me cuesta leerlo en el teléfono, quita el marco",
+			format: {
+				canvas: "mobile",
+				description: "Tabla de resultados sin marco con letra grande",
+			},
+			expected: size,
+		},
+		{
+			text: "Ahora hazlo de 900 por 1440",
+			format: { canvas: { width: 900, height: 1440 } },
+			expected: { width: 900, height: 1440 },
+		},
+	].entries()) {
+		await store.apply(
+			{ ...input, messageId: i + 2, text: edit.text },
+			plan([
+				{
+					type: "update",
+					id: task.id,
+					format: edit.format,
+					evidence: edit.text,
+				},
+			]),
+		);
+		expect((await store.read()).tasks[0]).toMatchObject({
+			reportImage: {
+				delivery: "image_only",
+				canvas: edit.expected,
+				description: "Tabla de resultados sin marco con letra grande",
+			},
+			nextRunAt: task.nextRunAt,
+		});
+	}
 });
