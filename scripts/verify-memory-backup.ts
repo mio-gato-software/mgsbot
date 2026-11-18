@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { z } from "zod";
-import { stateSchema } from "../src/commitments/schema.ts";
+import { COMMITMENTS_VERSION, stateSchema } from "../src/commitments/schema.ts";
 import {
 	chaptersSchema,
 	checkInsSchema,
@@ -20,7 +20,7 @@ const stores = new Map<string, { schema: z.ZodType; version?: number }>([
 	["identities.json", { schema: identitiesSchema }],
 	["follow-ups.json", { schema: followUpsSchema }],
 	["check-ins.json", { schema: checkInsSchema }],
-	["commitments.json", { schema: stateSchema, version: 2 }],
+	["commitments.json", { schema: stateSchema, version: COMMITMENTS_VERSION }],
 ]);
 const chatStores = new Map<string, z.ZodType>([
 	["sensory", sensorySchema],

@@ -556,6 +556,7 @@ test("a group retry passes the replied-to bot photo caption to task interpretati
 	services.commitments = async (input) => {
 		expect(input.text).toBe("Inténtalo otra vez");
 		expect(input.replyContext).toEqual({
+			messageId: 77,
 			text: "El reporte falló durante la revisión.",
 			isBot: true,
 		});

@@ -352,6 +352,10 @@ test("image clarification survives restart and remains in model context when res
 						id: original.id,
 						instruction,
 						evidence: "Esa imagen.",
+						format: {
+							delivery: "image_and_text",
+							description: "Tabla de posiciones actualizada",
+						},
 					},
 				]);
 			},
@@ -380,6 +384,8 @@ test("image clarification survives restart and remains in model context when res
 	);
 	expect(saved?.schedule.time).toBe("06:30");
 	expect(saved?.instruction).toBe(instruction);
+	expect(saved?.reportImage).toEqual(updated?.reportImage);
+	expect(saved?.reportImage?.delivery).toBe("image_and_text");
 });
 
 const screenshotRequest =
@@ -1001,7 +1007,7 @@ test("chat conversation delivers the scheduled report image directly and resumes
 		const captions: string[] = [];
 		ctx.replyWithPhoto = async (_photo, options) => {
 			captions.push(options?.caption ?? "");
-			return {} as never;
+			return { message_id: 50 } as never;
 		};
 		expect(await processConversation(ctx, text, "Ejemplo", {}, services)).toBe(
 			true,
@@ -1014,7 +1020,9 @@ test("chat conversation delivers the scheduled report image directly and resumes
 	expect(runCalls).toBe(1);
 	expect(behaviorCalls).toBe(1);
 	expect(chatCalls).toBe(2);
-	expect((await store.read()).tasks).toEqual(before);
+	expect((await store.read()).tasks).toEqual([
+		{ ...task, reportPhotoIds: [50] },
+	]);
 	expect(
 		(await loadSensory(input.chatId)).messages.some(
 			(m) => m.role === "model" && m.content === report,
@@ -1081,7 +1089,17 @@ test("a report design can be inspected and saved in the same turn with direct us
 					"Green header, two columns",
 				);
 				return plan([
-					{ type: "update", id: original.id, instruction, evidence: text },
+					{
+						type: "update",
+						id: original.id,
+						instruction,
+						evidence: text,
+						format: {
+							delivery: "image_and_text",
+							canvas: { width: 720, height: 1080 },
+							description: "Green header, two columns",
+						},
+					},
 				]);
 			},
 		},
@@ -1096,6 +1114,10 @@ test("a report design can be inspected and saved in the same turn with direct us
 	expect((await store.read()).tasks).toMatchObject([
 		{
 			id: original.id,
+			reportImage: {
+				canvas: { width: 720, height: 1080 },
+				description: "Green header, two columns",
+			},
 			instruction,
 			evidence: text,
 			expiresAt: original.expiresAt,
@@ -1133,7 +1155,13 @@ test.each(["Sí", "Así mismo", "Adelante con ese formato"])(
 						pendingQuestion: question,
 					});
 					return plan([
-						{ type: "update", id: task.id, instruction, evidence: text },
+						{
+							type: "update",
+							id: task.id,
+							instruction,
+							evidence: text,
+							format: { delivery: "image_and_text", canvas: "mobile" },
+						},
 					]);
 				},
 			},
@@ -1142,6 +1170,7 @@ test.each(["Sí", "Así mismo", "Adelante con ese formato"])(
 		expect(state.pending).toHaveLength(0);
 		expect(state.tasks[0]).toMatchObject({
 			id: task.id,
+			reportImage: { canvas: "mobile" },
 			instruction,
 			evidence: text,
 			schedule: task.schedule,
@@ -1149,3 +1178,414 @@ test.each(["Sí", "Así mismo", "Adelante con ese formato"])(
 		});
 	},
 );
+
+test("a mobile image-only report survives separate chat edits, clock changes, renewal and restart", async () => {
+	const {
+		generateScheduledDelivery,
+		runScheduledTasks,
+		deliverScheduledMessage,
+		scheduledGenerationServices,
+	} = await import("../src/commitments/runner.ts");
+	const { generateScheduledImage } = await import(
+		"../src/commitments/image.ts"
+	);
+	let messageId = 0;
+	async function turn(text: string, change: Record<string, unknown>) {
+		const result = await handleCommitmentRequest(
+			{ ...input, messageId: ++messageId, text },
+			{
+				store,
+				now: () => now,
+				interpret: async () => plan([{ ...change, evidence: text }]),
+			},
+		);
+		expect(result).toContain("saved successfully");
+		store = new CommitmentStore(store.path, () => now);
+	}
+	await turn(input.text, { ...action(), format: { delivery: "text" } });
+	const original = (await store.read()).tasks[0];
+	if (!original) throw new Error("missing report");
+	const update = { type: "update", id: original.id };
+	await turn("La clasificación, mándala también como foto.", {
+		...update,
+		format: {
+			delivery: "image_and_text",
+			description: "Tabla de posiciones con encabezado azul",
+		},
+	});
+	await turn("Haz que se lea bien en el celular.", {
+		...update,
+		format: { canvas: "mobile" },
+	});
+	await turn("Con la lámina basta. Quita lo que escribes debajo.", {
+		...update,
+		format: { delivery: "image_only" },
+	});
+	await turn("De ahora en adelante incluye también los partidos de hoy.", {
+		...update,
+		instruction: "Resultados de ayer y partidos de hoy",
+		format: {},
+	});
+	await turn("Mejor a las ocho.", { ...update, time: "08:00", format: {} });
+	const current = (await store.read()).tasks[0];
+	expect(current).toMatchObject({
+		id: original.id,
+		expiresAt: original.expiresAt,
+		searchQuery: original.searchQuery,
+		domains: original.domains,
+		schedule: { ...original.schedule, time: "08:00" },
+		reportImage: {
+			canvas: "mobile",
+			delivery: "image_only",
+			description: "Tabla de posiciones con encabezado azul",
+		},
+	});
+	await turn("Continúa otro mes.", { type: "renew", ids: [original.id] });
+	const photos: number[] = [];
+	const data: string[] = [];
+	const pixel = Buffer.from(
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",
+		"base64",
+	);
+	const portrait = await new Bun.Image(pixel).resize(64, 96).png().buffer();
+	const api = {
+		sendPhoto: async (
+			_chat: number,
+			_photo: unknown,
+			options?: { caption?: string },
+		) => {
+			expect(options?.caption).toBeUndefined();
+			photos.push(now);
+			return { message_id: 500 + photos.length } as never;
+		},
+		sendMessage: async () => {
+			throw new Error("unexpected Telegram text");
+		},
+	};
+	const errors: string[] = [];
+	for (const day of ["2026-10-23", "2026-10-24"]) {
+		now = localTime(day, "08:00");
+		store = new CommitmentStore(store.path, () => now);
+		await runScheduledTasks({
+			store,
+			now: () => now,
+			isOff: () => false,
+			isSleeping: () => false,
+			isAllowed: () => true,
+			record: async () => {},
+			alert: async (message) => {
+				errors.push(message);
+			},
+			generate: (task) =>
+				generateScheduledDelivery(task, {
+					...scheduledGenerationServices,
+					store,
+					now: () => now,
+					planImage: async () => {
+						throw new Error("reinterpreted a saved format");
+					},
+					retrieve: async () => ({
+						relevantFacts: [],
+						relevantEpisodes: [],
+						permanentFacts: [],
+						relationshipMemory: null,
+						recentChapters: [],
+						activeNames: [],
+						mentionedNames: [],
+					}),
+					assemble: async () => "Persona",
+					review: async () => undefined,
+					web: {
+						isEnabled: () => false,
+						search: async () => "Equipo Azul 3–2 Equipo Verde",
+						read: async () => "Tabla de hoy",
+						context: async () => "",
+						refreshHeadlines: async () => {},
+					},
+					weather: {
+						isEnabled: () => false,
+						instructions: () => "",
+						lookup: async () => "unavailable",
+					},
+					generate: async (_system, messages) => {
+						expect(messages[0]?.content).toContain("partidos de hoy");
+						expect(messages[0]?.content).toContain("Tabla de posiciones");
+						return `${day} Equipo Azul 3–2 Equipo Verde.`;
+					},
+					image: (visual, report) =>
+						generateScheduledImage(
+							visual,
+							report,
+							async (prompt, _ref, options) => {
+								expect(options?.dimensions).toEqual({
+									width: 1024,
+									height: 1536,
+								});
+								expect(prompt).toContain("Stack sections vertically");
+								data.push(report);
+								return portrait;
+							},
+						),
+				}),
+			deliver: async (chatId, message) => {
+				expect(message.image).toBeDefined();
+				expect(
+					await new Bun.Image(message.image as Buffer).metadata(),
+				).toMatchObject({ width: 1024, height: 1536 });
+				return deliverScheduledMessage(api, chatId, message);
+			},
+		});
+	}
+	expect(errors).toEqual([]);
+	expect(photos).toHaveLength(2);
+	expect((await store.read()).tasks[0]?.reportPhotoIds).toEqual([501, 502]);
+	for (const isBot of [true, false]) {
+		await handleCommitmentRequest(
+			{
+				...input,
+				messageId: ++messageId,
+				text: "Esta lámina",
+				replyContext: { text: "", isBot, messageId: 501 },
+			},
+			{
+				store,
+				now: () => now,
+				interpret: async (_latest, context) => {
+					expect(JSON.parse(context).repliedReportId).toBe(
+						isBot ? original.id : undefined,
+					);
+					return plan([]);
+				},
+			},
+		);
+	}
+	expect(data).toEqual([
+		"2026-10-23 Equipo Azul 3–2 Equipo Verde.",
+		"2026-10-24 Equipo Azul 3–2 Equipo Verde.",
+	]);
+	await turn("Incluye de nuevo el texto debajo.", {
+		...update,
+		format: { delivery: "image_and_text" },
+	});
+	expect((await store.read()).tasks[0]?.reportImage).toMatchObject({
+		canvas: "mobile",
+		description: "Tabla de posiciones con encabezado azul",
+		delivery: "image_and_text",
+	});
+	await turn("En adelante, envíamelo escrito sin imagen.", {
+		...update,
+		format: { delivery: "text" },
+	});
+	expect((await store.read()).tasks[0]?.reportImage).toBeNull();
+});
+
+test.each(["run", "edit", "replace"] as const)(
+	"a v2 report is interpreted from its original instruction once before first %s",
+	async (first) => {
+		await store.apply(input, plan([action()]));
+		const state = await store.read();
+		const task = state.tasks[0];
+		if (!task) throw new Error("missing task");
+		task.instruction =
+			"Resultados diarios. Solo la lámina, pensada para leer en un teléfono.";
+		delete task.reportImage;
+		await writeFile(
+			store.path,
+			JSON.stringify({ schemaVersion: 2, data: state }),
+		);
+		let calls = 0;
+		const expected = {
+			delivery: "image_only",
+			canvas: "mobile",
+			description: "Resultados diarios",
+		} as const;
+		const reopen = () =>
+			new CommitmentStore(
+				store.path,
+				() => now,
+				async (old) => {
+					expect(old.instruction).toBe(task.instruction);
+					calls++;
+					return expected;
+				},
+			);
+		store = reopen();
+		if (first === "run") await store.resolveReportImage(task);
+		const evidence = "Agrega los juegos que vienen";
+		const edit =
+			first === "replace"
+				? { ...action("08:00"), replaceId: task.id }
+				: {
+						type: "update",
+						id: task.id,
+						instruction: "Resultados y próximos juegos",
+					};
+		await store.apply(
+			{ ...input, text: evidence, messageId: 2 },
+			plan([{ ...edit, format: {}, evidence }]),
+		);
+		const restarted = reopen();
+		const active = (await restarted.read()).tasks.find(
+			(t) => t.status === "active",
+		);
+		if (!active) throw new Error("missing active task");
+		expect(active.reportImage).toEqual(expected);
+		expect(await restarted.resolveReportImage(active)).toEqual(expected);
+		expect(calls).toBe(1);
+	},
+);
+
+test("an old active report can be edited after many replacements and large reports cannot overflow its edit receipt", async () => {
+	await store.apply(input, plan([action()]));
+	const original = (await store.read()).tasks[0];
+	if (!original) throw new Error("missing task");
+	await store.transaction((state) => {
+		for (let i = 0; i < 35; i++)
+			state.tasks.push({
+				...original,
+				id: `archived-${i}`,
+				status: "cancelled",
+			});
+		original.lastMessage = "x".repeat(32000);
+		const task = state.tasks[0];
+		if (task) {
+			task.lastMessage = original.lastMessage;
+			task.behaviorEvents = Array.from({ length: 45 }, (_, i) => ({
+				behaviorId: "demo",
+				eventKey: String(i),
+				date: "2026-10-20",
+				summary: "e".repeat(1000),
+				status: "sent",
+				attempts: [now],
+				updatedAt: now,
+			}));
+		}
+	});
+	const result = await handleCommitmentRequest(
+		{ ...input, messageId: 2, text: "Una hora más tarde" },
+		{
+			store,
+			now: () => now,
+			interpret: async (_request, context) => {
+				const { tasks } = JSON.parse(context);
+				expect(tasks).toHaveLength(30);
+				const task = tasks.find((t: { id: string }) => t.id === original.id);
+				expect(task).toBeDefined();
+				expect(task.behaviorEvents).toBeUndefined();
+				return plan([
+					{
+						type: "update",
+						id: original.id,
+						time: "08:00",
+						format: {},
+						evidence: "Una hora más tarde",
+					},
+				]);
+			},
+		},
+	);
+	expect(result).toContain("saved successfully");
+	expect(result).not.toContain("behaviorEvents");
+	const saved = (await store.read()).tasks[0];
+	expect(saved?.schedule.time).toBe("08:00");
+	expect(saved?.behaviorEvents).toHaveLength(45);
+});
+
+test("a failed legacy interpretation and a rejected batch leave the v2 task untouched", async () => {
+	await store.apply(input, plan([action()]));
+	const state = await store.read();
+	const task = state.tasks[0];
+	if (!task) throw new Error("missing task");
+	delete task.reportImage;
+	const original = JSON.stringify({ schemaVersion: 2, data: state });
+	await writeFile(store.path, original);
+	const failing = new CommitmentStore(
+		store.path,
+		() => now,
+		async () => {
+			throw new Error("unavailable");
+		},
+	);
+	await expect(failing.resolveReportImage(task)).rejects.toThrow("unavailable");
+	const update = {
+		type: "update",
+		id: task.id,
+		evidence: "ajusta",
+		format: { delivery: "image_only" },
+	};
+	const usable = new CommitmentStore(
+		store.path,
+		() => now,
+		async () => null,
+	);
+	await expect(
+		usable.apply(
+			{ ...input, messageId: 2, text: "ajusta" },
+			plan([update, { type: "cancel", ids: ["missing"], evidence: "ajusta" }]),
+		),
+	).rejects.toThrow();
+	expect(await readFile(store.path, "utf8")).toBe(original);
+});
+
+test("source edits validate only new domains and a calendar replacement inherits omitted sources and image settings", async () => {
+	await store.apply(
+		input,
+		plan([
+			{ ...action(), format: { delivery: "image_only", canvas: "mobile" } },
+		]),
+	);
+	const task = (await store.read()).tasks[0];
+	if (!task) throw new Error("missing report");
+	const change = {
+		type: "update",
+		id: task.id,
+		format: {},
+		domains: [...task.domains, "example.org"],
+	};
+	const attempted = await handleCommitmentRequest(
+		{
+			...input,
+			text: "Usa esa otra página también.",
+			voice: true,
+			messageId: 2,
+		},
+		{
+			store,
+			now: () => now,
+			interpret: async () =>
+				plan([{ ...change, evidence: "Usa esa otra página también." }]),
+		},
+	);
+	expect(attempted).toContain("Nothing saved");
+	expect((await store.read()).tasks[0]?.domains).toEqual(task.domains);
+	const confirmed = await handleCommitmentRequest(
+		{ ...input, text: "example.org", messageId: 3 },
+		{
+			store,
+			now: () => now,
+			interpret: async () => plan([{ ...change, evidence: "example.org" }]),
+		},
+	);
+	expect(confirmed).toContain("saved successfully");
+	const revised = action("06:00");
+	const replacement = await store.apply(
+		{ ...input, text: "Pásalo a los lunes", messageId: 4 },
+		plan([
+			{
+				...revised,
+				task: {
+					...revised.task,
+					domains: undefined,
+					schedule: { ...revised.task.schedule, weekdays: [1] },
+				},
+				replaceId: task.id,
+				evidence: "Pásalo a los lunes",
+				format: {},
+			},
+		]),
+	);
+	expect(replacement).toContain("example.org");
+	const active = (await store.read()).tasks.find((t) => t.status === "active");
+	expect(active?.domains).toEqual([...task.domains, "example.org"]);
+	expect(active?.reportImage).toEqual(task.reportImage);
+});

@@ -10,7 +10,12 @@ import {
 } from "../provider-options.ts";
 import { withRetry } from "../utils.ts";
 import { characterReferencePrompt, userImageEditPrompt } from "./prompts.ts";
-import type { ImageProvider } from "./types.ts";
+import {
+	gptReportCanvas,
+	type ImageGenerationOptions,
+	type ImageProvider,
+	reportAspectRatio,
+} from "./types.ts";
 
 const DEFAULT_GENERATION_TIMEOUT_MS = 300_000;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60_000;
@@ -64,10 +69,12 @@ export class FalImageProvider implements ImageProvider {
 	async generateImage(
 		prompt: string,
 		referenceImagePath?: string,
+		options?: ImageGenerationOptions,
 	): Promise<Buffer> {
 		return this.requestImage(
 			referenceImagePath ? characterReferencePrompt(prompt) : prompt,
 			referenceImagePath,
+			options?.dimensions,
 		);
 	}
 
@@ -78,6 +85,7 @@ export class FalImageProvider implements ImageProvider {
 	private async requestImage(
 		prompt: string,
 		referenceImagePath?: string,
+		dimensions?: ImageGenerationOptions["dimensions"],
 	): Promise<Buffer> {
 		const body: Record<string, unknown> = {
 			prompt,
@@ -90,6 +98,9 @@ export class FalImageProvider implements ImageProvider {
 		if (!model) throw new Error(`Unknown fal image model: ${this.modelName}`);
 		if (model.name === "gpt-image-2") {
 			body.quality = resolveFalImageQuality();
+			if (dimensions) body.image_size = gptReportCanvas(dimensions);
+		} else if (dimensions) {
+			body.aspect_ratio = reportAspectRatio(dimensions);
 		}
 
 		let endpoint: string;
