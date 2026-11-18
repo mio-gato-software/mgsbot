@@ -1325,6 +1325,7 @@ test("a mobile image-only report survives separate chat edits, clock changes, re
 								data.push(report);
 								return portrait;
 							},
+							async () => null,
 						),
 				}),
 			deliver: async (chatId, message) => {
@@ -1588,4 +1589,58 @@ test("source edits validate only new domains and a calendar replacement inherits
 	const active = (await store.read()).tasks.find((t) => t.status === "active");
 	expect(active?.domains).toEqual([...task.domains, "example.org"]);
 	expect(active?.reportImage).toEqual(task.reportImage);
+});
+
+test("readability edits preserve a saved exact portrait size and accept a new explicit size", async () => {
+	const size = { width: 808, height: 1280 };
+	await store.apply(
+		input,
+		plan([
+			{
+				...action(),
+				format: {
+					delivery: "image_only",
+					description: "Tabla de resultados",
+					canvas: size,
+				},
+			},
+		]),
+	);
+	const [task] = (await store.read()).tasks;
+	if (!task) throw new Error("Missing report");
+	for (const [i, edit] of [
+		{
+			text: "Me cuesta leerlo en el teléfono, quita el marco",
+			format: {
+				canvas: "mobile",
+				description: "Tabla de resultados sin marco con letra grande",
+			},
+			expected: size,
+		},
+		{
+			text: "Ahora hazlo de 900 por 1440",
+			format: { canvas: { width: 900, height: 1440 } },
+			expected: { width: 900, height: 1440 },
+		},
+	].entries()) {
+		await store.apply(
+			{ ...input, messageId: i + 2, text: edit.text },
+			plan([
+				{
+					type: "update",
+					id: task.id,
+					format: edit.format,
+					evidence: edit.text,
+				},
+			]),
+		);
+		expect((await store.read()).tasks[0]).toMatchObject({
+			reportImage: {
+				delivery: "image_only",
+				canvas: edit.expected,
+				description: "Tabla de resultados sin marco con letra grande",
+			},
+			nextRunAt: task.nextRunAt,
+		});
+	}
 });
