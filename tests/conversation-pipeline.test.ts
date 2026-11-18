@@ -620,6 +620,59 @@ test("group continuation routing interprets an authorized report retry and uses 
 	expect(spies.replies).toHaveLength(0);
 });
 
+test("a missed preview replaces the ordinary image and caption before Telegram delivery", async () => {
+	const { ctx, spies } = makeMockContext({
+		chatId: ++chatId,
+		chatType: "group",
+		text: "Muéstrame el de hoy",
+	});
+	const buffer = await loadSensory(chatId);
+	buffer.allowPhotoRequest = true;
+	await saveSensory(buffer);
+	const services = dependencies();
+	let searched = false;
+	services.web = {
+		isEnabled: () => true,
+		context: async () => "",
+		refreshHeadlines: async () => {},
+		search: async () => {
+			searched = true;
+			return "Resultados de ejemplo";
+		},
+	};
+	services.generate = async () =>
+		searched
+			? "Aquí lo tienes [IMAGE: standings on a square sports poster]"
+			: '[WEB_SEARCH]{"query":"resultados de la liga","notice":"Voy a comprobarlo"}[/WEB_SEARCH]';
+	services.commitments = async (_request, _services, execution) => {
+		execution?.beforeChatImage?.(async (brief) => {
+			expect(brief).toBe("standings on a square sports poster");
+			await execution.run({ id: "saved-report" } as never);
+		});
+		return "";
+	};
+	services.scheduled = async () => ({
+		text: "Tabla actual",
+		image: Buffer.from("saved portrait"),
+		delivery: "image_only",
+	});
+	let photos = 0;
+	ctx.replyWithPhoto = async (_photo, options) => {
+		photos++;
+		expect(options?.caption).toBeUndefined();
+		return {} as never;
+	};
+	expect(
+		await processConversation(ctx, "Muéstrame el de hoy", "Ada", {}, services),
+	).toBe(true);
+	expect(searched).toBe(true);
+	expect(photos).toBe(1);
+	expect(spies.replies).toHaveLength(0);
+	expect((await loadSensory(chatId)).messages.at(-1)?.content).toBe(
+		"Tabla actual",
+	);
+});
+
 test("a spontaneous group reply cannot interpret or execute agenda actions", async () => {
 	const text = "Inténtalo de nuevo";
 	const { ctx, spies } = makeMockContext({

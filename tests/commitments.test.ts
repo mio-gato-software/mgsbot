@@ -1031,6 +1031,68 @@ test("chat conversation delivers the scheduled report image directly and resumes
 	await backgroundTasks.drain();
 });
 
+test("a proposed chat image recovers a missed report preview through the durable claim", async () => {
+	const format = {
+		delivery: "image_only" as const,
+		canvas: { width: 808, height: 1280 },
+		description: "Clasificación sin marco",
+	};
+	await store.apply(input, plan([{ ...action(), format }]));
+	const [task] = (await store.read()).tasks;
+	if (!task) throw Error("Missing task");
+	for (const [i, text] of [
+		"Enséñame cómo sale el de siempre",
+		"Sí, mándalo",
+		"Dibújame una pelota",
+	].entries()) {
+		const independent = i === 2;
+		let check: ((brief: string) => Promise<void>) | undefined;
+		let runs = 0;
+		const request = {
+			...input,
+			text,
+			messageId: i + 2,
+			recentConversation: [
+				{ role: "model", text: "¿Quieres que te muestre el informe habitual?" },
+			],
+		};
+		await handleCommitmentRequest(
+			request,
+			{
+				store,
+				now: () => now,
+				interpret: async () => plan([]),
+				reviewImage: async (context, brief) => {
+					expect(context.latestMessage).toBe(text);
+					expect(context.recentConversation).toEqual(
+						request.recentConversation,
+					);
+					expect(context.tasks.map((t) => t.id)).toEqual([task.id]);
+					expect(brief).toBe("Proposed untrusted drawing");
+					return independent
+						? { kind: "independent" }
+						: { kind: "run", taskId: task.id, evidence: text };
+				},
+			},
+			{
+				beforeChatImage: (review) => {
+					check = review;
+				},
+				run: async (selected) => {
+					runs++;
+					expect(selected.reportImage).toEqual(format);
+				},
+				reply: () => {},
+			},
+		);
+		if (!check) throw Error("Missing review");
+		await check("Proposed untrusted drawing");
+		await check("Proposed untrusted drawing");
+		expect(runs).toBe(independent ? 0 : 1);
+	}
+	expect((await store.read()).tasks).toEqual([task]);
+});
+
 test("manual run permission is enforced when shared group management is disabled", async () => {
 	const previous = process.env.ALLOW_GROUP_TASK_EDITS;
 	process.env.ALLOW_GROUP_TASK_EDITS = "false";

@@ -289,6 +289,8 @@ test("a saved nonstandard canvas yields the requested pixel dimensions even with
 		async (prompt, _reference, options) => {
 			expect(options?.dimensions).toEqual(dimensions);
 			expect(prompt).toContain("Stack sections vertically");
+			expect(prompt).toContain("360 px display width");
+			expect(prompt).toContain("omit outer frames, decorative borders");
 			return new Bun.Image(
 				Buffer.from(
 					"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",

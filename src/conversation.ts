@@ -54,6 +54,7 @@ import { buildMessages } from "./prompt/history.ts";
 import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
 import type { MediaAttachment } from "./providers/types.ts";
 import { ResearchFailure, researchFailureNotice } from "./research-failure.ts";
+import { parseResponse } from "./response-plan.ts";
 import { type SendResponseResult, sendResponse } from "./response-processor.ts";
 import { timeoutReply } from "./telegram-delivery.ts";
 import { isTtsAvailable } from "./tts/index.ts";
@@ -294,6 +295,7 @@ export async function processConversation(
 			mediaAttachment?.mimeType ?? reference?.mimeType ?? "image/jpeg";
 		let taskResponse: string | undefined;
 		let taskDelivery: ScheduledMessage | undefined;
+		let reviewChatImage: ((brief: string) => Promise<void>) | undefined;
 		let executedTask: ScheduledTask | undefined;
 		let recordReportPhoto: ((messageId: number) => Promise<void>) | undefined;
 		const commitmentContext =
@@ -334,6 +336,9 @@ export async function processConversation(
 						},
 						undefined,
 						{
+							beforeChatImage: (review) => {
+								reviewChatImage = review;
+							},
 							describeReference:
 								referencePath && reference
 									? () =>
@@ -408,10 +413,24 @@ export async function processConversation(
 				weather: dependencies.weather,
 				useCachedContext: !skipHistoricalContext,
 				announce: async (notice) => {
+					// The report route is still open. The active typing indicator gives
+					// progress without sending text before a possible image-only result.
+					if (reviewChatImage) return;
 					await ctx.reply(notice);
 					trackBackground("chat-log", logBotMessage(notice));
 				},
 			});
+			if (reviewChatImage) {
+				const candidate = parseResponse(responseText, {
+					allowImages: shouldGenImage || allowPhotoRequest,
+					allowImageEdits: !!userImagePath,
+					allowSpeech: false,
+				}).image;
+				if (candidate && !candidate.self) {
+					await reviewChatImage(candidate.prompt);
+					responseText = taskResponse ?? responseText;
+				}
+			}
 			if (renderedFactIds.size)
 				trackBackground(
 					"retrieval-reinforcement",
