@@ -302,9 +302,10 @@ test("failed send-intent persistence blocks Telegram and history failure cannot 
 	expect(delivered).toHaveLength(1);
 });
 
-test("v2 persistence protects behaviors and receipts against older writers and reads v1", async () => {
+test("versioned persistence protects behaviors and receipts against older writers and reads v1", async () => {
 	const raw = JSON.parse(await readFile(store.path, "utf8"));
-	expect(raw.schemaVersion).toBe(2);
+	expect(raw.schemaVersion).toBe(3);
+	expect(() => unwrapVersioned(raw, 2)).toThrow("Unsupported");
 	expect(() => unwrapVersioned(raw)).toThrow("Unsupported");
 	await Bun.write(store.path, JSON.stringify({ ...raw, schemaVersion: 1 }));
 	expect((await store.read()).tasks[0]?.behaviors).toEqual(task.behaviors);

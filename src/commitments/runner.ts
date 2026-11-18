@@ -26,7 +26,7 @@ import {
 } from "./behavior-runner.ts";
 import { displayTime, nextOccurrence } from "./calendar.ts";
 import { deliverScheduledMessage, type ScheduledMessage } from "./delivery.ts";
-import { generateScheduledImage, planScheduledImage } from "./image.ts";
+import { generateScheduledImage } from "./image.ts";
 import { renewalButtons, runRenewalNotices } from "./renewal.ts";
 import { allowedCommitmentChat, commitmentsEnabled } from "./requests.ts";
 import { MAX_SCHEDULED_REPORT_CHARS, type ScheduledTask } from "./schema.ts";
@@ -36,6 +36,7 @@ import {
 	commitments,
 	matchingPreferences,
 	preferenceContext,
+	rememberReportPhoto,
 } from "./store.ts";
 
 export const TASK_GRACE_MS = 60 * 60000;
@@ -104,6 +105,7 @@ export async function reviewScheduledReport(
 			role: "user",
 			content: JSON.stringify({
 				task: task.instruction,
+				requestedVisual: task.reportImage?.description,
 				executedAt: displayTime(Date.now(), task.timezone || BOT_TZ),
 				draft,
 				trace: messages.map((m) => ({
@@ -168,6 +170,7 @@ export async function repairScheduledReport(
 				role: "user",
 				content: JSON.stringify({
 					task: task.instruction,
+					requestedVisual: task.reportImage?.description,
 					draft,
 					corrections: missing,
 					evidence,
@@ -191,7 +194,8 @@ export const scheduledGenerationServices = {
 		),
 	review: reviewScheduledReport,
 	repair: repairScheduledReport,
-	planImage: planScheduledImage,
+	planImage: (task: ScheduledTask, store: CommitmentStore) =>
+		store.resolveReportImage(task),
 	image: generateScheduledImage,
 	web: worldContext as ConversationWebContext,
 	weather: weatherService as ConversationWeatherContext,
@@ -283,6 +287,7 @@ async function generateScheduledReport(
 				role: "user",
 				content: JSON.stringify({
 					task: task.instruction,
+					requestedVisual: task.reportImage?.description,
 					conditionalChecks: task.behaviors?.map(
 						(behavior) => behavior.condition,
 					),
@@ -328,8 +333,14 @@ export async function generateScheduledDelivery(
 	task: ScheduledTask,
 	services = scheduledGenerationServices,
 ): Promise<ScheduledMessage> {
-	const imageInstruction = await services.planImage(task);
-	const { text, observation } = await generateScheduledReport(task, services);
+	const imageInstruction =
+		task.reportImage === undefined
+			? await services.planImage(task, services.store)
+			: task.reportImage;
+	const { text, observation } = await generateScheduledReport(
+		{ ...task, reportImage: imageInstruction },
+		services,
+	);
 	return {
 		text,
 		...(imageInstruction?.delivery === "image_only"
@@ -465,7 +476,9 @@ export async function runScheduledTasks(
 				// same lock as cancellation. The final transaction write is a receipt.
 				await services.store.persist(state);
 				attempted = true;
-				await services.deliver(task.chatId, message);
+				const photoId = await services.deliver(task.chatId, message);
+				if (message.image && typeof photoId === "number")
+					rememberReportPhoto(task, photoId);
 				task.lastOccurrence.status = "sent";
 				task.lastMessage = message.text;
 				task.updatedAt = services.now();
@@ -496,23 +509,40 @@ export async function runScheduledTasks(
 		} catch (error) {
 			log.error("[agenda] Report execution failed:", error);
 			try {
-				await services.store.transaction((state) => {
+				await services.store.transaction(async (state) => {
 					const task = state.tasks.find((t) => t.id === claimed.id);
 					if (
-						task?.lastOccurrence?.dueAt === claimed.lastOccurrence?.dueAt &&
-						task?.lastOccurrence
+						!task?.lastOccurrence ||
+						task.lastOccurrence.dueAt !== claimed.lastOccurrence?.dueAt ||
+						!["sending", "preparing"].includes(task.lastOccurrence.status)
 					)
-						task.lastOccurrence.status = attempted ? "unknown" : "failed";
+						return;
+					task.lastOccurrence.status = attempted ? "unknown" : "failed";
+					if (
+						!attempted &&
+						task.status === "active" &&
+						task.expiresAt >= services.now() &&
+						services.now() - task.lastOccurrence.dueAt <= TASK_GRACE_MS &&
+						task.reportImage !== undefined &&
+						task.reportImage?.delivery !== "image_only" &&
+						!services.isOff() &&
+						!services.isSleeping() &&
+						services.isAllowed(task.chatId)
+					) {
+						await services.store.persist(state);
+						await services
+							.deliver(task.chatId, { text: researchFailureNotice(error) })
+							.catch((noticeError) =>
+								log.error(
+									"[agenda] Failure notice delivery failed:",
+									noticeError,
+								),
+							);
+					}
 				});
 			} catch {
 				log.warn("[agenda] Could not record delivery failure");
 			}
-			if (!attempted)
-				await services
-					.deliver(claimed.chatId, { text: researchFailureNotice(error) })
-					.catch((noticeError) =>
-						log.error("[agenda] Failure notice delivery failed:", noticeError),
-					);
 			await services
 				.alert(
 					`Scheduled task ${claimed.id}: ${errorSummary(error)}. ${attempted ? "delivery outcome uncertain; not retried to avoid duplicate messages" : "could not generate or persist this occurrence"}.`,

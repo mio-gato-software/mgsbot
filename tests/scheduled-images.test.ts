@@ -63,6 +63,7 @@ test("saved image requirements produce an attachment even when the report has no
 		planImage: async (saved) => {
 			expect(saved.instruction).toBe(task.instruction);
 			return {
+				delivery: "image_and_text",
 				description:
 					"Tabla de posiciones actualizada, estilo marcador deportivo",
 			};
@@ -203,11 +204,16 @@ test("image plan validation repairs once and rejects malformed output without ex
 	expect(
 		await planScheduledImage(task, async (_system, messages) => {
 			calls++;
-			if (calls === 1) return "[IMAGE: unvalidated prompt]";
+			if (calls === 1)
+				return '{"image":{"description":"Tabla actual","delivery":"image_and_text"}}';
 			expect(messages.at(-1)?.content).toContain("Format validation failed");
-			return '{"image":{"description":"Tabla actual"}}';
+			return '{"image":{"description":"Tabla actual","delivery":"image_and_text","canvas":"auto"}}';
 		}),
-	).toEqual({ description: "Tabla actual" });
+	).toEqual({
+		description: "Tabla actual",
+		delivery: "image_and_text",
+		canvas: "auto",
+	});
 	expect(calls).toBe(2);
 	calls = 0;
 	await expect(
@@ -224,7 +230,10 @@ test("required image failure prevents a text-only success, including empty provi
 		await expect(
 			generateScheduledDelivery(task, {
 				...services,
-				planImage: async () => ({ description: "Tabla actual" }),
+				planImage: async () => ({
+					description: "Tabla actual",
+					delivery: "image_and_text",
+				}),
 				image: (visual, report) =>
 					generateScheduledImage(visual, report, async () => {
 						if (empty) return Buffer.alloc(0);
@@ -265,18 +274,30 @@ test("a saved nonstandard canvas yields the requested pixel dimensions even with
 	const plan = await planScheduledImage(
 		{ ...task, instruction: "Una infografía de 456×720 px." },
 		async () =>
-			JSON.stringify({ image: { description: "Infografía", dimensions } }),
+			JSON.stringify({
+				image: {
+					description: "Infografía",
+					canvas: dimensions,
+					delivery: "image_only",
+				},
+			}),
 	);
 	if (!plan) throw new Error("missing visual");
 	const image = await generateScheduledImage(
 		plan,
 		"Verificado",
-		async (_prompt, _reference, options) => {
+		async (prompt, _reference, options) => {
 			expect(options?.dimensions).toEqual(dimensions);
-			return Buffer.from(
-				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",
-				"base64",
-			);
+			expect(prompt).toContain("Stack sections vertically");
+			return new Bun.Image(
+				Buffer.from(
+					"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",
+					"base64",
+				),
+			)
+				.resize(128, 192)
+				.png()
+				.buffer();
 		},
 	);
 	expect(await new Bun.Image(image).metadata()).toMatchObject(dimensions);
@@ -287,7 +308,10 @@ test("a failed factual report never invokes the image renderer", async () => {
 	await expect(
 		generateScheduledDelivery(task, {
 			...services,
-			planImage: async () => ({ description: "Report illustration" }),
+			planImage: async () => ({
+				description: "Report illustration",
+				delivery: "image_and_text",
+			}),
 			generate: async () => {
 				throw new Error("Report provider timed out");
 			},
@@ -373,4 +397,22 @@ test("oversized report diagnostics include the rejected length before rendering"
 			},
 		}),
 	).rejects.toThrow("Invalid scheduled report length: 32001");
+});
+
+test("mobile and exact portrait canvases reject square and landscape source images", async () => {
+	const image = Buffer.from(
+		"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jWZkAAAAASUVORK5CYII=",
+		"base64",
+	);
+	for (const canvas of ["mobile", { width: 480, height: 760 }] as const) {
+		for (const width of [64, 96]) {
+			await expect(
+				generateScheduledImage(
+					{ canvas, delivery: "image_only", description: "Tabla" },
+					"Azul 3–2 Verde",
+					() => new Bun.Image(image).resize(width, 64).png().buffer(),
+				),
+			).rejects.toThrow("non-portrait");
+		}
+	}
 });

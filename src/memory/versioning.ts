@@ -33,7 +33,12 @@ export function unwrapVersioned<T>(
 ): T {
 	if (typeof raw === "object" && raw !== null && "schemaVersion" in raw) {
 		const version = (raw as { schemaVersion: unknown }).schemaVersion;
-		if (version !== CURRENT_SCHEMA_VERSION && version !== supportedVersion) {
+		if (
+			typeof version !== "number" ||
+			!Number.isInteger(version) ||
+			version < CURRENT_SCHEMA_VERSION ||
+			version > supportedVersion
+		) {
 			throw new Error(`Unsupported memory schema version: ${String(version)}`);
 		}
 	}

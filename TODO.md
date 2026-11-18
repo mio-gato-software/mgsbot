@@ -9,6 +9,12 @@ Living document. Rules:
 
 ## Pending
 
+### Preserve reference layouts for recurring report images
+
+- **Why:** the report renderer receives a reusable design description and current report data. A legacy task that says “use the same reference design” without describing it can retain its canvas and delivery settings, but those fields cannot reconstruct the reference's layout.
+- **What to do:** when a stable reference design is explicitly requested, bind a reusable, chat-scoped layout to the task on capture. Check that unrelated edits keep it and that later renders use current results, without copying dates or scores from the reference. An old reference that is no longer available must be supplied again for an exact match.
+- **Size:** Medium. Added 2026-11-18.
+
 ### Check deduplication candidate coverage in multi-participant chats
 
 - **Why:** the first participant can fill the extractor's saved-fact list before later participants are considered. Corrections or confirmations later in the same block may lack the relevant prior facts.

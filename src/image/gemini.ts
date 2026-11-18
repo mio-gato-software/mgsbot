@@ -11,7 +11,11 @@ import {
 	noImageText,
 	userImageEditPrompt,
 } from "./prompts.ts";
-import type { ImageGenerationOptions, ImageProvider } from "./types.ts";
+import {
+	type ImageGenerationOptions,
+	type ImageProvider,
+	reportAspectRatio,
+} from "./types.ts";
 
 const hasGoogleApiKey = !!process.env.GOOGLE_API_KEY;
 
@@ -64,6 +68,9 @@ export class GeminiImageProvider implements ImageProvider {
 			config: {
 				imageConfig: {
 					imageSize: resolveGeminiImageSize(),
+					...(options?.dimensions && {
+						aspectRatio: reportAspectRatio(options.dimensions),
+					}),
 				},
 				responseModalities: ["IMAGE", "TEXT"],
 			},

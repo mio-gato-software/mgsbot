@@ -13,12 +13,13 @@ export async function deliverScheduledMessage(
 	api: Pick<Api, "sendMessage" | "sendPhoto">,
 	chatId: number,
 	message: ScheduledMessage,
-): Promise<void> {
+): Promise<number | undefined> {
 	const image = message.image;
+	let photoId: number | undefined;
 	if (message.delivery === "image_only" && !image)
 		throw new Error("Image-only report has no image");
 	if (image) {
-		await withMarkdownFallback((parseMode) =>
+		const photo = await withMarkdownFallback((parseMode) =>
 			api.sendPhoto(chatId, new InputFile(image, "report.png"), {
 				caption:
 					message.delivery !== "image_only" && message.text.length <= 1000
@@ -31,8 +32,9 @@ export async function deliverScheduledMessage(
 					: {}),
 			}),
 		);
+		photoId = photo.message_id;
 		if (message.delivery === "image_only" || message.text.length <= 1000)
-			return;
+			return photoId;
 	}
 	for (let offset = 0; offset < message.text.length; ) {
 		let end = Math.min(offset + 4000, message.text.length);
@@ -49,4 +51,5 @@ export async function deliverScheduledMessage(
 		);
 		offset = end;
 	}
+	return photoId;
 }

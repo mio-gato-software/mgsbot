@@ -3,9 +3,36 @@ import { scheduleSchema } from "./calendar.ts";
 
 // Report content is also the image renderer's input, not a single Telegram message.
 export const MAX_SCHEDULED_REPORT_CHARS = 32_000;
+export const COMMITMENTS_VERSION = 3;
+export const MAX_REPORT_PHOTO_IDS = 32;
 
 const text = z.string().trim().min(1).max(1200);
 const id = z.string().min(1).max(100);
+const domainsSchema = z.array(z.string().trim().min(3).max(253)).max(3);
+const canvasSchema = z.union([
+	z.enum(["auto", "mobile"]),
+	z.strictObject({
+		width: z.number().int().positive().max(4096),
+		height: z.number().int().positive().max(4096),
+	}),
+]);
+export const reportImageSchema = z.strictObject({
+	delivery: z.enum(["image_only", "image_and_text"]),
+	description: text,
+	canvas: canvasSchema.optional(),
+});
+export type ReportImage = z.infer<typeof reportImageSchema>;
+const formatChangeSchema = z
+	.strictObject({
+		delivery: z.enum(["text", "image_only", "image_and_text"]).optional(),
+		description: text.optional(),
+		canvas: canvasSchema.optional(),
+	})
+	.refine(
+		(f) => f.delivery !== "text" || (!f.description && !f.canvas),
+		"Text delivery cannot include image settings",
+	);
+export type FormatChange = z.infer<typeof formatChangeSchema>;
 export const behaviorInputSchema = z.object({
 	id: id.optional(),
 	condition: text,
@@ -40,7 +67,7 @@ export const preferenceInputSchema = z.object({
 	kind: z.enum(["sources", "style"]),
 	instruction: text,
 	topics: z.array(z.string().trim().min(2).max(60)).min(1).max(12),
-	domains: z.array(z.string().trim().min(3).max(253)).max(3).default([]),
+	domains: domainsSchema.default([]),
 });
 export const taskInputSchema = z.object({
 	behaviors: z.array(behaviorInputSchema).max(3).optional(),
@@ -49,7 +76,7 @@ export const taskInputSchema = z.object({
 	kind: z.enum(["reminder", "research"]),
 	searchQuery: z.string().trim().min(2).max(300).optional(),
 	schedule: scheduleSchema,
-	domains: z.array(z.string().trim().min(3).max(253)).max(3).default([]),
+	domains: domainsSchema.optional(),
 });
 export const actionSchema = z.discriminatedUnion("type", [
 	z.object({
@@ -70,15 +97,30 @@ export const actionSchema = z.discriminatedUnion("type", [
 		days: z.number().int().min(1).max(2).nullable(),
 		evidence: text,
 	}),
-	z.object({
-		type: z.literal("update"),
-		id,
-		instruction: text,
-		evidence: text,
-	}),
+	z
+		.object({
+			type: z.literal("update"),
+			id,
+			instruction: text.optional(),
+			time: scheduleSchema.shape.time.optional(),
+			domains: domainsSchema.optional(),
+			searchQuery: taskInputSchema.shape.searchQuery,
+			format: formatChangeSchema.optional(),
+			evidence: text,
+		})
+		.refine(
+			(a) =>
+				a.instruction ||
+				a.time ||
+				a.domains ||
+				a.searchQuery ||
+				Object.keys(a.format ?? {}).length,
+			"Provide the requested change",
+		),
 	z.object({
 		type: z.literal("schedule"),
 		task: taskInputSchema,
+		format: formatChangeSchema.optional(),
 		replaceId: id.optional(),
 		evidence: text,
 	}),
@@ -131,6 +173,13 @@ const occurrenceSchema = z.object({
 	status: z.enum(["preparing", "sending", "sent", "failed", "unknown"]),
 });
 export const taskSchema = taskInputSchema.extend({
+	domains: domainsSchema.default([]),
+	// Missing on legacy tasks. Null is a persisted decision to deliver text.
+	reportImage: reportImageSchema.nullable().optional(),
+	reportPhotoIds: z
+		.array(z.number().int().positive())
+		.max(MAX_REPORT_PHOTO_IDS)
+		.optional(),
 	behaviors: z.array(behaviorSchema).max(3).optional(),
 	behaviorEvents: z.array(behaviorEventSchema).max(500).optional(),
 	...provenance,

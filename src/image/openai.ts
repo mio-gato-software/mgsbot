@@ -12,7 +12,11 @@ import {
 	noImageText,
 	userImageEditPrompt,
 } from "./prompts.ts";
-import type { ImageGenerationOptions, ImageProvider } from "./types.ts";
+import {
+	gptReportCanvas,
+	type ImageGenerationOptions,
+	type ImageProvider,
+} from "./types.ts";
 
 function mimeFromPath(filePath: string): string {
 	const ext = filePath.split(".").pop()?.toLowerCase() ?? "jpg";
@@ -44,13 +48,10 @@ export class OpenAIImageProvider implements ImageProvider {
 		}
 
 		const model = resolveOpenAIImageModel();
-		const dimensions = options?.dimensions;
+		const dimensions =
+			options?.dimensions && gptReportCanvas(options.dimensions);
 		const size = dimensions
-			? dimensions.width === dimensions.height
-				? "1024x1024"
-				: dimensions.width < dimensions.height
-					? "1024x1536"
-					: "1536x1024"
+			? `${dimensions.width}x${dimensions.height}`
 			: resolveOpenAIImageSize();
 		const quality = resolveOpenAIImageQuality();
 

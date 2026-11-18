@@ -295,6 +295,7 @@ export async function processConversation(
 		let taskResponse: string | undefined;
 		let taskDelivery: ScheduledMessage | undefined;
 		let executedTask: ScheduledTask | undefined;
+		let recordReportPhoto: ((messageId: number) => Promise<void>) | undefined;
 		const commitmentContext =
 			!options.groupAutoReply &&
 			userId &&
@@ -308,6 +309,7 @@ export async function processConversation(
 							messageId: ctx.message.message_id,
 							text: directUserText ?? "",
 							replyContext: ctx.message.reply_to_message && {
+								messageId: ctx.message.reply_to_message.message_id,
 								text: (
 									ctx.message.reply_to_message.text ??
 									ctx.message.reply_to_message.caption ??
@@ -344,7 +346,7 @@ export async function processConversation(
 							reply: (text) => {
 								taskResponse = text;
 							},
-							run: async (task) => {
+							run: async (task, recordPhoto) => {
 								try {
 									const delivery = await dependencies.scheduled(task);
 									taskDelivery =
@@ -353,6 +355,7 @@ export async function processConversation(
 											: delivery;
 									taskResponse = taskDelivery.text;
 									executedTask = task;
+									recordReportPhoto = recordPhoto;
 								} catch (error) {
 									currentOperationSignal()?.throwIfAborted();
 									log.error("[agenda] Manual report failed:", error);
@@ -439,6 +442,10 @@ export async function processConversation(
 			userImagePath,
 			chatAction: typing,
 		});
+		if (result?.preparedPhotoId && recordReportPhoto)
+			await recordReportPhoto(result.preparedPhotoId).catch(() =>
+				log.warn("[agenda] Could not record delivered report photo reference"),
+			);
 		if (
 			result?.sent &&
 			executedTask &&

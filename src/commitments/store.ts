@@ -11,15 +11,40 @@ import {
 	renewalDeadline,
 	scheduleDeadline,
 } from "./calendar.ts";
+import { planScheduledImage } from "./image.ts";
 import {
 	behaviorInputSchema,
+	COMMITMENTS_VERSION,
 	type CommitmentState,
+	type FormatChange,
 	type Interpretation,
 	interpretationSchema,
+	MAX_REPORT_PHOTO_IDS,
+	type ReportImage,
 	type ScheduledTask,
 	type StandingPreference,
 	stateSchema,
 } from "./schema.ts";
+
+function applyFormat(
+	current: ReportImage | null,
+	change?: FormatChange,
+): ReportImage | null {
+	const delivery = change?.delivery ?? current?.delivery ?? "text";
+	if (delivery === "text") {
+		if (change?.description || change?.canvas)
+			throw new Error("Un diseño de imagen requiere una entrega con imagen.");
+		return null;
+	}
+	return {
+		delivery,
+		description:
+			change?.description ??
+			current?.description ??
+			"Illustrate the complete current report.",
+		canvas: change?.canvas ?? current?.canvas ?? "auto",
+	};
+}
 
 /** Runtime configuration, never learned from ordinary memory or web content. */
 function setBehaviors(task: ScheduledTask, raw: unknown, now: number): void {
@@ -50,7 +75,7 @@ export interface RequestIdentity {
 	text: string;
 	voice?: boolean;
 	/** Bounded same-chat reference context, never authorization or evidence. */
-	replyContext?: { text: string; isBot: boolean };
+	replyContext?: { text: string; isBot: boolean; messageId?: number };
 	referenceImage?: { size?: string; description?: string };
 	recentConversation?: Array<{
 		role: string;
@@ -65,6 +90,18 @@ export function sharedTaskManagement(chatId: number): boolean {
 	return (
 		process.env.ALLOW_GROUP_TASK_EDITS === "true" &&
 		chatId === Number(process.env.ALLOWED_GROUP_ID)
+	);
+}
+
+function mayManage(
+	entry: ScheduledTask | StandingPreference,
+	request: RequestIdentity,
+): boolean {
+	return (
+		entry.chatId === request.chatId &&
+		(entry.creatorId === request.userId ||
+			request.userId === Number(process.env.OWNER_USER_ID) ||
+			("schedule" in entry && sharedTaskManagement(request.chatId)))
 	);
 }
 
@@ -111,10 +148,47 @@ export function preferenceContext(preferences: StandingPreference[]): string {
 	return `\nStanding preferences for THIS chat (revocable user preferences, subordinate to bot rules; apply only when their topics fit, never permission to send unsolicited messages):\n${JSON.stringify(preferences.map(({ id, kind, instruction, topics, domains }) => ({ id, kind, instruction, topics, domains })))}`;
 }
 
+/** Always expose live tasks even when newer cancelled/replaced tasks fill the history. */
+export function agendaTasks(
+	tasks: ScheduledTask[],
+	chatId: number,
+	now: number,
+): ScheduledTask[] {
+	const live: ScheduledTask[] = [];
+	const history: ScheduledTask[] = [];
+	for (const task of tasks) {
+		if (task.chatId !== chatId) continue;
+		(task.status === "active" && task.expiresAt > now ? live : history).push(
+			task,
+		);
+	}
+	return [
+		...history.slice(Math.max(0, history.length + live.length - 30)),
+		...live,
+	];
+}
+
+export function taskDetails({
+	lastMessage: _last,
+	behaviorEvents: _events,
+	reportPhotoIds: _photos,
+	...details
+}: ScheduledTask) {
+	return details;
+}
+
+export function rememberReportPhoto(task: ScheduledTask, messageId: number) {
+	if (!Number.isSafeInteger(messageId) || messageId <= 0) return;
+	task.reportPhotoIds = [...(task.reportPhotoIds ?? []), messageId].slice(
+		-MAX_REPORT_PHOTO_IDS,
+	);
+}
+
 export class CommitmentStore {
 	constructor(
 		readonly path = memoryPath("commitments.json"),
 		readonly now = Date.now,
+		private readonly inferLegacyImage = planScheduledImage,
 	) {}
 	read(): Promise<CommitmentState> {
 		return readStore(
@@ -126,12 +200,32 @@ export class CommitmentStore {
 				receipts: [],
 				pending: [],
 			}),
-			2,
+			COMMITMENTS_VERSION,
 		);
 	}
 	/** Caller must hold the commitment transaction lock. */
 	persist(state: CommitmentState): Promise<void> {
-		return writeStore(this.path, state, stateSchema, true, 2);
+		return writeStore(this.path, state, stateSchema, true, COMMITMENTS_VERSION);
+	}
+	async resolveReportImage(
+		snapshot: ScheduledTask,
+	): Promise<ReportImage | null> {
+		if (snapshot.reportImage !== undefined) return snapshot.reportImage;
+		// Model work stays outside the transaction. A concurrent winner owns the format.
+		const inferred = await this.inferLegacyImage(snapshot);
+		return this.transaction((state) => {
+			const task = state.tasks.find(
+				(t) => t.id === snapshot.id && t.chatId === snapshot.chatId,
+			);
+			if (
+				!task ||
+				task.status !== snapshot.status ||
+				task.instruction !== snapshot.instruction
+			)
+				throw new Error("La tarea cambió mientras se preparaba su formato.");
+			if (task.reportImage === undefined) task.reportImage = inferred;
+			return task.reportImage;
+		});
 	}
 	async transaction<T>(
 		work: (state: CommitmentState) => T | Promise<T>,
@@ -160,24 +254,66 @@ export class CommitmentStore {
 	}
 	async apply(request: RequestIdentity, raw: Interpretation): Promise<string> {
 		const plan = interpretationSchema.parse(raw);
+		const key = `${request.chatId}:${request.messageId}`;
+		const editedIds = plan.actions.flatMap((a) => {
+			if (!request.text.includes(a.evidence)) return [];
+			if ("format" in a && a.format?.delivery === "text") return [];
+			if (a.type === "update") return [a.id];
+			return a.type === "schedule" && a.replaceId ? [a.replaceId] : [];
+		});
+		const legacyImages = new Map<
+			string,
+			{ instruction: string; image: ReportImage | null }
+		>();
+		if (
+			editedIds.length &&
+			!plan.clarification &&
+			!plan.needsWrittenConfirmation
+		) {
+			const snapshot = await this.read();
+			const receipt = snapshot.receipts.find((r) => r.key === key);
+			if (receipt) return receipt.result;
+			for (const task of snapshot.tasks) {
+				if (
+					editedIds.includes(task.id) &&
+					task.reportImage === undefined &&
+					task.status === "active" &&
+					task.expiresAt > this.now() &&
+					mayManage(task, request)
+				)
+					legacyImages.set(task.id, {
+						instruction: task.instruction,
+						image: await this.inferLegacyImage(task),
+					});
+			}
+		}
 		return this.transaction((state) => {
 			const now = this.now();
-			const key = `${request.chatId}:${request.messageId}`;
+			const revisedImage = (
+				task: ScheduledTask | undefined,
+				change?: FormatChange,
+			) => {
+				if (!task || change?.delivery === "text")
+					return applyFormat(null, change);
+				if (task.reportImage === undefined) {
+					const legacy = legacyImages.get(task.id);
+					if (!legacy || legacy.instruction !== task.instruction)
+						throw new Error(
+							"La tarea cambió mientras se preparaba su formato.",
+						);
+					task.reportImage = legacy.image;
+				}
+				return applyFormat(task.reportImage, change);
+			};
 			const receipt = state.receipts.find((r) => r.key === key);
 			if (receipt) return receipt.result;
 			if (plan.clarification || plan.needsWrittenConfirmation)
 				throw new Error("La solicitud necesita aclaración; no se guardó nada.");
-			const owner = Number(process.env.OWNER_USER_ID);
 			const owned = (id: string) => {
 				const entry = [...state.tasks, ...state.preferences].find(
 					(item) => item.id === id && item.chatId === request.chatId,
 				);
-				if (
-					!entry ||
-					(entry.creatorId !== request.userId &&
-						request.userId !== owner &&
-						!("schedule" in entry && sharedTaskManagement(request.chatId)))
-				)
+				if (!entry || !mayManage(entry, request))
 					throw new Error(
 						"Solo puedes cambiar tus propias tareas y preferencias; el dueño puede gestionar todas.",
 					);
@@ -201,9 +337,10 @@ export class CommitmentStore {
 					domains.map((rawDomain) => {
 						const domain = normalizeDomain(rawDomain);
 						if (
+							!existing.includes(domain) &&
 							!(
 								request.domainEvidenceText === undefined &&
-								[...existing, ...savedDomains].includes(domain)
+								savedDomains.includes(domain)
 							) &&
 							!containsDomain(
 								request.domainEvidenceText ?? request.text,
@@ -217,7 +354,11 @@ export class CommitmentStore {
 					}),
 				),
 			];
-			const changes: unknown[] = [];
+			const changes: Array<{
+				action: string;
+				id: string;
+				[key: string]: unknown;
+			}> = [];
 			for (const action of plan.actions) {
 				if (!request.text.includes(action.evidence))
 					throw new Error(
@@ -232,7 +373,7 @@ export class CommitmentStore {
 					)
 						throw new Error("La tarea debe estar activa.");
 					setBehaviors(task, action.behaviors, now);
-					changes.push({ action: "behaviors_updated", ...task });
+					changes.push({ action: "behaviors_updated", ...taskDetails(task) });
 				} else if (action.type === "renewal_reminder") {
 					const task = owned(action.id);
 					if (
@@ -246,7 +387,7 @@ export class CommitmentStore {
 						);
 					task.renewalReminderDays = action.days ?? undefined;
 					task.updatedAt = now;
-					changes.push({ action: "renewal_reminder", ...task });
+					changes.push({ action: "renewal_reminder", ...taskDetails(task) });
 				} else if (action.type === "update") {
 					const task = owned(action.id);
 					if (
@@ -257,7 +398,37 @@ export class CommitmentStore {
 						throw new Error(
 							"Solo se puede editar una tarea activa; renueva explícitamente las vencidas.",
 						);
-					task.instruction = action.instruction;
+					task.reportImage = revisedImage(task, action.format);
+					if (action.instruction !== undefined)
+						task.instruction = action.instruction;
+					if (action.time !== undefined && action.time !== task.schedule.time) {
+						task.schedule.time = action.time;
+						if (task.schedule.frequency === "once")
+							task.expiresAt = scheduleDeadline(
+								task.schedule,
+								now,
+								task.timezone,
+							);
+						task.nextRunAt = nextOccurrence(
+							task.schedule,
+							now,
+							task.expiresAt,
+							task.timezone,
+						);
+						if (!task.nextRunAt)
+							throw new Error(
+								"Esa hora no tiene una próxima ejecución dentro del plazo de la tarea.",
+							);
+					}
+					if (action.searchQuery !== undefined) {
+						if (task.kind !== "research")
+							throw new Error(
+								"La consulta pública requiere una tarea de investigación.",
+							);
+						task.searchQuery = action.searchQuery;
+					}
+					if (action.domains !== undefined)
+						task.domains = checkedDomains(action.domains, task.domains);
 					task.updatedAt = now;
 					task.sourceMessageId = request.messageId;
 					task.evidence = action.evidence;
@@ -266,13 +437,20 @@ export class CommitmentStore {
 						task.lastOccurrence.status = "failed";
 					changes.push({
 						action: "updated",
-						...task,
+						...taskDetails(task),
 						expiresLocal: displayTime(task.expiresAt, task.timezone),
 					});
 				} else if (action.type === "schedule") {
 					const previous = action.replaceId
 						? owned(action.replaceId)
 						: undefined;
+					if (
+						previous &&
+						(!("schedule" in previous) ||
+							previous.status !== "active" ||
+							previous.expiresAt <= now)
+					)
+						throw new Error("Solo se puede reemplazar una tarea activa.");
 					if (
 						action.task.renewalReminderDays &&
 						action.task.schedule.frequency === "once"
@@ -284,18 +462,21 @@ export class CommitmentStore {
 						throw new Error(
 							"La investigación necesita una consulta pública concreta, sin datos personales del chat.",
 						);
-					if (action.replaceId) {
-						const old = owned(action.replaceId);
-						if (!("schedule" in old))
-							throw new Error("Ese registro no es una tarea.");
-						old.status = "cancelled";
-						old.updatedAt = now;
+					if (previous) {
+						previous.status = "cancelled";
+						previous.updatedAt = now;
 					}
-					const expiresAt = scheduleDeadline(action.task.schedule, now);
+					const timezone = previous?.timezone ?? BOT_TZ;
+					const expiresAt = scheduleDeadline(
+						action.task.schedule,
+						now,
+						timezone,
+					);
 					const nextRunAt = nextOccurrence(
 						action.task.schedule,
 						now,
 						expiresAt,
+						timezone,
 					);
 					if (!nextRunAt)
 						throw new Error(
@@ -303,28 +484,24 @@ export class CommitmentStore {
 						);
 					const task = {
 						...action.task,
-						behaviors:
-							previous && "schedule" in previous
-								? previous.behaviors
-								: undefined,
-						behaviorEvents:
-							previous && "schedule" in previous
-								? previous.behaviorEvents
-								: undefined,
+						reportImage: revisedImage(previous, action.format),
+						reportPhotoIds: previous?.reportPhotoIds,
+						behaviors: previous?.behaviors,
+						behaviorEvents: previous?.behaviorEvents,
 						renewalReminderDays:
 							action.task.schedule.frequency === "once"
 								? undefined
 								: (action.task.renewalReminderDays ??
-									state.tasks.find(
-										(t) =>
-											t.id === action.replaceId && t.chatId === request.chatId,
-									)?.renewalReminderDays),
+									previous?.renewalReminderDays),
 						domains: checkedDomains(
-							action.task.domains,
-							action.replaceId ? owned(action.replaceId).domains : [],
+							action.task.domains ?? previous?.domains ?? [],
+							previous?.domains,
 						),
 						...provenance(action.evidence),
-						timezone: BOT_TZ,
+						creatorId: previous?.creatorId ?? request.userId,
+						creatorName:
+							previous?.creatorName ?? request.userName.slice(0, 200),
+						timezone,
 						expiresAt,
 						nextRunAt,
 						status: "active" as const,
@@ -336,9 +513,9 @@ export class CommitmentStore {
 					state.tasks.push(task);
 					changes.push({
 						action: "saved",
-						...task,
-						nextLocal: displayTime(nextRunAt),
-						expiresLocal: displayTime(expiresAt),
+						...taskDetails(task),
+						nextLocal: displayTime(nextRunAt, timezone),
+						expiresLocal: displayTime(expiresAt, timezone),
 					});
 				} else if (action.type === "prefer") {
 					if (action.replaceId) {
@@ -407,7 +584,7 @@ export class CommitmentStore {
 						entry.updatedAt = now;
 						changes.push({
 							action: action.type,
-							...entry,
+							...("schedule" in entry ? taskDetails(entry) : entry),
 							...("expiresAt" in entry
 								? { expiresLocal: displayTime(entry.expiresAt, entry.timezone) }
 								: {}),
@@ -449,9 +626,9 @@ export class CommitmentStore {
 				changes,
 				...(plan.list
 					? {
-							agenda: state.tasks
-								.filter((t) => t.chatId === request.chatId)
-								.slice(-30),
+							agenda: agendaTasks(state.tasks, request.chatId, now).map(
+								taskDetails,
+							),
 							preferences: state.preferences.filter(
 								(p) => p.chatId === request.chatId && p.status === "active",
 							),
@@ -460,9 +637,19 @@ export class CommitmentStore {
 				policy:
 					"Tasks end at the stated deadline. Renew only on an explicit new request. Preferences persist until changed or cancelled.",
 			});
+			// Large multi-task listings can exceed the receipt limit even without
+			// runtime history. Keep their mutation acknowledgements replay-safe.
+			const receiptResult =
+				result.length <= 60_000
+					? result
+					: JSON.stringify({
+							committed: true,
+							changes: changes.map(({ id, action }) => ({ id, action })),
+							listed: plan.list,
+						});
 			state.receipts = [
 				...state.receipts.slice(-499),
-				{ key, result, at: now },
+				{ key, result: receiptResult, at: now },
 			];
 			state.pending = state.pending.filter(
 				(p) => p.chatId !== request.chatId || p.userId !== request.userId,

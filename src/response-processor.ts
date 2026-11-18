@@ -42,6 +42,7 @@ export interface SendResponseOptions {
 }
 
 export interface SendResponseResult {
+	preparedPhotoId?: number;
 	cleanedText: string;
 	bufferDirty: boolean;
 	sent: boolean;
@@ -111,7 +112,7 @@ export async function sendResponse(
 		throw new Error("Image-only report has no prepared image");
 	if (options.preparedImage) {
 		chatAction?.update("upload_photo");
-		await ctx.replyWithPhoto(
+		const photo = await ctx.replyWithPhoto(
 			new InputFile(options.preparedImage, "report.png"),
 			{
 				caption:
@@ -123,7 +124,12 @@ export async function sendResponse(
 		);
 		if (!options.preparedImageOnly && plan.text.length > 1000)
 			await sendTextReply(ctx, plan.text, replyOptions);
-		return { sent: true, cleanedText: plan.text, bufferDirty: false };
+		return {
+			sent: true,
+			cleanedText: plan.text,
+			bufferDirty: false,
+			preparedPhotoId: photo.message_id,
+		};
 	}
 	if (plan.reaction) {
 		try {

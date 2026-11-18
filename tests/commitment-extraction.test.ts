@@ -13,6 +13,7 @@ const raw = {
 	actions: [
 		{
 			type: "schedule",
+			format: { delivery: "text" },
 			evidence: request.text,
 			task: {
 				instruction: "Resultados de la última jornada de LIDOM",

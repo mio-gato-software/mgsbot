@@ -779,3 +779,27 @@ test("factual review and repair use the selected main model rather than backgrou
 		background.mockRestore();
 	}
 });
+
+test("a failed image-only occurrence alerts the owner without sending text to the task chat", async () => {
+	now = localTime("2026-10-22", "07:00");
+	await store.transaction((state) => {
+		const task = state.tasks[0];
+		if (!task) throw new Error("missing task");
+		task.reportImage = {
+			delivery: "image_only",
+			canvas: "mobile",
+			description: "Standings",
+		};
+	});
+	await runScheduledTasks({
+		...services,
+		generate: async () => {
+			throw new Error("image unavailable");
+		},
+	});
+	expect(delivered).toEqual([]);
+	expect(alerts).toHaveLength(1);
+	const [task] = (await store.read()).tasks;
+	expect(task?.lastOccurrence?.status).toBe("failed");
+	expect(task?.nextRunAt).toBe(localTime("2026-10-23", "07:00"));
+});
