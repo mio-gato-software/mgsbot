@@ -8,6 +8,8 @@
 export type MentionType = "none" | "reply" | "tag" | "name";
 
 export interface ConversationMessage {
+	/** Saved task that produced this delivered bot message, when known. */
+	reportTaskId?: string;
 	/** Original user instruction kept separate from fetched/transcribed reference material. */
 	userText?: string;
 	/** Set at intake when this text belongs to the current speaker. */

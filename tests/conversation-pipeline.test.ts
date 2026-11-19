@@ -620,6 +620,113 @@ test("group continuation routing interprets an authorized report retry and uses 
 	expect(spies.replies).toHaveLength(0);
 });
 
+test("unthreaded bilingual retries recover the saved image-only report before a lookup or generic photo", async () => {
+	for (const [i, text] of ["¿Lo mandas de nuevo?", "Demo. Again."].entries()) {
+		const { ctx, spies } = makeMockContext({
+			chatId: ++chatId,
+			chatType: "supergroup",
+			text,
+		});
+		const buf = await loadSensory(chatId);
+		buf.allowPhotoRequest = true;
+		buf.messages.push({
+			role: "model",
+			content: "Resultados de la jornada.",
+			timestamp: Date.now() - 36 * 60000,
+			reportTaskId: "saved-report",
+		});
+		await saveSensory(buf);
+		const services = dependencies();
+		const proposal =
+			i === 0
+				? '[WEB_SEARCH]{"query":"liga marcadores","notice":"Voy a revisar."}[/WEB_SEARCH]'
+				: "Aquí está [IMAGE: square scoreboard]";
+		services.generate = async () => proposal;
+		services.web = {
+			isEnabled: () => i === 0,
+			context: async () => "",
+			refreshHeadlines: async () => {},
+			search: async () => {
+				throw Error("ordinary search bypassed the saved report");
+			},
+		};
+		services.commitments = async (request, _defaults, execution) => {
+			expect(request.recentConversation?.at(-1)?.reportTaskId).toBe(
+				"saved-report",
+			);
+			execution?.onReportReview?.(async (draft) => {
+				expect(draft).toContain(
+					i === 0 ? "liga marcadores" : "square scoreboard",
+				);
+				return () => execution.run({ id: "saved-report" } as never);
+			});
+			return "";
+		};
+		services.scheduled = async () => ({
+			text: "Resultados y tabla verificados",
+			image: Buffer.from("prepared portrait"),
+			delivery: "image_only",
+		});
+		let photos = 0;
+		ctx.replyWithPhoto = async (_photo, options) => {
+			expect(options?.caption).toBeUndefined();
+			photos++;
+			return { message_id: 100 } as never;
+		};
+		expect(await processConversation(ctx, text, "Ada", {}, services)).toBe(
+			true,
+		);
+		expect(photos).toBe(1);
+		expect(spies.replies).toHaveLength(0);
+		expect((await loadSensory(chatId)).messages.at(-1)).toMatchObject({
+			content: "Resultados y tabla verificados",
+			reportTaskId: "saved-report",
+		});
+	}
+});
+
+test("an independent lookup still announces and executes when report review is available", async () => {
+	const text = "¿A qué hora abre el parque?";
+	const { ctx, spies } = makeMockContext({
+		chatId: ++chatId,
+		chatType: "group",
+		text,
+	});
+	const services = dependencies();
+	let searched = false;
+	let reviews = 0;
+	services.web = {
+		isEnabled: () => true,
+		context: async () => "",
+		refreshHeadlines: async () => {},
+		search: async () => {
+			expect(spies.replies.map((r) => r.text)).toEqual(["Voy a verificar."]);
+			searched = true;
+			return "Abre a las nueve.";
+		},
+	};
+	services.generate = async () =>
+		searched
+			? "Abre a las nueve."
+			: '[WEB_SEARCH]{"query":"horario parque","notice":"Voy a verificar."}[/WEB_SEARCH]';
+	services.commitments = async (_r, _s, e) => {
+		e?.onReportReview?.(async () => {
+			reviews++;
+			return undefined;
+		});
+		return "";
+	};
+	services.scheduled = async () => {
+		throw Error("Unrelated lookup ran a task");
+	};
+	await processConversation(ctx, text, "Ada", {}, services);
+	expect(reviews).toBe(1);
+	expect(spies.replies.map((r) => r.text)).toEqual([
+		"Voy a verificar.",
+		"Abre a las nueve.",
+	]);
+});
+
 test("a spontaneous group reply cannot interpret or execute agenda actions", async () => {
 	const text = "Inténtalo de nuevo";
 	const { ctx, spies } = makeMockContext({

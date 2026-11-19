@@ -1031,6 +1031,83 @@ test("chat conversation delivers the scheduled report image directly and resumes
 	await backgroundTasks.drain();
 });
 
+test("only a grounded repeat in this chat can claim a saved report from a proposed draft", async () => {
+	const format = {
+		delivery: "image_only" as const,
+		canvas: { width: 808, height: 1280 },
+		description: "Tabla con marcadores y sedes",
+	};
+	await store.apply(input, plan([{ ...action(), format }]));
+	const [task] = (await store.read()).tasks;
+	if (!task) throw Error("Missing report");
+	for (const [i, kind] of [
+		"run",
+		"independent",
+		"unknown",
+		"forged",
+		"clarify",
+		"error",
+	].entries()) {
+		const text = kind === "independent" ? "Dibújame una pelota" : "Again.";
+		const recentConversation = [
+			{
+				role: "model",
+				text: "Resultados y clasificación.",
+				reportTaskId: task.id,
+			},
+		];
+		let review:
+			| import("../src/commitments/requests.ts").ReviewReportDraft
+			| undefined;
+		let runs = 0;
+		let replies = 0;
+		await handleCommitmentRequest(
+			{ ...input, messageId: i + 2, text, recentConversation },
+			{
+				store,
+				now: () => now,
+				interpret: async () => plan([]),
+				reviewDraft: async (context, draft) => {
+					expect(context.latestMessage).toBe(text);
+					expect(context.recentConversation).toEqual(recentConversation);
+					expect(context.tasks.map((t) => t.id)).toEqual([task.id]);
+					expect(draft).toContain("draw");
+					if (kind === "error") throw Error("Unavailable");
+					if (kind === "clarify" || kind === "independent") return { kind };
+					return {
+						kind: "run",
+						taskId: kind === "unknown" ? "missing" : task.id,
+						evidence: kind === "forged" ? "draw" : text,
+					};
+				},
+			},
+			{
+				onReportReview: (f) => {
+					review = f;
+				},
+				run: async (selected) => {
+					expect(selected.reportImage).toEqual(format);
+					runs++;
+				},
+				reply: () => {
+					replies++;
+				},
+			},
+		);
+		if (!review) throw Error("Missing eligibility check");
+		const handle = await review("draw an empty scoreboard");
+		expect(runs).toBe(0);
+		await handle?.();
+		expect(runs).toBe(kind === "run" ? 1 : 0);
+		expect(replies).toBe(kind === "independent" || kind === "run" ? 0 : 1);
+		if (kind === "run") {
+			await handle?.();
+			expect(runs).toBe(1);
+		}
+	}
+	expect((await store.read()).tasks).toEqual([task]);
+});
+
 test("manual run permission is enforced when shared group management is disabled", async () => {
 	const previous = process.env.ALLOW_GROUP_TASK_EDITS;
 	process.env.ALLOW_GROUP_TASK_EDITS = "false";

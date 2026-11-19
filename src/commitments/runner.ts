@@ -574,6 +574,7 @@ export async function checkAndSendScheduledTasks(
 				const buffer = await loadSensory(task.chatId);
 				await addMessageToSensory(buffer, {
 					role: "model",
+					reportTaskId: task.id,
 					content: message,
 					timestamp: Date.now(),
 				});

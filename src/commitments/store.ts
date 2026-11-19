@@ -83,6 +83,7 @@ export interface RequestIdentity {
 	replyContext?: { text: string; isBot: boolean; messageId?: number };
 	referenceImage?: { size?: string; description?: string };
 	recentConversation?: Array<{
+		reportTaskId?: string;
 		role: string;
 		name?: string;
 		userId?: number;

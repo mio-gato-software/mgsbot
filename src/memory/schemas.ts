@@ -10,6 +10,7 @@ export const messageSchema = z
 		content: z.string(),
 		userText: z.string().optional(),
 		userTextVerified: z.literal(true).optional(),
+		reportTaskId: z.string().min(1).max(100).optional(),
 		timestamp,
 		name: z.string().optional(),
 		userId: z.number().optional(),
