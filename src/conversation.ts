@@ -15,6 +15,7 @@ import { alertOwner, errorSummary } from "./alerts.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { checkAndSendTaskBehaviors } from "./commitments/behavior-runner.ts";
+import type { ReviewReportDraft } from "./commitments/requests.ts";
 import { handleCommitmentRequest } from "./commitments/requests.ts";
 import {
 	generateScheduledDelivery,
@@ -54,6 +55,7 @@ import { buildMessages } from "./prompt/history.ts";
 import { isFullAccessActive, isSimpleAssistantMode } from "./prompt/modes.ts";
 import type { MediaAttachment } from "./providers/types.ts";
 import { ResearchFailure, researchFailureNotice } from "./research-failure.ts";
+import { parseResponse } from "./response-plan.ts";
 import { type SendResponseResult, sendResponse } from "./response-processor.ts";
 import { timeoutReply } from "./telegram-delivery.ts";
 import { isTtsAvailable } from "./tts/index.ts";
@@ -165,6 +167,7 @@ export async function processConversation(
 	// shared handle, and the finally below always clears it.
 	const typing = startChatAction(ctx, "typing");
 	let result: SendResponseResult | null;
+	let deliveredReportId: string | undefined;
 	try {
 		// Register identity for this user
 		const { userId, username } = getUserInfo(ctx);
@@ -294,6 +297,7 @@ export async function processConversation(
 			mediaAttachment?.mimeType ?? reference?.mimeType ?? "image/jpeg";
 		let taskResponse: string | undefined;
 		let taskDelivery: ScheduledMessage | undefined;
+		let reviewDraft: ReviewReportDraft | undefined;
 		let executedTask: ScheduledTask | undefined;
 		let recordReportPhoto: ((messageId: number) => Promise<void>) | undefined;
 		const commitmentContext =
@@ -325,6 +329,7 @@ export async function processConversation(
 								role: m.role,
 								name: m.name,
 								userId: m.userId,
+								reportTaskId: m.role === "model" ? m.reportTaskId : undefined,
 								text: (m.role === "user"
 									? (m.userText ?? "")
 									: m.content
@@ -334,6 +339,9 @@ export async function processConversation(
 						},
 						undefined,
 						{
+							onReportReview: (review) => {
+								reviewDraft = review;
+							},
 							describeReference:
 								referencePath && reference
 									? () =>
@@ -399,6 +407,7 @@ export async function processConversation(
 					latest.content += `\n\n[Reference image dimensions: ${imageSize}]`;
 			}
 
+			let deferred: (() => Promise<void>) | undefined;
 			responseText = await generateWithWebSearch({
 				systemPrompt,
 				messages,
@@ -407,11 +416,30 @@ export async function processConversation(
 				web: dependencies.web,
 				weather: dependencies.weather,
 				useCachedContext: !skipHistoricalContext,
+				interceptFirstLookup:
+					reviewDraft &&
+					(async (proposal) => {
+						deferred = await reviewDraft?.(proposal);
+						return !!deferred;
+					}),
 				announce: async (notice) => {
 					await ctx.reply(notice);
 					trackBackground("chat-log", logBotMessage(notice));
 				},
 			});
+			if (reviewDraft && !deferred) {
+				const candidate = parseResponse(responseText, {
+					allowImages: shouldGenImage || allowPhotoRequest,
+					allowImageEdits: !!userImagePath,
+					allowSpeech: false,
+				}).image;
+				if (candidate && !candidate.self)
+					deferred = await reviewDraft(candidate.prompt);
+			}
+			if (deferred) {
+				await deferred();
+				responseText = taskResponse ?? responseText;
+			}
 			if (renderedFactIds.size)
 				trackBackground(
 					"retrieval-reinforcement",
@@ -442,6 +470,7 @@ export async function processConversation(
 			userImagePath,
 			chatAction: typing,
 		});
+		if (result?.sent) deliveredReportId = executedTask?.id;
 		if (result?.preparedPhotoId && recordReportPhoto)
 			await recordReportPhoto(result.preparedPhotoId).catch(() =>
 				log.warn("[agenda] Could not record delivered report photo reference"),
@@ -481,6 +510,7 @@ export async function processConversation(
 		const botMessage: ConversationMessage = {
 			role: "model",
 			content: result.cleanedText,
+			reportTaskId: deliveredReportId,
 			timestamp: Date.now(),
 		};
 		// Serialize per chat: a concurrent user turn arriving right now must not

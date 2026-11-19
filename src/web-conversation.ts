@@ -224,6 +224,8 @@ export async function generateWithWebSearch(
 		web: ConversationWebContext;
 		weather?: ConversationWeatherContext;
 		announce: (text: string) => Promise<void>;
+		/** Yield to another authorized workflow before announcing or executing a lookup. */
+		interceptFirstLookup?: (proposal: string) => Promise<boolean>;
 		useCachedContext?: boolean;
 		maxLookups?: number;
 		/** Actual tool results only; excludes model drafts, memory and quoted promises. */
@@ -510,6 +512,7 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 				break;
 			}
 			if (!announced) {
+				if (await input.interceptFirstLookup?.(control)) return "";
 				const notice =
 					lookup.request.notice.replace(/\[[^\]]*\]/g, "").trim() ||
 					"Déjame ver qué encuentro.";
