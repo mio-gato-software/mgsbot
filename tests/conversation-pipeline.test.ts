@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { backgroundTasks } from "../src/background-tasks.ts";
 import {
 	type ConversationDependencies,
@@ -12,6 +12,7 @@ import {
 	saveSemanticStore,
 } from "../src/memory/semantic.ts";
 import { loadSensory, saveSensory } from "../src/memory/sensory.ts";
+import { weatherCurrent } from "../src/prompt/sections/activity.ts";
 import type { SemanticFact } from "../src/types.ts";
 import { makeMockContext } from "./helpers/telegram-mock.ts";
 
@@ -163,6 +164,7 @@ test("generation reinforces only the complete facts that survived filtering and 
 	];
 	const previous = await loadSemanticStore();
 	await saveSemanticStore(facts);
+	const weather = spyOn(weatherCurrent, "render").mockReturnValue(null);
 	try {
 		services.retrieve = async (input) => {
 			expect(input.relevantOnly).toBe(true);
@@ -196,6 +198,7 @@ test("generation reinforces only the complete facts that survived filtering and 
 		).toEqual(["shown"]);
 		expect(stored[0]?.lastConfirmed).toBe(yesterday);
 	} finally {
+		weather.mockRestore();
 		await saveSemanticStore(previous);
 	}
 });
