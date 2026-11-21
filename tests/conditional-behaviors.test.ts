@@ -416,103 +416,170 @@ test("stale preparing claims can recover within limits; interrupted send intents
 	);
 });
 
-for (const levels of [0, 1, 2]) {
-	test(`evaluation grounds table quotes through ${levels} JSON serialization levels`, async () => {
-		const configured = task.behaviors?.[0];
-		if (!configured) throw new Error("Missing behavior");
-		const table =
-			'2026-11-07\nFinal\tC\tH\tE\nEquipo Verde\t2\t7\t0\nEquipo Azul\t5\t11\t0\nNota: "final confirmado"; archivo C:\\demo';
-		let source = table;
-		for (let level = 0; level < levels; level++)
-			source = JSON.stringify({ content: source });
-		let calls = 0;
-		const result = await evaluateBehavior(
-			configured,
-			[source],
-			[],
-			"2026-11-08",
-			async () => {
-				calls++;
-				return JSON.stringify({
-					outcome: "matched",
-					reason: "Verified final",
-					events: [{ ...event, evidence: [{ index: 0, quote: table }] }],
-				});
-			},
-		);
-		expect(calls).toBe(1);
-		expect(result.events[0]?.key).toBe(event.key);
-		const retained = result.events[0]?.evidence[0]?.quote ?? "";
-		expect(retained.length).toBeGreaterThan(0);
-		expect(source.includes(retained)).toBe(true);
+function proposeMatch(passageIds: number[]) {
+	return JSON.stringify({
+		outcome: "matched",
+		reason: "Final",
+		events: [
+			{ key: event.key, summary: event.summary, date: event.date, passageIds },
+		],
 	});
 }
 
-test("serialized evidence cannot validate changed scores, reconstructed tables or a different source index", async () => {
+for (const levels of [0, 1, 2]) {
+	test(`a win in a table serialized ${levels} times reaches meme delivery with original evidence`, async () => {
+		const table =
+			'2026-11-07\nFinal\tC\tH\tE\nEquipo Verde\t2\t7\t0\nEquipo Azul\t5\t11\t0\nNota: "final confirmado"';
+		let source = table;
+		for (let level = 0; level < levels; level++)
+			source = JSON.stringify({ content: source });
+		const evidence = ["Unrelated page", source];
+		services.evaluate = (behavior, sources, previous, date) =>
+			evaluateBehavior(
+				behavior,
+				sources,
+				previous,
+				date,
+				async (_system, messages) => {
+					const input = JSON.parse(messages[0]?.content ?? "{}");
+					if (input.passages) {
+						expect(input.passages[1]).toEqual({
+							id: 1,
+							index: 1,
+							quote: source,
+						});
+						return proposeMatch([1]);
+					}
+					expect(input.events[0].evidence).toEqual([
+						{ index: 1, quote: source },
+					]);
+					expect(messages).toHaveLength(1);
+					expect(input).not.toHaveProperty("previousEvents");
+					return JSON.stringify({ supportedKeys: [event.key] });
+				},
+			);
+		await runTaskBehaviors(task, { ...observation(), evidence }, services);
+		expect(alerts).toEqual([]);
+		expect(delivered).toHaveLength(1);
+		expect((await store.read()).tasks[0]?.behaviorEvents?.[0]?.status).toBe(
+			"sent",
+		);
+	});
+}
+
+for (const hasFinal of [true, false]) {
+	test(`citation repair ${hasFinal ? "recovers the verified win" : "keeps an in-progress score from triggering the meme"}`, async () => {
+		const evidence = [
+			"7 de noviembre de 2026. En el séptimo: Equipo Azul 5, Equipo Verde 2.",
+			hasFinal ? proof : "Noveno inning. Partido todavía en curso.",
+		];
+		let reviews = 0;
+		let repairs = 0;
+		services.evaluate = (behavior, sources, previous, date) =>
+			evaluateBehavior(
+				behavior,
+				sources,
+				previous,
+				date,
+				async (_system, messages, operation) => {
+					const input = JSON.parse(messages[0]?.content ?? "{}");
+					if (operation === "behavior-evaluation") return proposeMatch([0]);
+					if (operation === "behavior-evidence-recovery") {
+						repairs++;
+						expect(
+							input.passages.map((p: { quote: string }) => p.quote),
+						).toEqual(evidence);
+						expect(
+							JSON.parse(messages[1]?.content ?? "{}").rejected[0].key,
+						).toBe(event.key);
+						return proposeMatch([1]);
+					}
+					expect(operation).toBe("behavior-evidence-review");
+					expect(input).not.toHaveProperty("passages");
+					expect(input.events[0].evidence).toEqual([
+						{ index: reviews, quote: evidence[reviews] },
+					]);
+					reviews++;
+					return JSON.stringify({
+						supportedKeys: reviews === 2 && hasFinal ? [event.key] : [],
+					});
+				},
+			);
+		await runTaskBehaviors(task, { ...observation(), evidence }, services);
+		expect(repairs).toBe(1);
+		expect(reviews).toBe(2);
+		expect(delivered).toHaveLength(hasFinal ? 1 : 0);
+		expect(alerts).toEqual([]);
+	});
+}
+
+test("evaluation repairs an invalid passage ID and fails closed if repair also fails", async () => {
 	const configured = task.behaviors?.[0];
 	if (!configured) throw new Error("Missing behavior");
-	const table = "2026-11-07\nFinal\tEquipo Azul 5 - Equipo Verde 2";
-	const source = JSON.stringify({ content: table });
-	for (const invalid of [
-		{ index: 0, quote: table.replace("Azul 5", "Azul 8") },
-		{ index: 0, quote: table.replace("\t", " ") },
-		{ index: 1, quote: table },
-	]) {
-		await expect(
-			evaluateBehavior(
-				configured,
-				[source, "Unrelated page"],
-				[],
-				"2026-11-08",
-				async () =>
-					JSON.stringify({
-						outcome: "matched",
-						reason: "Unverified",
-						events: [{ ...event, evidence: [invalid] }],
-					}),
-			),
-		).rejects.toThrow("Unverifiable event evidence");
+	for (const repair of [true, false]) {
+		let calls = 0;
+		const result = evaluateBehavior(
+			configured,
+			[proof],
+			[],
+			"2026-11-08",
+			async (_system, messages) => {
+				calls++;
+				if (calls === 1) return proposeMatch([9]);
+				if (calls === 2) {
+					expect(messages.at(-1)?.content).toContain(
+						"Unknown event evidence passage ID 9",
+					);
+					return proposeMatch([repair ? 0 : 9]);
+				}
+				return JSON.stringify({ supportedKeys: [event.key] });
+			},
+		);
+		if (repair) {
+			expect((await result).events[0]?.evidence).toEqual(event.evidence);
+			expect(calls).toBe(3);
+		} else {
+			await expect(result).rejects.toThrow(
+				"Unknown event evidence passage ID 9",
+			);
+			expect(calls).toBe(2);
+		}
 	}
 });
 
-test("evaluation labels source indices explicitly and gives actionable repair feedback", async () => {
+test("passages retain source indices across boundaries and exclude evidence beyond the budget", async () => {
 	const configured = task.behaviors?.[0];
 	if (!configured) throw new Error("Missing behavior");
-	let calls = 0;
+	const source = `${"x".repeat(999)}🏆${proof}`;
 	const result = await evaluateBehavior(
 		configured,
-		["Unrelated page", proof],
+		[source, "z".repeat(64000), proof],
 		[],
 		"2026-11-08",
 		async (_system, messages) => {
-			const supplied = JSON.parse(messages[0]?.content ?? "{}");
-			expect(supplied.evidence).toEqual([
-				{ index: 0, content: "Unrelated page" },
-				{ index: 1, content: proof },
-			]);
-			calls++;
-			if (calls === 2) {
-				expect(messages.at(-1)?.content).toContain(
-					"Unverifiable event evidence at index 2",
-				);
-				expect(messages.at(-1)?.content).toContain(
-					"Valid evidence indices are 0, 1",
-				);
+			const input = JSON.parse(messages[0]?.content ?? "{}");
+			if (input.passages) {
+				const passages: { index: number; quote: string }[] = input.passages;
+				expect(
+					passages
+						.filter((p) => p.index === 0)
+						.map((p) => p.quote)
+						.join(""),
+				).toBe(source);
+				expect(passages[1]?.quote).toBe(`🏆${proof}`);
+				expect(passages.map((p) => p.quote).join("")).toHaveLength(64000);
+				expect(passages.some((p) => p.index === 2)).toBe(false);
+				return proposeMatch([0, 1]);
 			}
-			return JSON.stringify({
-				outcome: "matched",
-				reason: "Verified",
-				events: [
-					{
-						...event,
-						evidence: [{ index: calls === 1 ? 2 : 1, quote: proof }],
-					},
-				],
-			});
+			expect(
+				input.events[0].evidence
+					.map((p: { quote: string }) => p.quote)
+					.join(""),
+			).toBe(source);
+			return JSON.stringify({ supportedKeys: [event.key] });
 		},
 	);
-	expect(calls).toBe(2);
-	expect(result.events[0]?.evidence[0]?.index).toBe(1);
+	expect(result.events[0]?.key).toBe(event.key);
 });
 
 test("evaluation alerts identify the failing stage and reason without attempting image generation", async () => {
@@ -530,50 +597,37 @@ test("evaluation alerts identify the failing stage and reason without attempting
 	expect(renders).toBe(0);
 	expect(alerts).toHaveLength(1);
 	expect(alerts[0]).toContain("evaluation failed");
-	expect(alerts[0]).toContain("Unverifiable event evidence at index 2");
+	expect(alerts[0]).toContain("Unknown event evidence passage ID 2");
 	expect(delivered).toEqual([]);
 });
 
-test("evaluation validates verbatim tool evidence and retains event identities across different wording", async () => {
+test("only reviewed event keys survive a mixed batch, and an unknown review key fails closed", async () => {
 	const configured = task.behaviors?.[0];
 	if (!configured) throw new Error("Missing behavior");
-	let calls = 0;
-	const decision = await evaluateBehavior(
-		configured,
-		[proof],
-		[],
-		"2026-11-07",
-		async () => {
-			calls++;
-			return JSON.stringify({
-				outcome: "matched",
-				reason: "Final",
-				events: [
-					{
-						...event,
-						evidence: [
-							{
-								index: 0,
-								quote:
-									calls === 1 ? "Invented result absent from evidence" : proof,
-							},
-						],
-					},
-				],
-			});
-		},
-	);
-	expect(calls).toBe(2);
-	expect(decision.events[0]?.key).toBe(event.key);
-	await expect(
-		evaluateBehavior(configured, [proof], [], "2026-11-07", async () =>
-			JSON.stringify({
-				outcome: "matched",
-				reason: "Forged",
-				events: [{ ...event, evidence: [{ index: 9, quote: proof }] }],
-			}),
-		),
-	).rejects.toThrow();
+	for (const supportedKey of [event.key, "unproposed"]) {
+		const result = evaluateBehavior(
+			configured,
+			[proof, "Segundo juego en curso"],
+			[],
+			"2026-11-07",
+			async (_system, _messages, operation) => {
+				if (operation === "behavior-evidence-recovery")
+					return '{"outcome":"unknown","reason":"No final score","events":[]}';
+				if (operation === "behavior-evidence-review")
+					return JSON.stringify({ supportedKeys: [supportedKey] });
+				const batch = JSON.parse(proposeMatch([0]));
+				batch.events.push({
+					...batch.events[0],
+					key: "second-game",
+					passageIds: [1],
+				});
+				return JSON.stringify(batch);
+			},
+		);
+		if (supportedKey === event.key)
+			expect((await result).events).toEqual([event]);
+		else await expect(result).rejects.toThrow("unknown event key");
+	}
 });
 
 test("creative rendering receives verified facts, honors output modality and does not need full access", async () => {
