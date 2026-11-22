@@ -3,7 +3,7 @@
  * - "none": Bot not mentioned at all
  * - "reply": User replied to bot's message (always respond)
  * - "tag": User @mentioned the bot (always respond)
- * - "name": User mentioned bot's name (AI decides if addressed or just mentioned)
+ * - "name": The social router identified the bot as the direct addressee (a name is optional)
  */
 export type MentionType = "none" | "reply" | "tag" | "name";
 

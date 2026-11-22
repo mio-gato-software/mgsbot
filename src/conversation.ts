@@ -429,7 +429,8 @@ export async function processConversation(
 			const renderedFactIds = new Set<string>();
 			const systemPrompt =
 				(await dependencies.assemble(promptCtx, renderedFactIds)) +
-				commitmentContext +
+				(commitmentContext ||
+					"\nNo scheduling result is available for this turn. Do not promise to check an event or send something later.") +
 				(lastSelfie && messageId
 					? selfieContext(
 							lastSelfie,

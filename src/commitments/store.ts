@@ -6,6 +6,7 @@ import { readStore, writeStore } from "../memory/storage.ts";
 import { memoryPath } from "../runtime-paths.ts";
 import {
 	displayTime,
+	eventWatchSchedule,
 	extensionDeadline,
 	nextOccurrence,
 	renewalDeadline,
@@ -54,6 +55,10 @@ function applyFormat(
 /** Runtime configuration, never learned from ordinary memory or web content. */
 function setBehaviors(task: ScheduledTask, raw: unknown, now: number): void {
 	const inputs = z.array(behaviorInputSchema).max(3).parse(raw);
+	if (task.kind === "event_watch")
+		throw new Error(
+			"Para cambiar el acuerdo, cancela el seguimiento anterior y guarda el nuevo.",
+		);
 	if (inputs.length && task.kind !== "research")
 		throw new Error(
 			"Los comportamientos condicionales requieren una tarea de investigación.",
@@ -370,7 +375,31 @@ export class CommitmentStore {
 					throw new Error(
 						"No pude verificar la petición original; repítela explícitamente.",
 					);
-				if (action.type === "set_behaviors") {
+				if (action.type === "watch_event") {
+					const task: ScheduledTask = {
+						...provenance(action.evidence),
+						...eventWatchSchedule(
+							action.eventDate,
+							action.anchorTime,
+							action.waitMinutes,
+							now,
+							BOT_TZ,
+						),
+						kind: "event_watch",
+						timezone: BOT_TZ,
+						status: "active",
+						instruction: action.behavior.condition,
+						searchQuery: action.searchQuery,
+						domains: checkedDomains(action.domains ?? []),
+						behaviors: [
+							{ ...action.behavior, id: randomUUID(), createdAt: now },
+						],
+						checksMade: 0,
+						reportImage: null,
+					};
+					state.tasks.push(task);
+					changes.push({ action: "watch_saved", ...taskDetails(task) });
+				} else if (action.type === "set_behaviors") {
 					const task = owned(action.id);
 					if (
 						!("schedule" in task) ||
@@ -403,6 +432,10 @@ export class CommitmentStore {
 					)
 						throw new Error(
 							"Solo se puede editar una tarea activa; renueva explícitamente las vencidas.",
+						);
+					if (task.kind === "event_watch")
+						throw new Error(
+							"Para cambiar el acuerdo, cancela el seguimiento anterior y guarda el nuevo.",
 						);
 					task.reportImage = revisedImage(task, action.format);
 					if (action.instruction !== undefined)
@@ -467,6 +500,10 @@ export class CommitmentStore {
 					if (action.task.kind === "research" && !action.task.searchQuery)
 						throw new Error(
 							"La investigación necesita una consulta pública concreta, sin datos personales del chat.",
+						);
+					if (previous?.kind === "event_watch")
+						throw new Error(
+							"Cancela el seguimiento anterior antes de guardar el nuevo.",
 						);
 					if (previous) {
 						previous.status = "cancelled";

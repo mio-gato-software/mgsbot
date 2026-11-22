@@ -26,6 +26,34 @@ export function localTime(
 	return parsed.valueOf();
 }
 
+// A watch can resume after sleep or a restart without replaying missed checks.
+export const WATCH_WINDOW_MS = 18 * 60 * 60000;
+export const WATCH_RECHECK_MS = 45 * 60000;
+export const MAX_WATCH_CHECKS = 6;
+
+export function eventWatchSchedule(
+	date: string,
+	time: string,
+	waitMinutes: number,
+	now: number,
+	timezone: string,
+) {
+	const estimated = localTime(date, time, timezone) + waitMinutes * 60000;
+	const expiresAt = estimated + WATCH_WINDOW_MS;
+	if (!Number.isFinite(estimated) || expiresAt <= now) {
+		throw new Error("La fecha del evento no permite comprobar ese resultado.");
+	}
+	const nextRunAt = Math.max(now, estimated);
+	const first = dayjs.utc(nextRunAt).tz(timezone);
+	const schedule: Schedule = {
+		frequency: "once",
+		startDate: first.format("YYYY-MM-DD"),
+		time: first.format("HH:mm"),
+		weekdays: [first.day()],
+	};
+	return { schedule, nextRunAt, expiresAt };
+}
+
 export function monthDeadline(now: number, timezone = BOT_TZ): number {
 	const local = dayjs.utc(now).tz(timezone);
 	const next = local.add(1, "month");

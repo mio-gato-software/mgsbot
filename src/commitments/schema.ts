@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { scheduleSchema } from "./calendar.ts";
+import { dateSchema, MAX_WATCH_CHECKS, scheduleSchema } from "./calendar.ts";
 
 // Report content is also the image renderer's input, not a single Telegram message.
 export const MAX_SCHEDULED_REPORT_CHARS = 32_000;
-export const COMMITMENTS_VERSION = 3;
+export const COMMITMENTS_VERSION = 4;
 export const MAX_REPORT_PHOTO_IDS = 32;
 
 const text = z.string().trim().min(1).max(1200);
@@ -79,6 +79,20 @@ export const taskInputSchema = z.object({
 	domains: domainsSchema.optional(),
 });
 export const actionSchema = z.discriminatedUnion("type", [
+	z.object({
+		type: z.literal("watch_event"),
+		eventDate: dateSchema,
+		anchorTime: scheduleSchema.shape.time,
+		waitMinutes: z
+			.number()
+			.int()
+			.min(0)
+			.max(7 * 24 * 60),
+		searchQuery: taskInputSchema.shape.searchQuery.unwrap(),
+		behavior: behaviorInputSchema.omit({ id: true }),
+		domains: domainsSchema.optional(),
+		evidence: text,
+	}),
 	z.object({
 		type: z.literal("set_behaviors"),
 		id,
@@ -170,45 +184,65 @@ export const preferenceSchema = preferenceInputSchema.extend({
 const occurrenceSchema = z.object({
 	dueAt: z.number().finite(),
 	claimedAt: z.number().finite(),
-	status: z.enum(["preparing", "sending", "sent", "failed", "unknown"]),
+	status: z.enum([
+		"preparing",
+		"sending",
+		"sent",
+		"failed",
+		"unknown",
+		"checked",
+	]),
 });
-export const taskSchema = taskInputSchema.extend({
-	domains: domainsSchema.default([]),
-	// Missing on legacy tasks. Null is a persisted decision to deliver text.
-	reportImage: reportImageSchema.nullable().optional(),
-	reportPhotoIds: z
-		.array(z.number().int().positive())
-		.max(MAX_REPORT_PHOTO_IDS)
-		.optional(),
-	behaviors: z.array(behaviorSchema).max(3).optional(),
-	behaviorEvents: z.array(behaviorEventSchema).max(500).optional(),
-	...provenance,
-	timezone: z
-		.string()
-		.min(1)
-		.max(100)
-		.refine((zone) => {
-			try {
-				new Intl.DateTimeFormat("en", { timeZone: zone });
-				return true;
-			} catch {
-				return false;
-			}
-		}),
-	expiresAt: z.number().finite(),
-	nextRunAt: z.number().finite().optional(),
-	status: z.enum(["active", "cancelled", "expired", "completed"]),
-	lastOccurrence: occurrenceSchema.optional(),
-	lastMessage: z.string().max(MAX_SCHEDULED_REPORT_CHARS).optional(),
-	renewalTermStartedAt: z.number().finite().optional(),
-	renewalNotice: z
-		.object({
-			forExpiresAt: z.number().finite(),
-			at: z.number().finite(),
-			status: z.enum(["sending", "sent", "unknown", "declined"]),
-		})
-		.optional(),
-});
+export const taskSchema = taskInputSchema
+	.extend({
+		kind: z.enum(["research", "reminder", "event_watch"]),
+		checksMade: z.number().int().min(0).max(MAX_WATCH_CHECKS).optional(),
+		domains: domainsSchema.default([]),
+		// Missing on legacy tasks. Null is a persisted decision to deliver text.
+		reportImage: reportImageSchema.nullable().optional(),
+		reportPhotoIds: z
+			.array(z.number().int().positive())
+			.max(MAX_REPORT_PHOTO_IDS)
+			.optional(),
+		behaviors: z.array(behaviorSchema).max(3).optional(),
+		behaviorEvents: z.array(behaviorEventSchema).max(500).optional(),
+		...provenance,
+		timezone: z
+			.string()
+			.min(1)
+			.max(100)
+			.refine((zone) => {
+				try {
+					new Intl.DateTimeFormat("en", { timeZone: zone });
+					return true;
+				} catch {
+					return false;
+				}
+			}),
+		expiresAt: z.number().finite(),
+		nextRunAt: z.number().finite().optional(),
+		status: z.enum(["active", "cancelled", "expired", "completed"]),
+		lastOccurrence: occurrenceSchema.optional(),
+		lastMessage: z.string().max(MAX_SCHEDULED_REPORT_CHARS).optional(),
+		renewalTermStartedAt: z.number().finite().optional(),
+		renewalNotice: z
+			.object({
+				forExpiresAt: z.number().finite(),
+				at: z.number().finite(),
+				status: z.enum(["sending", "sent", "unknown", "declined"]),
+			})
+			.optional(),
+	})
+	.refine(
+		(task) =>
+			task.kind !== "event_watch" ||
+			(task.schedule.frequency === "once" &&
+				!!task.searchQuery &&
+				task.behaviors?.length === 1 &&
+				task.reportImage === null &&
+				task.checksMade !== undefined),
+		"An event watch needs a single condition, public query and finite check state",
+	);
 export type ScheduledTask = z.infer<typeof taskSchema>;
 export type StandingPreference = z.infer<typeof preferenceSchema>;
 export const stateSchema = z.object({
@@ -223,6 +257,7 @@ export const stateSchema = z.object({
 				chatId: z.number().int(),
 				userId: z.number().int(),
 				text: z.string().max(5000),
+				requestDate: dateSchema.optional(),
 				/** Only text actually typed by this user, never speech transcription. */
 				question: z.string().max(400).optional(),
 				writtenText: z.string().max(5000).optional(),

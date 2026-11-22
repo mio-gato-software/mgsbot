@@ -716,6 +716,7 @@ test("extension conversation keeps the draft across restart and adds a day to th
 				expect(request.text).toContain(opening);
 				expect(request.text).toContain(followup);
 				expect(JSON.parse(context).pendingRequest).toBe(opening);
+				expect(JSON.parse(context).requestDate).toBe("2026-10-24");
 				return plan([
 					{ type: "extend", ids: [original.id], days: 1, evidence: followup },
 				]);

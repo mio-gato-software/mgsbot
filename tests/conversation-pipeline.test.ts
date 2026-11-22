@@ -43,7 +43,10 @@ test("a complete turn sends and persists the same reply", async () => {
 	const { ctx, spies } = makeMockContext({ chatId: ++chatId });
 	const services = dependencies();
 	services.generate = async (system, messages) => {
-		expect(system).toBe("Test bot system prompt");
+		expect(system).toStartWith("Test bot system prompt");
+		expect(system).toContain(
+			"Do not promise to check an event or send something later.",
+		);
 		expect(messages.at(-1)?.content).toContain("hola");
 		return "Hola, Ana";
 	};

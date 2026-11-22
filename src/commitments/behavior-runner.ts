@@ -46,9 +46,22 @@ function eligible(
 ): current is ScheduledTask {
 	return (
 		!!current &&
-		current.status === "active" &&
+		(current.status === "active" ||
+			// The scheduler completes a one-time task before running its effects.
+			(current.status === "completed" &&
+				current.schedule.frequency === "once" &&
+				current.lastOccurrence?.status === "sent" &&
+				original.lastOccurrence?.status === "preparing" &&
+				current.lastOccurrence.dueAt === original.lastOccurrence.dueAt &&
+				current.lastOccurrence.claimedAt ===
+					original.lastOccurrence.claimedAt)) &&
 		current.expiresAt > services.now() &&
 		current.chatId === original.chatId &&
+		(current.kind !== "event_watch" ||
+			(current.lastOccurrence?.status === "preparing" &&
+				current.lastOccurrence.claimedAt ===
+					original.lastOccurrence?.claimedAt &&
+				current.lastOccurrence.dueAt === original.lastOccurrence?.dueAt)) &&
 		current.instruction === original.instruction &&
 		JSON.stringify(current.behaviors?.find((b) => b.id === behavior.id)) ===
 			JSON.stringify(behavior) &&
@@ -66,7 +79,7 @@ export async function runTaskBehaviors(
 	observation: BehaviorObservation,
 	services: BehaviorServices,
 ): Promise<void> {
-	if (task.kind !== "research" || !task.behaviors?.length) return;
+	if (task.kind === "reminder" || !task.behaviors?.length) return;
 	const now = services.now();
 	if (
 		observation.checkedAt > now + 1000 ||
@@ -92,6 +105,15 @@ export async function runTaskBehaviors(
 			);
 			stage = "persistence";
 			if (result.outcome !== "matched") {
+				if (task.kind === "event_watch" && result.outcome === "not_matched") {
+					await services.store.transaction((state) => {
+						const watch = state.tasks.find((t) => t.id === task.id);
+						if (eligible(watch, task, behavior, services)) {
+							watch.status = "completed";
+							watch.nextRunAt = undefined;
+						}
+					});
+				}
 				log.info(`[behaviors] ${behavior.id}: ${result.outcome}`);
 				continue;
 			}
@@ -224,6 +246,10 @@ export async function runTaskBehaviors(
 						attempted = true;
 						await services.deliver(task.chatId, message);
 						receipt.status = "sent";
+						if (current.kind === "event_watch") {
+							current.status = "completed";
+							current.nextRunAt = undefined;
+						}
 						receipt.lastCaption = message.text;
 						receipt.updatedAt = services.now();
 						return true;
@@ -246,6 +272,14 @@ export async function runTaskBehaviors(
 							);
 						if (receipt && receipt.updatedAt === claimedAt) {
 							receipt.status = attempted ? "unknown" : "failed";
+							if (
+								attempted &&
+								current?.kind === "event_watch" &&
+								current.status === "active"
+							) {
+								current.status = "completed";
+								current.nextRunAt = undefined;
+							}
 							receipt.updatedAt = services.now();
 						}
 					});

@@ -24,7 +24,12 @@ import {
 	type BehaviorObservation,
 	checkAndSendTaskBehaviors,
 } from "./behavior-runner.ts";
-import { displayTime, nextOccurrence } from "./calendar.ts";
+import {
+	displayTime,
+	MAX_WATCH_CHECKS,
+	nextOccurrence,
+	WATCH_RECHECK_MS,
+} from "./calendar.ts";
 import { deliverScheduledMessage, type ScheduledMessage } from "./delivery.ts";
 import { generateScheduledImage } from "./image.ts";
 import { renewalButtons, runRenewalNotices } from "./renewal.ts";
@@ -336,11 +341,34 @@ export async function generateScheduledMessage(
 	return (await generateScheduledReport(task, services)).text;
 }
 
+/** A private observation needs public evidence and the bot's voice, without composing a report. */
+export async function observeScheduledEvent(
+	task: ScheduledTask,
+	services = scheduledGenerationServices,
+): Promise<BehaviorObservation> {
+	if (!task.searchQuery) throw new Error("Missing event search query");
+	const checkedAt = services.now();
+	const evidence: string[] = [];
+	await searchWithPreferences(
+		services.web,
+		task.chatId,
+		{ query: task.searchQuery, freshness: "pd" },
+		task.domains,
+		(source) => evidence.push(source),
+	);
+	const persona = await services.assemble(
+		buildPromptContext({ relevantFacts: [], relevantEpisodes: [] }),
+	);
+	return { evidence, checkedAt, persona };
+}
+
 /** Prepare every required artifact before persisting send intent or contacting Telegram. */
 export async function generateScheduledDelivery(
 	task: ScheduledTask,
 	services = scheduledGenerationServices,
 ): Promise<ScheduledMessage> {
+	if (task.kind === "event_watch")
+		throw new Error("An event watch does not produce a report");
 	const imageInstruction =
 		task.reportImage === undefined
 			? await services.planImage(task, services.store)
@@ -367,6 +395,7 @@ export interface RunnerServices {
 	generate: (task: ScheduledTask) => Promise<ScheduledMessage>;
 	deliver: (chatId: number, message: ScheduledMessage) => Promise<unknown>;
 	record: (task: ScheduledTask, message: string) => Promise<void>;
+	observeEvent?: (task: ScheduledTask) => Promise<BehaviorObservation>;
 	behaviors?: (
 		task: ScheduledTask,
 		observation: BehaviorObservation,
@@ -395,7 +424,25 @@ export async function runScheduledTasks(
 				interrupted.push(task.id);
 			}
 			if (task.status !== "active") continue;
-			if (task.expiresAt < now) {
+			const watching = task.kind === "event_watch";
+			if (
+				watching &&
+				task.behaviorEvents?.some((event) =>
+					["sending", "sent", "unknown"].includes(event.status),
+				)
+			) {
+				// A crash can leave a durable send intent without a confirmed outcome.
+				for (const event of task.behaviorEvents) {
+					if (event.status === "sending") event.status = "unknown";
+				}
+				task.status = "completed";
+				task.nextRunAt = undefined;
+				continue;
+			}
+			if (
+				task.expiresAt < now ||
+				(watching && (task.checksMade ?? 0) >= MAX_WATCH_CHECKS)
+			) {
 				task.status = "expired";
 				task.updatedAt = now;
 				continue;
@@ -410,7 +457,7 @@ export async function runScheduledTasks(
 				continue;
 			}
 			if (task.nextRunAt > now) continue;
-			if (now - task.nextRunAt > TASK_GRACE_MS) {
+			if (!watching && now - task.nextRunAt > TASK_GRACE_MS) {
 				task.lastOccurrence = {
 					dueAt: task.nextRunAt,
 					claimedAt: now,
@@ -435,12 +482,17 @@ export async function runScheduledTasks(
 				claimedAt: now,
 				status: "preparing",
 			};
-			task.nextRunAt = nextOccurrence(
-				task.schedule,
-				now,
-				task.expiresAt,
-				task.timezone,
-			);
+			if (watching) {
+				task.checksMade = (task.checksMade ?? 0) + 1;
+				task.nextRunAt = now + WATCH_RECHECK_MS;
+			} else {
+				task.nextRunAt = nextOccurrence(
+					task.schedule,
+					now,
+					task.expiresAt,
+					task.timezone,
+				);
+			}
 			due.push(structuredClone(task));
 		}
 		return { claims: due, interrupted };
@@ -454,6 +506,23 @@ export async function runScheduledTasks(
 	for (const claimed of claims) {
 		let attempted = false;
 		try {
+			if (claimed.kind === "event_watch") {
+				if (!services.observeEvent || !services.behaviors)
+					throw new Error("Missing event observation service");
+				const observation = await services.observeEvent(claimed);
+				await services.behaviors(claimed, observation);
+				await services.store.transaction((state) => {
+					const watch = state.tasks.find((t) => t.id === claimed.id);
+					if (
+						watch?.lastOccurrence?.status !== "preparing" ||
+						watch.lastOccurrence.claimedAt !== claimed.lastOccurrence?.claimedAt
+					)
+						return;
+					watch.lastOccurrence.status = "checked";
+					watch.updatedAt = services.now();
+				});
+				continue;
+			}
 			const message = await services.generate(claimed);
 			if (
 				!message.text.trim() ||
@@ -528,6 +597,7 @@ export async function runScheduledTasks(
 					task.lastOccurrence.status = attempted ? "unknown" : "failed";
 					if (
 						!attempted &&
+						task.kind !== "event_watch" &&
 						task.status === "active" &&
 						task.expiresAt >= services.now() &&
 						services.now() - task.lastOccurrence.dueAt <= TASK_GRACE_MS &&
@@ -570,6 +640,7 @@ export async function checkAndSendScheduledTasks(
 		store: commitments,
 		now: Date.now,
 		generate: generateScheduledDelivery,
+		observeEvent: observeScheduledEvent,
 		behaviors: (task, observation) =>
 			checkAndSendTaskBehaviors(api, task, observation, { isOff, isSleeping }),
 		deliver: (chatId, message) => deliverScheduledMessage(api, chatId, message),

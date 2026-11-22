@@ -17,6 +17,7 @@ import {
 import {
 	classifyWithTypeSafe,
 	editIntentWithTypeSafe,
+	groupExchangeGuidance,
 	repeatedSelfieWithTypeSafe,
 } from "./typesafe-classifier.ts";
 
@@ -72,10 +73,27 @@ function truncateText(text: string, maxChars: number): string {
 	return `${text.slice(0, maxChars - 12).trimEnd()} [truncated]`;
 }
 
+// The end of a long reply often contains the question or aside being answered.
+function groupMessageExcerpt(text: string): string {
+	if (text.length <= GROUP_ROUTER_MAX_MESSAGE_CHARS) return text;
+	const separator = " […] ";
+	const available = GROUP_ROUTER_MAX_MESSAGE_CHARS - separator.length;
+	const head = Math.ceil(available / 2);
+	const tail = available - head;
+	return `${text.slice(0, head)}${separator}${text.slice(-tail)}`;
+}
+
 function formatGroupMessageForClassifier(message: ConversationMessage): string {
 	const speaker =
 		message.role === "model" ? "Bot" : (message.name ?? "Group member");
-	return `${speaker}: ${truncateText(message.content, GROUP_ROUTER_MAX_MESSAGE_CHARS)}`;
+	const ownText = message.role === "user" ? message.userText : undefined;
+	if (ownText && ownText !== message.content) {
+		// Prioritize the speaker's words over an expanded photo, link or quote.
+		const excerpt = groupMessageExcerpt(ownText);
+		const context = ` [context: ${message.content.slice(0, GROUP_ROUTER_MAX_MESSAGE_CHARS)}]`;
+		return `${speaker}: ${(excerpt + context).slice(0, GROUP_ROUTER_MAX_MESSAGE_CHARS)}`;
+	}
+	return `${speaker}: ${groupMessageExcerpt(message.content)}`;
 }
 
 function formatRecentGroupMessages(messages: ConversationMessage[]): string {
@@ -110,12 +128,9 @@ function formatReplyContext(
 function buildGroupMessageIntentPrompt(input: GroupMessageIntentInput): string {
 	const recent = formatRecentGroupMessages(input.recentMessages);
 	const lastBotMessage = input.lastBotMessage?.trim()
-		? truncateText(input.lastBotMessage.trim(), GROUP_ROUTER_MAX_MESSAGE_CHARS)
+		? groupMessageExcerpt(input.lastBotMessage.trim())
 		: "(none)";
-	const currentMessage = truncateText(
-		input.currentMessage,
-		GROUP_ROUTER_MAX_MESSAGE_CHARS,
-	);
+	const currentMessage = groupMessageExcerpt(input.currentMessage);
 	const replyContext = formatReplyContext(input.replyContext);
 
 	return `You are a lightweight multilingual router for a Telegram group chat bot named ${input.botName}.
@@ -139,6 +154,7 @@ Action rules:
 - A Telegram reply to someone other than the bot is strong evidence the latest message is for that person. Choose "ambient"/"silence" unless the latest text explicitly addresses the bot.
 - Short acknowledgements, reactions, laughter, or agreement after another member's message are ambient unless they clearly answer the bot.
 - This must work across languages. Do not rely on language-specific keywords.
+- ${groupExchangeGuidance}
 
 Mode-specific guidance:
 - message: Interpret any group message with the supplied context. A direct request can address the bot without its name. Choose respond for a direct request or clear continuation, or when an ambient invitation makes participation natural.
@@ -318,15 +334,9 @@ export async function classifyGroupSocialIntent(
 			botName: truncateText(input.botName, 100),
 			mode: input.mode,
 			currentSpeaker: truncateText(input.currentSpeaker, 100),
-			currentMessage: truncateText(
-				currentMessage,
-				GROUP_ROUTER_MAX_MESSAGE_CHARS,
-			),
+			currentMessage: groupMessageExcerpt(currentMessage),
 			recentMessages: formatRecentGroupMessages(input.recentMessages),
-			lastBotMessage: truncateText(
-				input.lastBotMessage ?? "",
-				GROUP_ROUTER_MAX_MESSAGE_CHARS,
-			),
+			lastBotMessage: groupMessageExcerpt(input.lastBotMessage ?? ""),
 			replyContext: formatReplyContext(input.replyContext),
 		});
 		if (decision !== null) return decision;

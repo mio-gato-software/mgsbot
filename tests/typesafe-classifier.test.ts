@@ -171,6 +171,72 @@ test("typed group answers bypass the legacy model and bound the supplied context
 	expect(calls).toBe(1);
 });
 
+test.each(["typesafe", "openai"])(
+	"%s receives the speaker's question about a photo and the closing remark for both follow-ups",
+	async (provider) => {
+		process.env.CLASSIFIER_PROVIDER = provider;
+		const question = "¿Cómo quedan mis Nubes si ganan?";
+		const aside = "¡Yo voy con Coral y espero que pierdan los tuyos!";
+		const lastBotMessage = "Así se resuelve el desempate. ".repeat(30) + aside;
+		const replies = [
+			"Sigue soñando, que el título será nuestro.",
+			"Y mañana te lo recordaré.",
+		] as const;
+		const recentMessages = [
+			{
+				role: "user" as const,
+				name: "Ada",
+				content: `[Image] ${"Standings. ".repeat(80)}`,
+				userText: question,
+				timestamp: 1,
+			},
+			{ role: "model" as const, content: lastBotMessage, timestamp: 2 },
+		];
+		const calls: string[] = [];
+		mockFetch(async (_url, init) => {
+			const body = JSON.parse(String(init?.body));
+			calls.push(
+				provider === "typesafe"
+					? JSON.stringify(body.state)
+					: body.input[0].content,
+			);
+			return provider === "typesafe"
+				? Response.json(groupAnswer(0.9, "respond", "continuation"))
+				: legacyResponse(
+						'{"addressing":"continuation","action":"respond","confidence":0.9}',
+					);
+		});
+		for (const currentMessage of replies) {
+			expect(
+				(
+					await classifyGroupSocialIntent({
+						...input,
+						mode: "message",
+						currentSpeaker: "Ada",
+						currentMessage,
+						recentMessages,
+						lastBotMessage,
+					})
+				)?.addressing,
+			).toBe("continuation");
+			recentMessages.push({
+				role: "user",
+				name: "Ada",
+				content: currentMessage,
+				userText: currentMessage,
+				timestamp: 3,
+			});
+		}
+		expect(calls).toHaveLength(2);
+		for (const call of calls) {
+			expect(call).toContain(question);
+			expect(call).toContain(aside);
+		}
+		expect(calls[1]).toContain(replies[0]);
+		expect(calls[1]).toContain(replies[1]);
+	},
+);
+
 test("confident silence is preserved and both confidence values are respected", async () => {
 	const response = groupAnswer(0.95, "silence", "about_bot");
 	response.answers.action.confidence = 0.85;

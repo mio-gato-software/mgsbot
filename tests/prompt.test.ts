@@ -16,6 +16,7 @@ import {
 	memoryPersons,
 	memoryRelationship,
 } from "../src/prompt/sections/memory.ts";
+import { mentionGroupName } from "../src/prompt/sections/mention.ts";
 import { rulesBehavior, rulesGroup } from "../src/prompt/sections/rules.ts";
 import { voiceTts, voiceTutor } from "../src/prompt/sections/voice.ts";
 import type { PromptContext } from "../src/prompt/types.ts";
@@ -229,10 +230,15 @@ describe("section: rules.group", () => {
 		const out =
 			(await rulesGroup.render(makeCtx({ groupContinuation: true }))) ?? "";
 		expect(out).toContain("recently spoke");
-		expect(out).toContain("asking you to continue");
-		expect(out).toContain("replying to each other");
+		expect(out).toContain("several consecutive messages");
+		expect(out).toContain("play along");
 		expect(out).toContain("[QUOTE_REPLY]");
-		expect(out).toContain("[SILENCE]");
+	});
+
+	test("a socially direct turn does not require a literal name mention", async () => {
+		const out = await mentionGroupName.render(makeCtx({ mentionType: "name" }));
+		expect(out).toContain("addressing you directly");
+		expect(out).not.toContain("[SILENCE]");
 	});
 });
 

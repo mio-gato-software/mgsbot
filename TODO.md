@@ -22,10 +22,10 @@ Living document. Rules:
 - **Size:** Small once representative examples are available.
 - Added 2026-11-17.
 
-### Add observation sources beyond scheduled reports for conditional behaviors
+### Add explicitly authorized conversation observations for conditional behaviors
 
-- **Why:** conditional behaviors now evaluate a scheduled research task's actual tool evidence and keep durable event receipts. They currently run after the parent report; they do not observe every conversation or subscribe to live event feeds.
-- **What to do:** reuse the evaluator and event delivery receipts for explicitly authorized conversation observations or independent watch schedules. Preserve source provenance, per-chat permissions, finite monitoring terms and lookup/image budgets. Define catch-up and silence behavior before adding shorter polling intervals.
+- **Why:** conditional behaviors support scheduled reports and independent finite watches of public events. Ordinary conversations are not event evidence.
+- **What to do:** define what explicit opt-in would allow a chat observation to trigger delivery, then reuse the evaluator and receipts. Preserve source provenance, permissions, finite terms and budgets.
 - **Size:** Medium; the shared evaluation and receipt infrastructure is available.
 - Added 2026-11-07.
 

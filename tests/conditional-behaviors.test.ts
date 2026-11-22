@@ -12,6 +12,7 @@ import {
 	runTaskBehaviors,
 } from "../src/commitments/behavior-runner.ts";
 import { localTime } from "../src/commitments/calendar.ts";
+import { runScheduledTasks } from "../src/commitments/runner.ts";
 import {
 	interpretationSchema,
 	type ScheduledTask,
@@ -130,6 +131,48 @@ test("one effect per event across concurrent report/manual runs and restart, wit
 	});
 	expect(delivered).toEqual(["Meme de victoria"]);
 	expect(renders).toBe(1);
+	expect((await store.read()).tasks[0]?.behaviorEvents?.[0]?.status).toBe(
+		"sent",
+	);
+});
+
+test("a one-time report can deliver its conditional image once after completion", async () => {
+	await store.transaction((state) => {
+		const parent = state.tasks[0];
+		if (!parent) throw new Error("Missing task");
+		parent.schedule = {
+			frequency: "once",
+			time: "06:30",
+			startDate: "2026-11-07",
+			weekdays: [6],
+		};
+		parent.nextRunAt = now;
+		parent.expiresAt = now + 3600000;
+	});
+	const runner = {
+		...services,
+		generate: async () => ({
+			text: "Resultado final",
+			observation: observation(),
+		}),
+		behaviors: async (claim: ScheduledTask) => {
+			const completed = (await store.read()).tasks[0];
+			expect(completed?.status).toBe("completed");
+			// A manual run without the scheduled claim cannot use this exception.
+			await runTaskBehaviors(
+				{ ...claim, lastOccurrence: undefined },
+				observation(),
+				services,
+			);
+			expect(delivered).toEqual(["Resultado final"]);
+			await runTaskBehaviors(claim, observation(), services);
+			await runTaskBehaviors(claim, observation(), services);
+		},
+	};
+	await runScheduledTasks(runner);
+	await runScheduledTasks(runner);
+	expect(alerts).toEqual([]);
+	expect(delivered).toEqual(["Resultado final", "¡Qué paliza!"]);
 	expect((await store.read()).tasks[0]?.behaviorEvents?.[0]?.status).toBe(
 		"sent",
 	);
@@ -304,7 +347,8 @@ test("failed send-intent persistence blocks Telegram and history failure cannot 
 
 test("versioned persistence protects behaviors and receipts against older writers and reads v1", async () => {
 	const raw = JSON.parse(await readFile(store.path, "utf8"));
-	expect(raw.schemaVersion).toBe(3);
+	expect(raw.schemaVersion).toBe(4);
+	expect(() => unwrapVersioned(raw, 3)).toThrow("Unsupported");
 	expect(() => unwrapVersioned(raw, 2)).toThrow("Unsupported");
 	expect(() => unwrapVersioned(raw)).toThrow("Unsupported");
 	await Bun.write(store.path, JSON.stringify({ ...raw, schemaVersion: 1 }));

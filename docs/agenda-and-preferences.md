@@ -93,6 +93,10 @@ Event identities are persisted separately from report occurrences, with prior ev
 
 Configure through chat, for example: “Cuando Equipo Azul gane un partido final, añade un meme de su mascota celebrando al reporte diario.” The extractor resolves the subject from explicit context and saves a scoped behavior, rather than turning it into an unconditional image request. Asking to remove the automatic joke changes the behavior list while preserving the report. New tasks still require a research objective and an explicit check time. Existing task owners, the bot owner, and permitted shared-group managers can configure behaviors. External pages, quoted instructions and casual preferences cannot authorize changes.
 
+For a one-off wager or other future public outcome, the bot saves a separate event watch. For example, after discussing a 17:00 game, “Si Coral gana hoy, mándanos un meme sobre Nube” can schedule the first private check around 20:00. The model identifies the event and estimates a delay from its start, expected duration and publication time. The scheduler adds that delay in the bot timezone, including across midnight. A time specifically requested by the user takes precedence. The same mechanism supports announcements or draws. Only a direct request to act authorizes it.
+
+Each check uses the existing public search and page budgets. Partial, delayed or unverified outcomes leave the watch open for another check after 45 minutes. A confirmed contrary result closes it silently. A verified match triggers only the agreed text or image. Each watch allows up to six checks within 18 hours of the initial estimate and respects sleep, access and cancellation. Check claims and send intents survive restart. Watches count toward the chat's active task limit. Report-attached behaviors continue to run with their reports.
+
 For headless configuration, stop the bot and supply the existing task ID in a private JSON file:
 
 ```json
@@ -112,7 +116,7 @@ For headless configuration, stop the bot and supply the existing task ID in a pr
 
 Run `./mgsbot --configure-task-behaviors config.json`, then start the service. Source checkouts can use `bun run behaviors:configure config.json`. The configuration replaces the task's complete behavior list; retain existing behavior IDs to edit them, omit IDs for new behaviors, and use `[]` to disable all. This path does not invent Telegram receipts or modify the report objective, schedule, source domains or deadline. Keep operator-specific files outside version control.
 
-The commitments store writes schema v3 and reads unversioned, v1 and v2 stores. Other memory stores retain their existing versions. Older binaries reject v3 to protect saved delivery settings, behavior configuration and event receipts; rollback must use a compatible binary and preserve newer state. Current behavior observations are public research only. Additional conversation-driven or more frequent observation sources can reuse the evaluator and delivery receipts later.
+The commitments store writes schema v4 and reads unversioned, v1, v2 and v3 stores. Other memory stores retain their existing versions. Older binaries reject v4 to protect saved delivery settings, behavior configuration and event receipts; rollback must use a compatible binary and preserve newer state. Both report behaviors and event watches use public research evidence.
 
 ## Run a saved report from chat
 
