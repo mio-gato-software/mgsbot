@@ -266,3 +266,26 @@ test("sensitive search terms and shared URLs never reach the configured readers"
 		await disabled.read(1, "https://example.com/", "shared-link"),
 	).toContain("disabled");
 });
+
+test("group research uses fresh news and shares the persistent search budget", async () => {
+	const f = await fixture();
+	const options = { ...f.options, dailyLimit: () => 1 };
+	const service = new WorldContextService(options);
+	expect(await service.researchNews("astronomy")).toHaveLength(1);
+	expect(f.requests).toEqual([
+		{ query: "astronomy", news: true, freshness: "pd" },
+	]);
+	const restarted = new WorldContextService(options);
+	await expect(restarted.researchNews("football")).rejects.toThrow(
+		"Daily web search limit",
+	);
+	expect(await restarted.search(1, { query: "another topic" })).toContain(
+		"could not be completed",
+	);
+	expect(f.requests).toHaveLength(1);
+	const disabled = new WorldContextService({
+		...options,
+		enabled: () => false,
+	});
+	expect(await disabled.researchNews("astronomy")).toEqual([]);
+});

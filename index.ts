@@ -293,6 +293,11 @@ if (process.env.ENABLE_COMMITMENTS !== "false") {
 	);
 }
 
+const { groupNews } = await import("./src/group-news.ts");
+backgroundTasks.every("group-news", 60_000, () =>
+	groupNews.tick(bot.api, isBotOff, isSleepingHour),
+);
+
 // --- Graceful shutdown ---
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;

@@ -187,6 +187,18 @@ export class WorldContextService {
 		return this.searchProvider(request);
 	}
 
+	/** Group research shares the global search budget and returns typed evidence. */
+	async researchNews(query: string) {
+		if (!this.isEnabled()) return [];
+		return this.serialized(() =>
+			this.request({
+				query: query.trim().slice(0, 400),
+				news: true,
+				freshness: "pd",
+			}),
+		);
+	}
+
 	async refreshHeadlines(): Promise<void> {
 		if (
 			!this.isEnabled() ||
