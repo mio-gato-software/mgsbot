@@ -164,3 +164,21 @@ export async function editIntentWithTypeSafe(
 	if (value <= 0.2) return false;
 	return null;
 }
+
+export async function repeatedSelfieWithTypeSafe(
+	state: unknown,
+	instructions: string,
+): Promise<boolean | null> {
+	const result = z
+		.object({
+			answers: z.object({
+				repeat: z.object({ type: z.literal("noul"), noul: probability }),
+			}),
+		})
+		.safeParse(
+			await evaluate(state, { repeat: { type: "noul", instructions } }),
+		);
+	if (!result.success) return null;
+	const score = result.data.answers.repeat.noul;
+	return score >= 0.8 ? true : score <= 0.2 ? false : null;
+}

@@ -44,6 +44,7 @@ export interface ResponsePlan {
 	textOutsideSpeech: string;
 	speech?: string;
 	image?: { prompt: string; self: boolean; edit?: true };
+	selfieFollowUp?: { action: "resend" } | { action: "retake"; prompt: string };
 	reaction?: string;
 	quoteReplyRequested: boolean;
 }
@@ -55,6 +56,7 @@ export function parseResponse(
 		allowImages: boolean;
 		allowImageEdits: boolean;
 		allowSpeech: boolean;
+		hasDeliveredSelfie?: boolean;
 	},
 ): ResponsePlan {
 	const { responseText: unquoted, quoteReplyRequested } =
@@ -62,6 +64,17 @@ export function parseResponse(
 	let text = unquoted.replaceAll(SILENCE_MARKER, "").trim();
 	const reaction = text.match(REACTION_MARKER_REGEX)?.[1]?.trim();
 	text = text.replace(/\[REACT:\s*[^\]]+\]/g, "").trim();
+	const resend = text.includes("[SELFIE_RESEND]");
+	const retake = text.match(/\[SELFIE_RETAKE:\s*([^\]]+)\]/)?.[1]?.trim();
+	text = text
+		.replaceAll("[SELFIE_RESEND]", "")
+		.replace(/\[SELFIE_RETAKE:\s*[^\]]*\]/g, "")
+		.trim();
+	let selfieFollowUp: ResponsePlan["selfieFollowUp"];
+	if (options.hasDeliveredSelfie && resend)
+		selfieFollowUp = { action: "resend" };
+	else if (options.hasDeliveredSelfie && options.allowImages && retake)
+		selfieFollowUp = { action: "retake", prompt: retake };
 	const selfMatch = options.allowImages
 		? text.match(IMAGE_SELF_MARKER_REGEX)
 		: null;
@@ -90,9 +103,10 @@ export function parseResponse(
 	return {
 		text,
 		textOutsideSpeech,
+		...(selfieFollowUp && { selfieFollowUp }),
 		speech:
 			options.allowSpeech && speeches.length ? speeches.join("\n") : undefined,
-		image,
+		image: selfieFollowUp ? undefined : image,
 		reaction,
 		quoteReplyRequested,
 	};

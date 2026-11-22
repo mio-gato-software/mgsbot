@@ -75,9 +75,11 @@ bun run rules:init
 
 A valid profile overrides in-chat configuration. Rules customize conversational behavior and style; access control and provider settings remain in `.env`. Inspect files with `bun run profile:show` and `bun run rules:show`.
 
-Place the character reference at `memory/base.png`, `memory/base.jpg`, or `memory/base.jpeg`. Character photos always require this reference and preserve its photographic or illustrated medium. The normal weekly photo becomes eligible during a conversation; `/allowphotorequest` grants one requested photo. `FULL_ACCESS_MODE=true` enables on-demand generation, including external subjects without a character reference.
+Place the character reference at `memory/base.png`, `memory/base.jpg`, or `memory/base.jpeg`. New character scenes use this reference and preserve its photographic or illustrated medium. The normal weekly photo becomes eligible during a conversation; `/allowphotorequest` grants one requested photo. `FULL_ACCESS_MODE=true` enables on-demand generation, including external subjects without a character reference.
 
-User-image edits use the user's photo; character photos use the configured reference. Photo follow-ups can reuse the sender's latest image within the recent-message buffer for up to 30 minutes; otherwise reply to the original photo. These paths use `MEMORY_DIR` when configured.
+Each chat remembers its last delivered selfie. A repeated request written while that selfie is on its way is satisfied by the original delivery. An explicit resend uses the same Telegram file. Another take uses the delivered photo as its visual reference to preserve the outfit and setting, subject to the usual photo permissions.
+
+User-image edits use the user's photo. Photo follow-ups can reuse the sender's latest image within the recent-message buffer for up to 30 minutes; otherwise reply to the original photo. These paths use `MEMORY_DIR` when configured.
 
 ## Agenda and research
 

@@ -1,5 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { backgroundTasks } from "../src/background-tasks.ts";
+import { ChatUpdateQueue } from "../src/chat-update-queue.ts";
 import {
 	type ConversationDependencies,
 	defaultConversationDependencies,
@@ -13,6 +14,10 @@ import {
 } from "../src/memory/semantic.ts";
 import { loadSensory, saveSensory } from "../src/memory/sensory.ts";
 import { weatherCurrent } from "../src/prompt/sections/activity.ts";
+import {
+	defaultResponseDependencies,
+	sendResponse,
+} from "../src/response-processor.ts";
 import type { SemanticFact } from "../src/types.ts";
 import { makeMockContext } from "./helpers/telegram-mock.ts";
 
@@ -754,4 +759,95 @@ test("a spontaneous group reply cannot interpret or execute agenda actions", asy
 
 	expect(interpreted).toBe(false);
 	expect(spies.replies.map((reply) => reply.text)).toEqual(["Hola, Ana"]);
+});
+
+test("queued reminders are compared with the delivered request before chat generation", async () => {
+	const id = ++chatId;
+	const buffer = await loadSensory(id);
+	buffer.allowPhotoRequest = true;
+	await saveSensory(buffer);
+	const services = dependencies();
+	const pendingPhoto = Promise.withResolvers<void>();
+	const delivered = Promise.withResolvers<void>();
+	const errors: unknown[] = [];
+	const queue = new ChatUpdateQueue(2, 10, async (error) => {
+		errors.push(error);
+	});
+	const original = "¿Te sacas una selfie?";
+	const first = makeMockContext({ chatId: id, messageId: 10, text: original });
+	let generations = 0;
+	services.generate = async () => "Aquí va [IMAGE_SELF: balcony portrait]";
+	services.send = (options) =>
+		sendResponse(options, {
+			...defaultResponseDependencies,
+			baseImage: () => "character.jpg",
+			generateImage: async () => {
+				generations++;
+				return Buffer.from("image");
+			},
+		});
+	first.ctx.replyWithPhoto = async () => {
+		pendingPhoto.resolve();
+		await delivered.promise;
+		return {
+			message_id: 14,
+			date: 12345,
+			photo: [{ file_id: "selfie-fixture" }],
+		} as never;
+	};
+	await queue.enqueue(String(id), async () => {
+		await processConversation(first.ctx, original, "Ada", {}, services);
+	});
+	await pendingPhoto.promise;
+	const reminders = [
+		"Dale, que seguimos esperando",
+		"Cuando puedas, enséñamela",
+	];
+	const classified: string[] = [];
+	services.repeatedSelfie = async (state) => {
+		expect(state.originalRequest).toBe("¿Te sacas una selfie?");
+		expect(state.sameSpeaker).toBe(true);
+		classified.push(state.currentMessage);
+		return true;
+	};
+	services.generate = async () => {
+		throw Error("Unexpected second generation");
+	};
+	for (const [i, text] of reminders.entries()) {
+		const { ctx, spies } = makeMockContext({
+			chatId: id,
+			messageId: 11 + i,
+			text,
+		});
+		await queue.enqueue(String(id), async () => {
+			expect(await processConversation(ctx, text, "Ada", {}, services)).toBe(
+				false,
+			);
+			expect(spies.replies).toBeEmpty();
+		});
+	}
+	delivered.resolve();
+	await queue.drain();
+	expect(errors).toBeEmpty();
+	expect(generations).toBe(1);
+	expect(classified).toEqual(reminders);
+	const text = "La que acabas de mandar no cargó. ¿Me la pasas?";
+	const { ctx } = makeMockContext({ chatId: id, messageId: 15, text });
+	services.generate = async (prompt) => {
+		expect(prompt).toContain("after that selfie");
+		expect(prompt).toContain("[SELFIE_RESEND]");
+		return "[SELFIE_RESEND]";
+	};
+	const photos: unknown[] = [];
+	ctx.replyWithPhoto = async (photo) => {
+		photos.push(photo);
+		return {
+			message_id: 16,
+			date: 12345,
+			photo: [{ file_id: "selfie-fixture" }],
+		} as never;
+	};
+	expect(await processConversation(ctx, text, "Ada", {}, services)).toBe(true);
+	expect(photos).toEqual(["selfie-fixture"]);
+	expect(classified).toEqual(reminders);
 });

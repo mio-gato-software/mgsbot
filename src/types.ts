@@ -33,7 +33,17 @@ export interface ImageReference {
 
 // --- New Memory Architecture ---
 
+export interface DeliveredSelfie {
+	fileId: string;
+	messageId: number;
+	requestMessageId: number;
+	requesterId?: number;
+	requestText: string;
+	sentAt: number;
+}
+
 export interface SensoryBuffer {
+	lastSelfie?: DeliveredSelfie;
 	schemaVersion?: number; // absent in legacy files; stamped on save
 	chatId: number;
 	messages: ConversationMessage[]; // max 10, FIFO

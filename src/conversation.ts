@@ -9,6 +9,7 @@ export {
 } from "./memory/promotion.ts";
 
 import type { Context } from "grammy";
+import { classifyRepeatedSelfie } from "./ai/classifiers.ts";
 import { generateResponse } from "./ai/core.ts";
 import { describeImage } from "./ai/vision.ts";
 import { alertOwner, errorSummary } from "./alerts.ts";
@@ -57,6 +58,7 @@ import type { MediaAttachment } from "./providers/types.ts";
 import { ResearchFailure, researchFailureNotice } from "./research-failure.ts";
 import { parseResponse } from "./response-plan.ts";
 import { type SendResponseResult, sendResponse } from "./response-processor.ts";
+import { crossedSelfieDelivery, selfieContext } from "./selfie-continuity.ts";
 import { timeoutReply } from "./telegram-delivery.ts";
 import { isTtsAvailable } from "./tts/index.ts";
 import type { ConversationMessage, MentionType } from "./types.ts";
@@ -110,6 +112,7 @@ export interface ConversationOptions {
 	directUserText?: string;
 }
 export interface ConversationDependencies {
+	repeatedSelfie: typeof classifyRepeatedSelfie;
 	generate: typeof generateResponse;
 	retrieve: typeof retrieveMemoryContext;
 	send: typeof sendResponse;
@@ -122,6 +125,7 @@ export interface ConversationDependencies {
 	behaviors?: typeof checkAndSendTaskBehaviors;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
+	repeatedSelfie: classifyRepeatedSelfie,
 	generate: generateResponse,
 	retrieve: retrieveMemoryContext,
 	send: sendResponse,
@@ -374,6 +378,33 @@ export async function processConversation(
 						},
 					)
 				: "";
+		const lastSelfie =
+			!isSimpleAssistantMode && directUserText && taskResponse === undefined
+				? buffer.lastSelfie
+				: undefined;
+		const messageId = ctx.message?.message_id;
+		// Telegram can replay the source update after a restart.
+		if (messageId && lastSelfie?.requestMessageId === messageId) return false;
+		let uncertainOverlap = false;
+		if (
+			lastSelfie &&
+			messageId &&
+			directUserText &&
+			crossedSelfieDelivery(lastSelfie, messageId)
+		) {
+			const reply = ctx.message?.reply_to_message;
+			const repeat = await dependencies.repeatedSelfie({
+				originalRequest: lastSelfie.requestText,
+				sameSpeaker: lastSelfie.requesterId === userId,
+				currentMessage: directUserText.slice(0, 2000),
+				replyTarget: (reply?.text ?? reply?.caption)?.slice(0, 500),
+				recentMessages: buffer.messages
+					.slice(-6, -1)
+					.map((m) => `${m.name ?? m.role}: ${m.content.slice(0, 400)}`),
+			});
+			if (repeat) return false;
+			uncertainOverlap = repeat === null;
+		}
 		let responseText = taskResponse;
 		if (responseText === undefined) {
 			const memory =
@@ -398,7 +429,16 @@ export async function processConversation(
 			const renderedFactIds = new Set<string>();
 			const systemPrompt =
 				(await dependencies.assemble(promptCtx, renderedFactIds)) +
-				commitmentContext;
+				commitmentContext +
+				(lastSelfie && messageId
+					? selfieContext(
+							lastSelfie,
+							messageId,
+							shouldGenImage || allowPhotoRequest,
+							ctx.message?.reply_to_message?.photo?.at(-1)?.file_id ===
+								lastSelfie.fileId,
+						)
+					: "");
 			const messages = buildMessages(buffer, mediaAttachment);
 			const latest = messages.findLast((message) => message.role === "user");
 			if (latest) {
@@ -461,6 +501,9 @@ export async function processConversation(
 		result = await dependencies.send({
 			ctx,
 			responseText,
+			lastSelfie: taskResponse === undefined ? lastSelfie : undefined,
+			requestText: directUserText,
+			uncertainOverlap,
 			preparedImage: taskDelivery?.image,
 			preparedImageOnly: taskDelivery?.delivery === "image_only",
 			shouldGenImage: taskResponse === undefined && shouldGenImage,

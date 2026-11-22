@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import {
 	classifyEditIntent,
 	classifyGroupSocialIntent,
+	classifyRepeatedSelfie,
 } from "../src/ai/classifiers.ts";
 import { getOpenAIClient } from "../src/ai/openai-client.ts";
 import {
@@ -269,4 +270,37 @@ test("empty input never calls either provider", async () => {
 		await classifyGroupSocialIntent({ ...input, currentMessage: " " }),
 	).toEqual({ addressing: "ambient", action: "silence", confidence: 1 });
 	expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test("the overlap classifier passes the request and clarification to Jev and falls back on uncertain evidence", async () => {
+	let score = 0.99;
+	let currentMessage = "¿Va en camino?";
+	let fallbackCalls = 0;
+	mockFetch(async (url, init) => {
+		const body = JSON.parse(String(init?.body));
+		if (String(url).includes("typesafe.ai")) {
+			expect(body.state.currentMessage).toBe(currentMessage);
+			expect(body.state.originalRequest).toBe("Enséñame cómo te ves hoy");
+			expect(body.questions.repeat.type).toBe("noul");
+			return Response.json({
+				answers: { repeat: { type: "noul", noul: score } },
+			});
+		}
+		fallbackCalls++;
+		expect(body.input[0].content).toContain(currentMessage);
+		return legacyResponse("no");
+	});
+	const state = {
+		originalRequest: "Enséñame cómo te ves hoy",
+		sameSpeaker: true,
+		recentMessages: ["Ada: una selfie"],
+	};
+	expect(await classifyRepeatedSelfie({ ...state, currentMessage })).toBe(true);
+	expect(fallbackCalls).toBe(0);
+	currentMessage = "Y después otra desde más lejos";
+	score = 0.5;
+	expect(await classifyRepeatedSelfie({ ...state, currentMessage })).toBe(
+		false,
+	);
+	expect(fallbackCalls).toBe(1);
 });

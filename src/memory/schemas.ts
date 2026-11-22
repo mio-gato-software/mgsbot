@@ -37,6 +37,16 @@ export const sensorySchema = z
 		lastActivity: timestamp,
 		messageCountSincePromotion: z.number().int().nonnegative(),
 		allowPhotoRequest: z.boolean().optional(),
+		lastSelfie: z
+			.object({
+				fileId: z.string().min(1),
+				messageId: z.number().int().positive(),
+				requestMessageId: z.number().int().positive(),
+				requesterId: z.number().int().optional(),
+				requestText: z.string().max(1000),
+				sentAt: timestamp,
+			})
+			.optional(),
 		lastImageDate: z.string().optional(),
 		imageTargetTime: z.string().optional(),
 		imageTargetDate: z.string().optional(),

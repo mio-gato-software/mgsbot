@@ -258,3 +258,81 @@ test("a user image permits an edit without authorizing a new character photo", a
 	}
 	expect(calls).toEqual(["user.jpg"]);
 });
+
+test("a confirmed captioned selfie survives a later text failure and is the visual reference for another take", async () => {
+	const { loadSensory } = await import("../src/memory/sensory.ts");
+	const input = options(
+		`${"caption ".repeat(200)}[IMAGE_SELF: on the balcony]`,
+	);
+	input.buffer.chatId = 820110;
+	input.allowPhotoRequest = true;
+	input.ctx.replyWithPhoto = async () =>
+		({
+			message_id: 5,
+			date: 12345,
+			photo: [{ file_id: "small" }, { file_id: "original" }],
+		}) as never;
+	input.ctx.reply = async () => {
+		throw Error("text failed");
+	};
+	const deps = {
+		...defaultResponseDependencies,
+		baseImage: () => "identity.jpg",
+		generateImage: async () => Buffer.from("selfie"),
+	};
+	await expect(sendResponse(input, deps)).rejects.toThrow("text failed");
+	const saved = await loadSensory(input.buffer.chatId);
+	expect(saved.lastSelfie?.fileId).toBe("original");
+	expect(saved.allowPhotoRequest).toBe(false);
+	const dir = await mkdtemp(join(tmpdir(), "selfie-retake-"));
+	const path = join(dir, "original.jpg");
+	try {
+		const next = {
+			...input,
+			ctx: makeMockContext({ messageId: 6 }).ctx,
+			buffer: saved,
+			lastSelfie: saved.lastSelfie,
+			userImagePath: "unrelated.jpg",
+			responseText: "Aquí va [SELFIE_RETAKE: side profile]",
+		};
+		next.ctx.replyWithPhoto = async () =>
+			({
+				message_id: 7,
+				date: 12346,
+				photo: [{ file_id: "profile" }],
+			}) as never;
+		const calls: string[] = [];
+		const services = {
+			...deps,
+			generateImage: async () => {
+				throw Error("Unexpected fresh image");
+			},
+			downloadImage: async (
+				_api: typeof input.ctx.api,
+				_token: string,
+				fileId: string,
+			) => {
+				calls.push(fileId);
+				await writeFile(path, "original");
+				return { filePath: path, mimeType: "image/jpeg" };
+			},
+			editImage: async (prompt: string, reference: string) => {
+				calls.push(reference);
+				expect(prompt).toContain("exact outfit, location");
+				expect(prompt).toContain("side profile");
+				return Buffer.from("second take");
+			},
+		};
+		await sendResponse({ ...next, allowPhotoRequest: false }, services);
+		expect(calls).toBeEmpty();
+		const result = await sendResponse(next, services);
+		expect(result?.cleanedText).toContain("Aquí va");
+		expect(calls).toEqual(["original", path]);
+		expect((await loadSensory(input.buffer.chatId)).lastSelfie?.fileId).toBe(
+			"profile",
+		);
+		await expect(stat(path)).rejects.toThrow();
+	} finally {
+		await rm(dir, { recursive: true, force: true });
+	}
+});
