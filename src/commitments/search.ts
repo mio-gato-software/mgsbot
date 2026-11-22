@@ -39,13 +39,16 @@ async function readSources(
 	web: ConversationWebContext,
 	chatId: number,
 	urls: string[],
+	onSource?: (content: string) => void,
 ): Promise<string> {
 	if (!web.read || !(web.isReadEnabled?.() ?? true)) return "";
 	const pages: string[] = [];
 	for (const url of [...new Set(urls)].slice(0, 3)) {
 		currentOperationSignal()?.throwIfAborted();
 		try {
-			pages.push(await web.read(chatId, url));
+			const page = await web.read(chatId, url);
+			pages.push(page);
+			onSource?.(page);
 		} catch (error) {
 			log.error("[research] Preferred source lookup failed:", error);
 			currentOperationSignal()?.throwIfAborted();
@@ -63,6 +66,7 @@ export async function searchWithPreferences(
 	chatId: number,
 	request: WebSearchRequest,
 	explicitDomains: string[] = [],
+	onSource?: (content: string) => void,
 ): Promise<string> {
 	const preferences = commitmentsEnabled()
 		? await commitments.preferences(chatId)
@@ -79,6 +83,7 @@ export async function searchWithPreferences(
 	].slice(0, 3);
 	if (!domains.length) {
 		const result = await web.search(chatId, request);
+		onSource?.(result);
 		return (
 			result +
 			(await readSources(
@@ -87,6 +92,7 @@ export async function searchWithPreferences(
 				parseSearchResponse(result)
 					.sources.slice(0, 2)
 					.map((s) => s.url),
+				onSource,
 			))
 		);
 	}
@@ -156,5 +162,8 @@ export async function searchWithPreferences(
 		currentOperationSignal()?.throwIfAborted();
 		results.push("General search unavailable. Do not invent missing results.");
 	}
-	return results.join("\n\n") + (await readSources(web, chatId, urls));
+	for (const result of results) onSource?.(result);
+	return (
+		results.join("\n\n") + (await readSources(web, chatId, urls, onSource))
+	);
 }

@@ -76,7 +76,10 @@ test("conditional observations include initial research and chained tool results
 			context: async () => "Cached stale page",
 			refreshHeadlines: async () => {},
 			search: async () => "Initial result: standings, game not final yet",
-			read: async () => "November 7: Equipo Azul won 5-2. Final.",
+			read: async (_chatId, url) =>
+				url.endsWith("/standings")
+					? "Long standings page. ".repeat(700)
+					: "November 7: Equipo Azul won 10-3. Final.",
 		},
 		weather: {
 			isEnabled: () => false,
@@ -87,14 +90,15 @@ test("conditional observations include initial research and chained tool results
 			calls++;
 			expect(messages[0]?.content).toContain("conditionalChecks");
 			if (calls === 1)
-				return '[WEB_READ]{"urls":["https://example.com/result"],"notice":"Reviso"}[/WEB_READ]';
+				return '[WEB_READ]{"urls":["https://example.com/standings","https://example.com/result"],"notice":"Reviso"}[/WEB_READ]';
+			expect(messages.at(-1)?.content).not.toContain("won 10-3");
 			return "Report draft can contain invented claims; never use it as trigger evidence.";
 		},
 	});
-	expect(result.observation?.evidence).toHaveLength(2);
+	expect(result.observation?.evidence).toHaveLength(3);
 	const evidence = result.observation?.evidence.join("\n") ?? "";
 	expect(evidence).toContain("Initial result");
-	expect(evidence).toContain("Azul won 5-2");
+	expect(evidence).toContain("Azul won 10-3");
 	expect(evidence).not.toContain("invented claims");
 	expect(evidence).not.toContain("old scores");
 	expect(evidence).not.toContain("private memory");

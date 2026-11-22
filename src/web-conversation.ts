@@ -230,6 +230,8 @@ export async function generateWithWebSearch(
 		maxLookups?: number;
 		/** Actual tool results only; excludes model drafts, memory and quoted promises. */
 		onEvidence?: (content: string) => void;
+		/** Individual tool sources before concatenation and prompt clipping. */
+		onSource?: (content: string) => void;
 		reviewFinal?: (
 			draft: string,
 			messages: ChatMessage[],
@@ -537,20 +539,31 @@ PAGE READING is available. Open public URLs, including JavaScript-rendered text 
 					"lookup batch",
 					Math.min(timing.stepTimeoutMs, planningTime()),
 					async () => {
-						if (lookup.tool === "WEATHER_LOOKUP")
-							return weather.lookup(lookup.request);
+						if (lookup.tool === "WEATHER_LOOKUP") {
+							const forecast = await weather.lookup(lookup.request);
+							input.onSource?.(forecast);
+							return forecast;
+						}
 						if (lookup.tool === "WEB_SEARCH")
-							return searchWithPreferences(web, input.chatId, {
-								query: lookup.request.query,
-								freshness: lookup.request.freshness,
-							});
+							return searchWithPreferences(
+								web,
+								input.chatId,
+								{
+									query: lookup.request.query,
+									freshness: lookup.request.freshness,
+								},
+								[],
+								input.onSource,
+							);
 						const read = web.read;
 						if (!read) throw new Error("Page reading disabled");
 						const results: string[] = [];
 						for (const url of [...new Set(lookup.request.urls)]) {
 							currentOperationSignal()?.throwIfAborted();
 							try {
-								results.push(await read(input.chatId, url));
+								const page = await read(input.chatId, url);
+								results.push(page);
+								input.onSource?.(page);
 							} catch (error) {
 								currentOperationSignal()?.throwIfAborted();
 								log.error("[research] Page reading failed:", error);
