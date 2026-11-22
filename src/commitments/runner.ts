@@ -229,6 +229,12 @@ async function generateScheduledReport(
 			`${task.instruction} ${task.searchQuery ?? ""}`,
 		),
 	);
+	const behaviorSources = new Set<string>();
+	const onSource = task.behaviors?.length
+		? (source: string) => {
+				behaviorSources.add(source);
+			}
+		: undefined;
 	const evidence =
 		task.kind === "research"
 			? await searchWithPreferences(
@@ -239,6 +245,7 @@ async function generateScheduledReport(
 						freshness: "pd",
 					},
 					task.domains,
+					onSource,
 				)
 			: "No web lookup needed; this is a personal reminder.";
 	const observations = [evidence.slice(0, 32000)];
@@ -269,6 +276,7 @@ async function generateScheduledReport(
 						delivery: "scheduled",
 						maxLookups: 12,
 						onEvidence: (content) => observations.push(content),
+						onSource,
 						repairFinal: (draft, missing) =>
 							services.repair(task, draft, missing, observations),
 						reviewFinal: (draft) =>
@@ -314,7 +322,7 @@ async function generateScheduledReport(
 	return {
 		text: clean,
 		observation: {
-			evidence: observations,
+			evidence: [...behaviorSources],
 			persona: base + preferences,
 			checkedAt: now,
 		},

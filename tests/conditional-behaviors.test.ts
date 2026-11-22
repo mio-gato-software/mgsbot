@@ -547,7 +547,7 @@ test("evaluation repairs an invalid passage ID and fails closed if repair also f
 	}
 });
 
-test("passages retain source indices across boundaries and exclude evidence beyond the budget", async () => {
+test("passages retain source indices and reserve budget for a late final score", async () => {
 	const configured = task.behaviors?.[0];
 	if (!configured) throw new Error("Missing behavior");
 	const source = `${"x".repeat(999)}🏆${proof}`;
@@ -568,7 +568,9 @@ test("passages retain source indices across boundaries and exclude evidence beyo
 				).toBe(source);
 				expect(passages[1]?.quote).toBe(`🏆${proof}`);
 				expect(passages.map((p) => p.quote).join("")).toHaveLength(64000);
-				expect(passages.some((p) => p.index === 2)).toBe(false);
+				expect(
+					passages.filter((p) => p.index === 2).map((p) => p.quote),
+				).toEqual([proof]);
 				return proposeMatch([0, 1]);
 			}
 			expect(
