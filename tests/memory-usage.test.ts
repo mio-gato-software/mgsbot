@@ -78,7 +78,6 @@ test("background Responses usage is recorded with its operation", async () => {
 		import './tests/preload.ts';
 		import { generateBackgroundResponseWithModel } from './src/ai/core.ts';
 		import { loadMemoryUsage } from './src/memory/usage-metrics.ts';
-		process.env.OPENAI_API_KEY = 'test-no-network';
 		let requests = 0;
 		globalThis.fetch = Object.assign(async (url, init) => {
 			if (String(url) !== 'https://api.openai.com/v1/responses')
@@ -113,6 +112,7 @@ test("background Responses usage is recorded with its operation", async () => {
 			BACKGROUND_PROVIDER: "openai",
 			BACKGROUND_MODEL: "gpt-test-memory",
 			BACKGROUND_FALLBACK_TO_CHAT: "false",
+			OPENAI_API_KEY: "test-no-network",
 			PROMOTION_METRICS: "true",
 			NODE_ENV: "production",
 		},

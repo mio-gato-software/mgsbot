@@ -68,6 +68,43 @@ test("missing internal calendar fields are repaired without asking the user to r
 	expect(messages?.[2]?.content).toContain("weekdays");
 });
 
+test("a one-time reminder derives its weekday from the requested date", async () => {
+	const text =
+		"Recuérdame mañana a las nueve de la mañana que riegue las plantas.";
+	generate = spyOn(core, "generateBackgroundResponse").mockResolvedValue(
+		JSON.stringify({
+			actions: [
+				{
+					type: "schedule",
+					format: { delivery: "text" },
+					evidence: text,
+					task: {
+						instruction: "Regar las plantas",
+						kind: "reminder",
+						schedule: {
+							frequency: "once",
+							time: "09:00",
+							startDate: "2026-10-23",
+						},
+					},
+				},
+			],
+		}),
+	);
+	const result = await interpretRequest(
+		{ ...request, text },
+		"{}",
+		Date.parse("2026-10-22T15:00:00Z"),
+	);
+	expect(result.actions[0]).toMatchObject({
+		type: "schedule",
+		task: {
+			schedule: { time: "09:00", startDate: "2026-10-23", weekdays: [5] },
+		},
+	});
+	expect(generate).toHaveBeenCalledTimes(1);
+});
+
 test("schema repair is bounded and never invents a task on repeated failure", async () => {
 	generate = spyOn(core, "generateBackgroundResponse").mockResolvedValue(
 		"not JSON",

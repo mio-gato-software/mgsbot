@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveLegacyClassifierProvider } from "../src/ai/platform.ts";
 
 // Always replace inherited configuration: bun test must never mutate live memory.
 const root = mkdtempSync(join(tmpdir(), "mgsbot-tests-"));
@@ -21,9 +22,6 @@ process.env.ENABLE_WEB_SEARCH = "false";
 process.env.ENABLE_WEB_READING = "false";
 process.env.ENABLE_WEATHER_LOOKUP = "false";
 process.env.ENABLE_COMMITMENTS = "false";
-// Classifier tests supply their own provider keys and mock transport.
-delete process.env.CLASSIFIER_PROVIDER;
-delete process.env.OPENAI_API_KEY;
-delete process.env.GOOGLE_API_KEY;
-delete process.env.FAL_API_KEY;
+// Typed classifier tests select their provider explicitly and mock its transport.
+process.env.CLASSIFIER_PROVIDER = resolveLegacyClassifierProvider();
 delete process.env.TYPESAFE_API_KEY;

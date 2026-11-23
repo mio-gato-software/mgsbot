@@ -15,6 +15,22 @@ export const scheduleSchema = z.object({
 });
 export type Schedule = z.infer<typeof scheduleSchema>;
 
+/** A one-time date already identifies its weekday. Recurrences still need explicit days. */
+export const interpretedScheduleSchema = scheduleSchema
+	.partial({ weekdays: true })
+	.transform((schedule, ctx): Schedule => {
+		if (schedule.weekdays !== undefined)
+			return { ...schedule, weekdays: schedule.weekdays };
+		if (schedule.frequency === "once")
+			return { ...schedule, weekdays: [dayjs.utc(schedule.startDate).day()] };
+		ctx.addIssue({
+			code: "custom",
+			path: ["weekdays"],
+			message: "Provide weekdays for a recurring schedule",
+		});
+		return z.NEVER;
+	});
+
 /** Resolve each wall-clock date afresh: adding 24h would drift across DST. */
 export function localTime(
 	date: string,

@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { dateSchema, MAX_WATCH_CHECKS, scheduleSchema } from "./calendar.ts";
+import {
+	dateSchema,
+	interpretedScheduleSchema,
+	MAX_WATCH_CHECKS,
+	scheduleSchema,
+} from "./calendar.ts";
 
 // Report content is also the image renderer's input, not a single Telegram message.
 export const MAX_SCHEDULED_REPORT_CHARS = 32_000;
@@ -133,7 +138,7 @@ export const actionSchema = z.discriminatedUnion("type", [
 		),
 	z.object({
 		type: z.literal("schedule"),
-		task: taskInputSchema,
+		task: taskInputSchema.extend({ schedule: interpretedScheduleSchema }),
 		format: formatChangeSchema.optional(),
 		replaceId: id.optional(),
 		evidence: text,

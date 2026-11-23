@@ -147,7 +147,7 @@ ${context}`;
 				{ role: "assistant", content: output.slice(0, 12000) },
 				{
 					role: "user",
-					content: `Repair the JSON shape using the SAME request; this is an internal validation issue, not missing user information. Return a complete valid plan. Every schedule needs startDate, time, frequency and weekdays. Daily without exclusions uses [0,1,2,3,4,5,6]; preserve requested exclusions/weekdays. Recurring schedules without a start date start today; their first occurrence must be future. Omit unused optional fields, never null or empty placeholders. Do not ask the user to repair fields or repeat details already provided. Validation: ${String(error).slice(0, 2000)}`,
+					content: `Repair the JSON shape using the SAME request; this is an internal validation issue, not missing user information. Return a complete valid plan. Every schedule needs startDate, time and frequency. Recurring schedules also need weekdays. Daily without exclusions uses [0,1,2,3,4,5,6]; preserve requested exclusions/weekdays. Recurring schedules without a start date start today; their first occurrence must be future. Omit unused optional fields, never null or empty placeholders. Do not ask the user to repair fields or repeat details already provided. Validation: ${String(error).slice(0, 2000)}`,
 				},
 			);
 		}
