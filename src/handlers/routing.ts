@@ -224,6 +224,7 @@ export async function classifyGroupTurn(
 	ctx: Context,
 	text: string,
 	userName: string,
+	imageAttached?: boolean,
 ) {
 	const chatId = ctx.chat?.id;
 	if (!chatId || !text.trim()) return null;
@@ -233,6 +234,7 @@ export async function classifyGroupTurn(
 		botName: getBotName(),
 		currentSpeaker: userName,
 		currentMessage: text,
+		imageAttached,
 		recentMessages: buffer.messages,
 		lastBotMessage: buffer.messages.findLast(
 			(message) => message.role === "model",

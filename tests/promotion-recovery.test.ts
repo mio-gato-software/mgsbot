@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { ExtractionParseError } from "../src/ai/evaluation.ts";
+import { resetAlertState, setAlertSink } from "../src/alerts.ts";
 import { botNow } from "../src/bot-time.ts";
 import { getChapterForMonth } from "../src/memory/chapters.ts";
 import { loadWorkingMemory } from "../src/memory/episodes.ts";
@@ -9,6 +11,7 @@ import {
 	drainPromotionSpool,
 	type PromotionDependencies,
 } from "../src/memory/promotion.ts";
+import { loadPromotionMetrics } from "../src/memory/promotion-metrics.ts";
 import {
 	loadPromotionSpool,
 	promotionId,
@@ -101,6 +104,8 @@ beforeEach(async () => {
 	};
 });
 afterEach(async () => {
+	setAlertSink(null);
+	resetAlertState();
 	await rm(join(SENSORY_DIR, `${chatId}.json`), { force: true });
 });
 async function queue() {
@@ -139,6 +144,61 @@ test("failure before all embeddings finish leaves a durable chunk and no partial
 	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
 	expect((await loadWorkingMemory(chatId)).episodes).toHaveLength(1);
 	expect(await loadPromotionSpool(chatId)).toHaveLength(0);
+});
+
+test("a malformed extraction regenerates once and records both attempts without alerting", async () => {
+	await queue();
+	const alerts: string[] = [];
+	setAlertSink(async (alert) => {
+		alerts.push(alert);
+	});
+	const recoveries: boolean[] = [];
+	const evaluate = dependencies.evaluate;
+	dependencies.evaluate = async (...args) => {
+		const recover = args[2]?.recoverMalformed === true;
+		recoveries.push(recover);
+		if (!recover) throw new ExtractionParseError("fixture-model");
+		return evaluate(...args);
+	};
+	await drainPromotionSpool(chatId, dependencies, { flushNarrative: true });
+	expect(recoveries).toEqual([false, true]);
+	expect(alerts).toEqual([]);
+	expect(await loadPromotionSpool(chatId)).toEqual([]);
+	expect((await loadWorkingMemory(chatId)).episodes).toHaveLength(1);
+	expect(
+		(await loadPromotionMetrics()).filter((metric) => metric.chatId === chatId),
+	).toEqual([
+		expect.objectContaining({
+			model: "fixture-model",
+			parseOk: false,
+			retried: false,
+		}),
+		expect.objectContaining({ parseOk: true, retried: true, kept: true }),
+	]);
+});
+
+test("a second malformed extraction alerts and leaves the original chunk queued", async () => {
+	await queue();
+	const alerts: string[] = [];
+	setAlertSink(async (alert) => {
+		alerts.push(alert);
+	});
+	const recoveries: boolean[] = [];
+	dependencies.evaluate = async (_messages, _facts, options) => {
+		recoveries.push(options?.recoverMalformed === true);
+		throw new ExtractionParseError("fixture-model");
+	};
+	await drainPromotionSpool(chatId, dependencies);
+	expect(recoveries).toEqual([false, true]);
+	expect(alerts).toEqual([
+		expect.stringContaining("[alert:memory-extraction]"),
+	]);
+	expect(await loadPromotionSpool(chatId)).toEqual([
+		expect.objectContaining({ attempts: 1, messages }),
+	]);
+	expect((await loadWorkingMemory(chatId)).episodes).toEqual([]);
+	await drainPromotionSpool(chatId, dependencies);
+	expect(recoveries).toEqual([false, true, false]);
 });
 
 test("failure after a fact write replays checkpoints without duplicate episodes, facts, or confirmations", async () => {

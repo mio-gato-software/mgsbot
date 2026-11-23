@@ -237,6 +237,45 @@ test.each(["typesafe", "openai"])(
 	},
 );
 
+test.each(["typesafe", "openai"])(
+	"%s receives image caption guidance for social addressing",
+	async (provider) => {
+		process.env.CLASSIFIER_PROVIDER = provider;
+		const currentMessage = "DemoBot. Te traje el dibujo que te debía.";
+		mockFetch(async (_url, init) => {
+			const body = JSON.parse(String(init?.body));
+			if (provider === "typesafe") {
+				expect(body.state).toMatchObject({
+					imageAttached: true,
+					currentMessage,
+				});
+				expect(body.questions.addressing.instructions).toContain(
+					"address the bot by name in its own sentence",
+				);
+				return Response.json(groupAnswer());
+			}
+			expect(body.input[0].content).toContain(
+				"Latest message (imageAttached: true)",
+			);
+			expect(body.input[0].content).toContain(currentMessage);
+			expect(body.input[0].content).toContain(
+				"address the bot by name in its own sentence",
+			);
+			return legacyResponse(
+				'{"addressing":"direct","action":"respond","confidence":0.95}',
+			);
+		});
+		expect(
+			await classifyGroupSocialIntent({
+				...input,
+				mode: "message",
+				currentMessage,
+				imageAttached: true,
+			}),
+		).toEqual({ addressing: "direct", action: "respond", confidence: 0.95 });
+	},
+);
+
 test("confident silence is preserved and both confidence values are respected", async () => {
 	const response = groupAnswer(0.95, "silence", "about_bot");
 	response.answers.action.confidence = 0.85;

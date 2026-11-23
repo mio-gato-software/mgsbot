@@ -452,6 +452,62 @@ test("passive group photos avoid downloads and preserve the caption", async () =
 	expect(spies.chatActions).toHaveLength(0);
 	expect((await messages(ctx))[0]?.content).toContain("Read this chart");
 });
+test.each([
+	["Mia. Aquí tienes el dibujo que te prometí.", "direct", false, true],
+	["Aquí está lo que te debía por la apuesta.", "continuation", true, true],
+	["Al final sí te hice la caricatura.", "continuation", true, true],
+	["Aquí está lo que te debía por la apuesta.", "continuation", false, false],
+	["Les comparto el dibujo del equipo.", "ambient", true, false],
+] as const)(
+	"group photo caption %s routes as %s with an open window of %s",
+	async (caption, addressing, windowOpen, shouldReply) => {
+		social.mockResolvedValue({ addressing, action: "respond", confidence: 1 });
+		const { ctx, spies } = photo({ chatType: "supergroup", caption });
+		const previousTurn = "Acepto el trato. Luego me enseñas el dibujo.";
+		if (windowOpen) {
+			const buffer = await loadSensory(ctx.chat?.id ?? 0);
+			buffer.messages = [
+				{ role: "model", content: previousTurn, timestamp: Date.now() - 1000 },
+			];
+			await saveSensory(buffer);
+			openGroupContinuationWindow(buffer.chatId);
+		}
+		await handlePhoto(ctx, "test-token");
+		expect(social.mock.calls[0]?.[0]).toMatchObject({
+			currentMessage: caption,
+			imageAttached: true,
+			lastBotMessage: windowOpen ? previousTurn : undefined,
+		});
+		expect(downloads).toBe(shouldReply ? 1 : 0);
+		expect(spies.replies).toHaveLength(shouldReply ? 1 : 0);
+		const userTurns = (await messages(ctx)).filter(
+			(turn) => turn.role === "user",
+		);
+		expect(userTurns).toHaveLength(1);
+		expect(userTurns[0]?.userText).toBe(caption);
+		if (shouldReply && addressing === "continuation") {
+			expect(generate.mock.calls[0]?.[0]).toContain("continuing the exchange");
+		}
+	},
+);
+
+test("a photo caption continuing a reply to another member is passive", async () => {
+	social.mockResolvedValue({
+		addressing: "continuation",
+		action: "respond",
+		confidence: 1,
+	});
+	const { ctx, spies } = photo({
+		chatType: "supergroup",
+		caption: "Vine a cumplir mi promesa",
+		replyToMessage: { from: { id: 77 }, text: "A ver tu dibujo" },
+	});
+	if (ctx.chat) openGroupContinuationWindow(ctx.chat.id);
+	await handlePhoto(ctx, "test-token");
+	expect(downloads).toBe(0);
+	expect(spies.replies).toHaveLength(0);
+});
+
 test("photo analysis timeout propagates after cleanup", async () => {
 	describe.mockRejectedValue(new OperationTimeoutError("vision"));
 	const { ctx, spies } = photo();

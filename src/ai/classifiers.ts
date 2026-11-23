@@ -18,6 +18,7 @@ import {
 	classifyWithTypeSafe,
 	editIntentWithTypeSafe,
 	groupExchangeGuidance,
+	groupImageGuidance,
 	repeatedSelfieWithTypeSafe,
 } from "./typesafe-classifier.ts";
 
@@ -45,6 +46,7 @@ export interface GroupMessageIntentInput {
 	botName: string;
 	currentSpeaker: string;
 	currentMessage: string;
+	imageAttached?: boolean;
 	recentMessages: ConversationMessage[];
 	lastBotMessage?: string;
 	replyContext?: {
@@ -154,7 +156,7 @@ Action rules:
 - A Telegram reply to someone other than the bot is strong evidence the latest message is for that person. Choose "ambient"/"silence" unless the latest text explicitly addresses the bot.
 - Short acknowledgements, reactions, laughter, or agreement after another member's message are ambient unless they clearly answer the bot.
 - This must work across languages. Do not rely on language-specific keywords.
-- ${groupExchangeGuidance}
+- ${groupExchangeGuidance}${input.imageAttached ? `\n- ${groupImageGuidance}` : ""}
 
 Mode-specific guidance:
 - message: Interpret any group message with the supplied context. A direct request can address the bot without its name. Choose respond for a direct request or clear continuation, or when an ambient invitation makes participation natural.
@@ -171,7 +173,7 @@ ${lastBotMessage}
 Telegram reply target:
 ${replyContext}
 
-Latest message:
+Latest message${input.imageAttached ? " (imageAttached: true)" : ""}:
 ${input.currentSpeaker}: ${currentMessage}
 
 Return ONLY compact JSON with this exact shape:
@@ -335,6 +337,7 @@ export async function classifyGroupSocialIntent(
 			mode: input.mode,
 			currentSpeaker: truncateText(input.currentSpeaker, 100),
 			currentMessage: groupMessageExcerpt(currentMessage),
+			imageAttached: input.imageAttached,
 			recentMessages: formatRecentGroupMessages(input.recentMessages),
 			lastBotMessage: groupMessageExcerpt(input.lastBotMessage ?? ""),
 			replyContext: formatReplyContext(input.replyContext),

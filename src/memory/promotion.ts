@@ -391,41 +391,55 @@ export async function promoteToMemory(
 	const baseMetric = {
 		chatId,
 		source,
-		retried: options?.retried === true,
 		bar: minImportance,
 		defaultBar,
 		messageCount: overflow.length,
 	};
 
-	// LLM: evaluate and extract
 	let result: PromotionResult;
-	try {
-		result = await dependencies.evaluate(recentText, existingFacts);
-	} catch (err) {
-		// Record the failed attempt before rethrowing: a rising parse-failure rate
-		// on the cheap background model is exactly what the metrics exist to catch.
-		await recordPromotionDecision({
-			...baseMetric,
-			ts: Date.now(),
-			model: err instanceof ExtractionParseError ? err.model : "",
-			parseOk: !(err instanceof ExtractionParseError),
-			importance: 0,
-			factImportances: [],
-			droppedFacts: 0,
-			hasPersonalitySignals: false,
-			kept: false,
-			summary: "",
-		});
-		if (err instanceof ExtractionParseError) {
-			log.warn(
-				`[promote] Extraction from ${err.model} was unparseable for chat ${chatId} — spooling for retry.`,
-			);
-			await alertOwner(
-				"memory-extraction",
-				`Background extraction returned unparseable output from ${err.model}. Memory writes for chat ${chatId} are being retried.`,
-			);
+	let retried = options?.retried === true;
+	let initialParseError: ExtractionParseError | undefined;
+	for (;;) {
+		try {
+			result = await dependencies.evaluate(recentText, existingFacts, {
+				recoverMalformed: initialParseError !== undefined,
+			});
+			break;
+		} catch (error) {
+			const parseError =
+				error instanceof ExtractionParseError ? error : undefined;
+			await recordPromotionDecision({
+				...baseMetric,
+				retried,
+				ts: Date.now(),
+				model: parseError?.model ?? "",
+				parseOk: parseError === undefined,
+				importance: 0,
+				factImportances: [],
+				droppedFacts: 0,
+				hasPersonalitySignals: false,
+				kept: false,
+				summary: "",
+			});
+			// New chunks get one immediate regeneration. Subsequent spool passes
+			// keep the existing retry cadence and attempt limit.
+			if (parseError && !retried) {
+				initialParseError = parseError;
+				retried = true;
+				continue;
+			}
+			const unresolved = parseError ?? initialParseError;
+			if (unresolved) {
+				log.warn(
+					`[promote] Extraction from ${unresolved.model} was unparseable for chat ${chatId}; the chunk remains queued.`,
+				);
+				await alertOwner(
+					"memory-extraction",
+					`Background extraction returned unparseable output from ${unresolved.model}. Memory writes for chat ${chatId} are being retried.`,
+				);
+			}
+			throw error;
 		}
-		throw err;
 	}
 
 	log.debug(
@@ -483,6 +497,7 @@ export async function promoteToMemory(
 
 	await recordPromotionDecision({
 		...baseMetric,
+		retried,
 		ts: Date.now(),
 		model: result.extraction?.model ?? "",
 		parseOk: true,

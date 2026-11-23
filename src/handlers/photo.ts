@@ -9,6 +9,7 @@ import {
 	isGroupChat,
 	observeConversationTurn,
 } from "../conversation.ts";
+import { claimGroupContinuationSlot } from "../group-state.ts";
 import { getMessageImage } from "../image-context.ts";
 import { log } from "../logger.ts";
 import { cleanupFile, downloadImageByFileId } from "../media-handlers.ts";
@@ -21,9 +22,10 @@ import {
 } from "../providers/types.ts";
 import type { MentionType } from "../types.ts";
 import {
+	classifyGroupTurn,
+	detectMentionType,
 	hasEditIntent,
 	processConversationAndTrackGroupContinuation,
-	resolveMediaMention,
 	sanitizeBracketText,
 } from "./routing.ts";
 
@@ -37,14 +39,32 @@ export async function handlePhoto(
 	const image = getMessageImage(ctx);
 	if (!image) return;
 	const userName = getUserDisplayName(ctx);
+	const telegram = knownMentionType ?? detectMentionType(ctx, ctx.me.id);
+	const group = isGroupChat(ctx);
+	const decision =
+		knownMentionType === undefined &&
+		telegram === "none" &&
+		group &&
+		requestText
+			? await classifyGroupTurn(ctx, requestText, userName, true)
+			: null;
 	const mentionType =
-		knownMentionType ?? (await resolveMediaMention(ctx, requestText, userName));
+		decision?.action === "respond" && decision.addressing === "direct"
+			? "name"
+			: telegram;
+	const groupContinuation =
+		mentionType === "none" &&
+		decision?.action === "respond" &&
+		decision.addressing === "continuation" &&
+		!ctx.message?.reply_to_message &&
+		ctx.chat !== undefined &&
+		claimGroupContinuationSlot(ctx.chat.id);
 	const source =
 		image.messageId === ctx.message?.message_id
 			? ctx.message
 			: ctx.message?.reply_to_message;
 	const imageName = sanitizeBracketText(source?.from?.first_name ?? userName);
-	if (isGroupChat(ctx) && mentionType === "none") {
+	if (group && mentionType === "none" && !groupContinuation) {
 		const caption = requestText;
 		const observedContent = caption
 			? `[Image from ${imageName}, caption: "${sanitizeBracketText(caption)}"]`
@@ -104,6 +124,7 @@ export async function handlePhoto(
 				userName,
 				{
 					mentionType,
+					groupContinuation,
 					botOff: isBotOff(),
 					isSleepingHour: isSleepingHour(),
 					mediaAttachment,

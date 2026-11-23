@@ -41,7 +41,7 @@ export interface PromotionMetricRecord {
 	ts: number;
 	chatId: number;
 	source: PromotionSource;
-	/** True when this attempt came from the retry spool. */
+	/** True when this extraction was regenerated or retried from the spool. */
 	retried: boolean;
 	/** Bar this chunk was judged against. */
 	bar: number;

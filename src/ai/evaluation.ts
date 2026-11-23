@@ -171,6 +171,7 @@ export async function evaluateConversationChunk(
 		SemanticFact,
 		"id" | "subject" | "category" | "content"
 	>[] = [],
+	options: { recoverMalformed?: boolean } = {},
 ): Promise<PromotionResult> {
 	const factIds = new Map(
 		existingFacts.map((fact, index) => [`F${index + 1}`, fact.id]),
@@ -196,7 +197,10 @@ ${existingFactSummary}
 	}
 
 	const systemPrompt =
-		"You are an assistant that extracts important information from conversations. Respond ONLY with valid JSON, no additional text.";
+		"You are an assistant that extracts important information from conversations. Respond ONLY with valid JSON, no additional text." +
+		(options.recoverMalformed
+			? "\nGenerate a fresh extraction from the conversation below. Return exactly one complete JSON object matching the requested fields. Check that the object has balanced braces, quoted property names, and escaped quotes inside strings. Use empty arrays for unsupported facts or signals."
+			: "");
 
 	const userMessage = `Analyze this conversation and extract:
 
@@ -261,8 +265,8 @@ ${recentMessages}`;
 	// An unparseable reply used to degrade to "casual conversation, importance 1",
 	// which the promotion gate then dropped — a model failure was indistinguishable
 	// from a boring conversation, and the chunk was lost silently. Throw instead:
-	// the caller spools the chunk for retry, and the failure shows up in the logs
-	// and in the extraction-quality metrics.
+	// the promotion worker can retry against the original evidence and record
+	// the failure in the extraction-quality metrics.
 	const jsonMatch = text.match(/\{[\s\S]*\}/);
 	if (!jsonMatch) {
 		throw new ExtractionParseError(model);
