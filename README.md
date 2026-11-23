@@ -1,136 +1,55 @@
 # MGS Bot
 
 <p align="center">
-  <img src="assets/bot-avatar.png" alt="MGS Bot" width="300" />
+  <img src="assets/bot-avatar.png" alt="MGS Bot" width="220" />
 </p>
 
-A conversational Telegram bot with persistent memory, a configurable personality, voice replies, and image generation. Built with Bun, TypeScript, and grammY, for one owner in DMs and optionally one allowed group.
-
-- Remembers facts, conversation summaries, relationships, and monthly chapters; adaptive personality learns gradually from direct user feedback.
-- Handles text, `.txt` files, voice notes, audio, photos, PDFs, public web pages, and YouTube links. Telegram audio, images, and PDFs have a 20 MiB download cap, and text files have a 1 MB cap. Generated fal assets use its media CDN and a 32 MiB cap.
-- Generates character photos, edits user images, and creates illustrations for scheduled reports.
-- Supports natural-language reminders, recurring research, source/style preferences, and conditional actions such as a celebration meme after a confirmed win.
-- Searches the web, reads public pages, and checks current/hourly weather with any chat provider.
-- Offers opt-in DM follow-ups and periodic check-ins.
+MGS Bot is a self-hosted Telegram bot for your DMs and, optionally, one group. It remembers details across conversations, works with voice notes, photos and documents, and can send reminders and scheduled research reports.
 
 ## Quick start
 
-Use **Bun 1.4.2**, a Telegram bot token from [@BotFather](https://t.me/BotFather), your numeric Telegram user ID, and an **OpenAI or Google AI API key**.
+You'll need a Telegram bot token from [@BotFather](https://t.me/BotFather), your numeric Telegram user ID, and an OpenAI or Google AI API key.
 
-```bash
-git clone https://github.com/mio-gato-software/mgsbot.git
-cd mgsbot
-bun install --frozen-lockfile
-cp .env.sample .env
-```
+1. Get the source and create a local configuration file.
 
-Fill in `.env` for an OpenAI-only setup:
+   ```sh
+   git clone https://github.com/mio-gato-software/mgsbot.git
+   cd mgsbot
+   cp .env.sample .env
+   ```
 
-```dotenv
-BOT_TOKEN=your_telegram_bot_token
-OWNER_USER_ID=your_numeric_telegram_user_id
-OPENAI_API_KEY=your_openai_api_key
-AI_PLATFORM=openai
-```
+2. In `.env`, fill in `BOT_TOKEN`, `OWNER_USER_ID`, and either `OPENAI_API_KEY` or `GOOGLE_API_KEY`. For reminders at your local time, set `BOT_TIMEZONE` to your IANA timezone, such as `Europe/Madrid`. Leave `ALLOWED_GROUP_ID` blank for DM-only use.
 
-For Gemini, use `GOOGLE_API_KEY` and `AI_PLATFORM=gemini` instead. OpenAI alone covers most features; **YouTube analysis requires Google**.
+3. Install dependencies and start the bot with **Bun 1.4.2**.
 
-```bash
-bun run start
-```
+   ```sh
+   bun install --frozen-lockfile
+   bun run start
+   ```
 
-DM the bot to configure its name, language, and personality, or use the [profile files](#profile-rules-and-character-image). On a computer with a browser, `bun run start -- --setup` opens the configuration wizard; missing credentials also trigger it. Prepare `.env` beforehand on a server or in Docker.
+4. Open the bot in Telegram and send it a message from the owner account. The first conversation sets up its name and personality. After setup, send `/help` to see the commands.
 
-## Configuration
+**Other ways to run it.** With the same `.env`, Docker users can run `docker compose up -d --build` in the cloned repository. Standalone binaries for Linux x64, macOS ARM64 and Windows x64 can run directly from the directory containing `.env`. [Download a release](https://github.com/mio-gato-software/mgsbot/releases) · [Deployment and upgrades](docs/deployment.md)
 
-[`.env.sample`](.env.sample) lists credentials, model variables, defaults, and optional settings. Restart after editing `.env`.
+## Try it in Telegram
 
-`OWNER_USER_ID` permits the owner's DMs; `ALLOWED_GROUP_ID` optionally permits one group. The group router uses Telegram metadata for explicit mentions and replies. A model interprets other messages, captions and transcriptions for direct requests, continuations and spontaneous responses. Unaddressed messages can contribute to memory; `ENABLE_GROUP_VOICE_CONTEXT=false` disables passive voice-note transcription.
-
-`AI_PLATFORM` supplies defaults: Gemini when a Google key exists, otherwise OpenAI. Services are independently configurable:
-
-| Service | Setting |
+| Send this | What happens |
 | --- | --- |
-| Conversation | `CHAT_PROVIDER` and its model variable |
-| Transcription / voice replies | `STT_PROVIDER` / `TTS_PROVIDER` |
-| Image generation | `IMAGE_PROVIDER` and its model variable |
-| Memory embeddings | `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `EMBEDDING_DIM` |
-| Background memory work | `BACKGROUND_PROVIDER`, `BACKGROUND_MODEL` |
-| Image / PDF analysis | `VISION_PROVIDER` / `DOCUMENT_PROVIDER` |
-| Routing classifiers | `CLASSIFIER_PROVIDER`, `CLASSIFIER_MODEL`; OpenAI Decision API by default with an OpenAI key |
+| A PDF with “Summarize the main points” | The bot reads the document and summarizes it in the chat. |
+| “Remind me tomorrow at 9 am to return the library books.” | The bot saves a one-time reminder and sends it in the same chat. |
+| “Every Friday at 8 am, send me the weekend forecast for Madrid.” | The bot looks up the forecast at delivery time. Recurring tasks run for up to one calendar month and can be renewed in chat. |
+| A public article link with “What does the author argue?” | The bot reads the linked page. Add `BRAVE_API_KEY` if you also want it to search for sources. |
 
-Chat providers: `gemini`, `openai`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `deepseek`, and `fal`. Keep an OpenAI or Google key for support services when using another chat provider. `BACKGROUND_FALLBACK_TO_CHAT=false` prevents background failures from invoking the chat model.
-
-With `OPENAI_API_KEY`, an unset `CLASSIFIER_PROVIDER` uses OpenAI Decision API with `gpt-6-luna` for group participation, image edit intent, repeat selfie requests, and creative novelty. Select `CLASSIFIER_PROVIDER=typesafe` with `TYPESAFE_API_KEY` to opt in to Jev. To migrate an explicit Jev selection, set `CLASSIFIER_PROVIDER=openai-decisions` or remove the selector. The `openai`, `gemini`, and `fal` values select text classifiers. Unavailable or uncertain typed results use the existing model-based fallback for each task.
-
-`BOT_TIMEZONE` controls the clock and schedules. Sleep hours suppress group replies and proactive sends. Follow-ups and check-ins are disabled by default; enable them with `ENABLE_FOLLOW_UPS` and `ENABLE_CHECK_INS`. Other modes include `ENABLE_TUTOR_MODE`, `SIMPLE_ASSISTANT_MODE`, and optional chat logging. See [adaptive personality](docs/adaptive-personality.md) for its controls and limits.
-
-With Brave and `ALLOWED_GROUP_ID` configured, the bot also learns up to eight public interests from that group's user messages and episode summaries. It keeps these separately in `memory/group-news/<chatId>.json`, runs one local news search plus one rotating interest-based search per local calendar day, and schedules one conversation starter at a random remaining daytime minute each week (08:00–21:00, `BOT_TIMEZONE`). Set `ENABLE_GROUP_NEWS=false` to disable both group research and posts independently of ambient headlines. `GROUP_NEWS_LOCAL_QUERY` defaults to `noticias de hoy República Dominicana`. Local news remains eligible even without learned interests or when interest extraction fails. At delivery, the background model chooses among fresh candidates from both searches for everyday relevance, novelty and variety; local stories do not have to match previous group discussions. No private DM memories are used to choose topics.
-
-The post is a short reaction in the bot's personality with a source link and room for anyone to participate. It opens the normal group continuation window so members can reply without tagging the bot. Off/sleep/simple mode, setup status, active conversations (15 minutes), and the group spontaneous-reply cooldown are respected. Delivery refreshes both searches (at most one batch/hour, within the shared budget) and only accepts a known publication time within the last 24 hours. Undated articles, evergreen material, and recycled old events are skipped. The message uses a conversational Dominican voice in Spanish, with a personal reaction proportionate to the story and no forced slang or routine closing question. The last five actual posts are supplied as style history so openings, rhythm and endings can vary; the approved tone example is a reference, not a reusable script. Cached stories expire after 48 hours; recent source URLs/titles are excluded and the generation prompt also rejects repeated events. A failed search does not discard the other search’s results; daily research failures wait until the next local day, while a due post may recheck after one hour. No suitable fresh news means no post rather than invented news. The weekly cadence is a target, not a forced bulletin; downtime and these guards can skip a week. Delivery is reserved before Telegram submission to prevent duplicates after restart, so an ambiguous delivery failure can also skip that week's post.
+Weather uses Open-Meteo and needs no extra key. YouTube analysis requires `GOOGLE_API_KEY`. Set `ENABLE_FOLLOW_UPS=true` or `ENABLE_CHECK_INS=true` to let the bot start conversations in your DMs. With Brave search and an allowed group, it can also post a weekly news item. [Configuration options](.env.sample) · [Agenda and research](docs/agenda-and-preferences.md) · [Weather](docs/weather.md)
 
 ## Profile, rules, and character image
 
-To configure the persona without the Telegram setup conversation:
+To set up the persona before the first chat, run `bun run profile:init` and edit `memory/bot_profile.json`. For custom conversation rules, run `bun run rules:init` and edit `memory/bot_rules.json`. To give generated character photos a consistent appearance, place a reference image at `memory/base.png`, `memory/base.jpg`, or `memory/base.jpeg`. [How personality adapts](docs/adaptive-personality.md)
 
-```bash
-bun run profile:init
-bun run rules:init
-# Edit memory/bot_profile.json and memory/bot_rules.json, then start normally.
-```
+## Operating the bot
 
-A valid profile overrides in-chat configuration. Rules customize conversational behavior and style; access control and provider settings remain in `.env`. Inspect files with `bun run profile:show` and `bun run rules:show`.
+- **Telegram controls.** In the owner's DM, use `/off` and `/on` to pause and resume replies. Use `/provider` to inspect the current configuration, or `/provider <name> [model]` to switch the chat provider until restart.
+- **Persistent data.** Back up `memory/` and keep it across upgrades. It holds conversation memory, profiles and scheduled tasks. Run one bot process per store. Docker mounts `memory/`, `audios/` and `logs/` from the host. [Backups and recovery](docs/maintenance.md)
+- **Development.** Use `bun run dev` for watch mode. Check changes with `bun run lint`, `bun run typecheck` and `bun test --coverage`. [Architecture and repository guide](AGENTS.md)
 
-Place the character reference at `memory/base.png`, `memory/base.jpg`, or `memory/base.jpeg`. New character scenes use this reference and preserve its photographic or illustrated medium. The normal weekly photo becomes eligible during a conversation; `/allowphotorequest` grants one requested photo. `FULL_ACCESS_MODE=true` enables on-demand generation, including external subjects without a character reference.
-
-Each chat remembers its last delivered selfie. A repeated request written while that selfie is on its way is satisfied by the original delivery. An explicit resend uses the same Telegram file. Another take uses the delivered photo as its visual reference to preserve the outfit and setting, subject to the usual photo permissions.
-
-User-image edits use the user's photo. Photo follow-ups can reuse the sender's latest image within the recent-message buffer for up to 30 minutes; otherwise reply to the original photo. These paths use `MEMORY_DIR` when configured.
-
-## Agenda and research
-
-Ask naturally for one-time reminders, daily/weekly research, selected weekdays, or lasting source/style preferences. Recurrences last at most **one calendar month** and require explicit renewal. `ENABLE_COMMITMENTS=false` or simple assistant mode disables the agenda.
-
-Reports can include requested images and conditional text/images based on confirmed research evidence. Conditions are checked after the parent report, at its scheduled cadence. Saved receipts prevent automatic replay of sent or uncertain deliveries. See [agenda and standing preferences](docs/agenda-and-preferences.md) for examples, permissions, budgets, and headless configuration.
-
-- **Search:** `BRAVE_API_KEY` enables public search and optional ambient headlines.
-- **Page reading:** works directly without extra credentials. `BROWSERBASE_API_KEY` adds Fetch and JavaScript rendering; a separately installed [local Chromium browser](docs/local-browser.md) is another option. Reads are bounded, public, and read-only.
-- **Weather:** Open-Meteo needs no extra key. Configure `WEATHER_CITY` and optionally `WEATHER_COUNTRY` separately from the timezone. See [weather queries](docs/weather.md) for forecast limits and scheduled reports.
-
-## Telegram commands
-
-Send commands in the owner's DM.
-
-| Command | Action |
-| --- | --- |
-| `/help` | List commands |
-| `/provider [name] [model]` | Inspect configuration or change chat until restart; other services stay independently configured |
-| `/allowphotorequest [group]` | Authorize one photo request in the DM or allowed group |
-| `/off` / `/on` | Pause / resume message processing without stopping the process |
-| `/optimize` | Check memory-confidence decay and report statistics |
-
-## Deployment and data
-
-For Docker, prepare `.env` and run `docker compose up -d --build`. Compose mounts `.env` read-only and persists `memory/`, `audios/`, and `logs/`; data directories must be writable by the container's `bun` user.
-
-For a standalone executable, use `bun run build` or `bun run build:linux`, or download a [release](https://github.com/mio-gato-software/mgsbot/releases) for Linux x64, macOS ARM64, or Windows x64. Run it from the directory containing `.env`; Bun is unnecessary on the target machine. Pushing `main` runs CI; tagged releases publish binaries. See [deployment and upgrades](docs/deployment.md).
-
-`memory/` holds persistent user data, profiles, schedules, and recovery state. `MEMORY_DIR` changes its root; update Docker mounts accordingly. Preserve it across upgrades and use only one process per store. Verified daily backups retain seven dated snapshots; keep an external copy too. Never commit credentials or runtime data.
-
-See [maintenance and recovery](docs/maintenance.md) for backups, corrupted stores, interrupted promotions, and embedding changes. `bun run memory:stats` reports usage and cache metrics; `bun run promote:stats` reports extraction quality. [TODO.md](TODO.md) tracks known pending work.
-
-## Development
-
-```bash
-bun run dev          # Restart on source changes
-bun run lint:fix     # Apply lint and formatting fixes
-bun run typecheck    # Bun does not type-check at runtime
-bun test --coverage  # Disposable test memory; enforce coverage thresholds
-bun run build        # Compile the executable
-```
-
-[AGENTS.md](AGENTS.md) describes the architecture and repository rules.
-
-## License
-
-[MIT](LICENSE). This project is not accepting contributions; forks are welcome.
+Forks are welcome. This project is closed to contributions. [MIT license](LICENSE)
