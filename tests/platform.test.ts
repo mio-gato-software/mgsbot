@@ -113,13 +113,13 @@ describe("AI platform", () => {
 });
 
 describe("independent support axes", () => {
-	test("support providers follow AI_PLATFORM unless overridden", () => {
+	test("support providers follow AI_PLATFORM and favor Decisions for classifiers", () => {
 		const openaiOnly = { OPENAI_API_KEY: "sk-test" };
 		expect(resolveEmbeddingProvider(openaiOnly)).toBe("openai");
 		expect(resolveVisionProvider(openaiOnly)).toBe("openai");
 		expect(resolveDocumentProvider(openaiOnly)).toBe("openai");
 		expect(resolveBackgroundProvider(openaiOnly)).toBe("openai");
-		expect(resolveClassifierProvider(openaiOnly)).toBe("openai");
+		expect(resolveClassifierProvider(openaiOnly)).toBe("openai-decisions");
 	});
 
 	test("can mix chat platform with a different embedding provider", () => {
@@ -261,6 +261,7 @@ describe("model fallbacks", () => {
 		expect(
 			resolveClassifierModel({
 				OPENAI_API_KEY: "sk",
+				CLASSIFIER_PROVIDER: "openai",
 				CLASSIFIER_MODEL: "custom-clf",
 			}),
 		).toBe("custom-clf");

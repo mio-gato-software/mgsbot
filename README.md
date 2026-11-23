@@ -57,9 +57,11 @@ DM the bot to configure its name, language, and personality, or use the [profile
 | Memory embeddings | `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `EMBEDDING_DIM` |
 | Background memory work | `BACKGROUND_PROVIDER`, `BACKGROUND_MODEL` |
 | Image / PDF analysis | `VISION_PROVIDER` / `DOCUMENT_PROVIDER` |
-| Routing classifiers | `CLASSIFIER_PROVIDER`, `CLASSIFIER_MODEL`; optional TypeSafe/Jev |
+| Routing classifiers | `CLASSIFIER_PROVIDER`, `CLASSIFIER_MODEL`; OpenAI Decision API by default with an OpenAI key |
 
 Chat providers: `gemini`, `openai`, `openrouter`, `anthropic`, `azure`, `alibaba`, `fireworks`, `deepseek`, and `fal`. Keep an OpenAI or Google key for support services when using another chat provider. `BACKGROUND_FALLBACK_TO_CHAT=false` prevents background failures from invoking the chat model.
+
+With `OPENAI_API_KEY`, an unset `CLASSIFIER_PROVIDER` uses OpenAI Decision API with `gpt-6-luna` for group participation, image edit intent, repeat selfie requests, and creative novelty. Select `CLASSIFIER_PROVIDER=typesafe` with `TYPESAFE_API_KEY` to opt in to Jev. To migrate an explicit Jev selection, set `CLASSIFIER_PROVIDER=openai-decisions` or remove the selector. The `openai`, `gemini`, and `fal` values select text classifiers. Unavailable or uncertain typed results use the existing model-based fallback for each task.
 
 `BOT_TIMEZONE` controls the clock and schedules. Sleep hours suppress group replies and proactive sends. Follow-ups and check-ins are disabled by default; enable them with `ENABLE_FOLLOW_UPS` and `ENABLE_CHECK_INS`. Other modes include `ENABLE_TUTOR_MODE`, `SIMPLE_ASSISTANT_MODE`, and optional chat logging. See [adaptive personality](docs/adaptive-personality.md) for its controls and limits.
 

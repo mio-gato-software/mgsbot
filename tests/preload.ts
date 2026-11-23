@@ -21,4 +21,9 @@ process.env.ENABLE_WEB_SEARCH = "false";
 process.env.ENABLE_WEB_READING = "false";
 process.env.ENABLE_WEATHER_LOOKUP = "false";
 process.env.ENABLE_COMMITMENTS = "false";
+// Classifier tests supply their own provider keys and mock transport.
+delete process.env.CLASSIFIER_PROVIDER;
+delete process.env.OPENAI_API_KEY;
+delete process.env.GOOGLE_API_KEY;
+delete process.env.FAL_API_KEY;
 delete process.env.TYPESAFE_API_KEY;

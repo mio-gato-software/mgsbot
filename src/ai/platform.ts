@@ -3,7 +3,11 @@ type EnvMap = NodeJS.ProcessEnv;
 export type AiPlatform = "gemini" | "openai";
 export type SupportProviderName = "gemini" | "openai";
 export type BackgroundProviderName = SupportProviderName | "fal";
-export type ClassifierProviderName = SupportProviderName | "fal" | "typesafe";
+export type ClassifierProviderName =
+	| SupportProviderName
+	| "fal"
+	| "typesafe"
+	| "openai-decisions";
 
 export const DEFAULT_GEMINI_CHAT_MODEL = "gemini-3.6-flash";
 export const DEFAULT_GEMINI_BACKGROUND_MODEL = "gemini-3.6-flash";
@@ -19,6 +23,7 @@ export const DEFAULT_GEMINI_EMBEDDING_DIM = 768;
 export const DEFAULT_OPENAI_CHAT_MODEL = "gpt-6-luna";
 export const DEFAULT_OPENAI_BACKGROUND_MODEL = "gpt-6-luna";
 export const DEFAULT_OPENAI_CLASSIFIER_MODEL = "gpt-6-luna";
+export const DEFAULT_OPENAI_DECISIONS_MODEL = "gpt-6-luna";
 export const DEFAULT_OPENAI_VISION_MODEL = "gpt-6-luna";
 export const DEFAULT_OPENAI_DOCUMENT_MODEL = "gpt-6-luna";
 export const DEFAULT_OPENAI_STT_MODEL = "gpt-4o-mini-transcribe";
@@ -146,11 +151,16 @@ export function resolveClassifierProvider(
 	env: EnvMap = process.env,
 ): ClassifierProviderName {
 	const explicit = envString(env, "CLASSIFIER_PROVIDER")?.toLowerCase();
-	if (
-		(!explicit || explicit === "typesafe") &&
-		envString(env, "TYPESAFE_API_KEY")
-	)
+	if ((!explicit || explicit === "openai-decisions") && hasOpenAiApiKey(env))
+		return "openai-decisions";
+	if (explicit === "typesafe" && supportProviderHasKey("typesafe", env))
 		return "typesafe";
+	return resolveLegacyClassifierProvider(env);
+}
+
+export function resolveLegacyClassifierProvider(
+	env: EnvMap = process.env,
+): SupportProviderName | "fal" {
 	if (envString(env, "CLASSIFIER_PROVIDER")?.toLowerCase() === "fal")
 		return "fal";
 	return resolveSupportProvider(
@@ -195,11 +205,24 @@ export function resolveBackgroundModel(env: EnvMap = process.env): string {
 }
 
 export function resolveClassifierModel(env: EnvMap = process.env): string {
-	if (resolveClassifierProvider(env) === "typesafe")
-		return envString(env, "TYPESAFE_MODEL") ?? "jev-1.13.0";
+	const provider = resolveClassifierProvider(env);
+	if (provider === "openai-decisions") return DEFAULT_OPENAI_DECISIONS_MODEL;
+	if (provider === "typesafe") return resolveTypeSafeClassifierModel(env);
+	return resolveLegacyClassifierModel(env);
+}
+
+export function resolveTypeSafeClassifierModel(
+	env: EnvMap = process.env,
+): string {
+	return envString(env, "TYPESAFE_MODEL") ?? "jev-1.13.0";
+}
+
+export function resolveLegacyClassifierModel(
+	env: EnvMap = process.env,
+): string {
 	const explicit = envString(env, "CLASSIFIER_MODEL");
 	if (explicit) return explicit;
-	return resolveClassifierProvider(env) === "openai"
+	return resolveLegacyClassifierProvider(env) === "openai"
 		? DEFAULT_OPENAI_CLASSIFIER_MODEL
 		: DEFAULT_GEMINI_CLASSIFIER_MODEL;
 }
@@ -357,5 +380,7 @@ export function supportProviderHasKey(
 ): boolean {
 	if (provider === "typesafe") return !!envString(env, "TYPESAFE_API_KEY");
 	if (provider === "fal") return !!envString(env, "FAL_API_KEY");
-	return provider === "openai" ? hasOpenAiApiKey(env) : hasGoogleApiKey(env);
+	return provider === "openai" || provider === "openai-decisions"
+		? hasOpenAiApiKey(env)
+		: hasGoogleApiKey(env);
 }

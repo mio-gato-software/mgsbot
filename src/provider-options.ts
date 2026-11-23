@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+	type ClassifierProviderName,
 	DEFAULT_GEMINI_CHAT_MODEL,
 	DEFAULT_OPENAI_CHAT_MODEL,
 	DEFAULT_OPENAI_IMAGE_MODEL,
@@ -239,7 +240,7 @@ interface ProviderEnv extends EnvMap {
 	VISION_PROVIDER?: "gemini" | "openai";
 	DOCUMENT_PROVIDER?: "gemini" | "openai";
 	BACKGROUND_PROVIDER?: "gemini" | "openai" | "fal";
-	CLASSIFIER_PROVIDER?: "gemini" | "openai" | "fal" | "typesafe";
+	CLASSIFIER_PROVIDER?: ClassifierProviderName;
 	YOUTUBE_PROVIDER?: "gemini" | "openai";
 	OPENROUTER_TRANSPORT?: OpenRouterTransport;
 	FAL_IMAGE_MODEL?: string;
@@ -306,7 +307,7 @@ const ProviderEnvSchema = z.object({
 		z.enum(["gemini", "openai", "fal"]),
 	),
 	CLASSIFIER_PROVIDER: optionalProviderString(
-		z.enum(["gemini", "openai", "fal", "typesafe"]),
+		z.enum(["gemini", "openai", "fal", "typesafe", "openai-decisions"]),
 	),
 	TYPESAFE_API_KEY: optionalString,
 	TYPESAFE_MODEL: optionalString,
@@ -780,9 +781,10 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 		{
 			label: "Classifiers",
 			name: "CLASSIFIER_PROVIDER",
-			// TypeSafe is optional even when explicitly selected without a key.
+			// Typed classifiers fall back to the legacy classifier if unavailable.
 			provider:
-				providerEnv.CLASSIFIER_PROVIDER === "typesafe"
+				providerEnv.CLASSIFIER_PROVIDER === "typesafe" ||
+				providerEnv.CLASSIFIER_PROVIDER === "openai-decisions"
 					? undefined
 					: providerEnv.CLASSIFIER_PROVIDER,
 		},
@@ -800,6 +802,15 @@ export function validateProviderConfiguration(env: EnvMap = process.env): {
 				`${check.label} require ${required} when ${check.name}=${check.provider}.`,
 			);
 		}
+	}
+
+	if (
+		providerEnv.CLASSIFIER_PROVIDER === "openai-decisions" &&
+		!providerEnv.OPENAI_API_KEY
+	) {
+		warnings.push(
+			`OpenAI Decision API requires OPENAI_API_KEY. Classifiers will use ${resolveClassifierProvider(providerEnv)}.`,
+		);
 	}
 
 	if (

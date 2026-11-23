@@ -8,7 +8,7 @@ This file provides guidance to AI coding agents working with this repository.
 
 **Regular expressions are strictly prohibited for making decisions about user intent or conversational behavior.** Do not use regex, keyword lists, substring matching, or equivalent lexical heuristics to decide whether a user is making a request, which action they want, whether to invoke a model/tool, or whether to create, edit, cancel, extend, or renew a task. This prohibition includes preliminary gates and fallback decision paths: a request must not be discarded before reaching the model because it lacks a particular word or phrasing.
 
-Use an inexpensive model with the relevant conversation context and existing task state. **Prefer Jev** for supported classification tasks; use **Luna** when richer interpretation is needed or Jev cannot handle the task. Validate structured model outputs and enforce permissions, persistence, scheduling limits, and other deterministic business constraints in code. Mechanical format parsing/validation is distinct from deciding the meaning of a user's request and must never be repurposed as an intent gate.
+Use an inexpensive model with the relevant conversation context and existing task state. Prefer **OpenAI Decision API** for supported classification tasks. Jev is available with an explicit classifier selection. Use **Luna** through the appropriate generation API when richer interpretation is needed. Validate structured model outputs and enforce permissions, persistence, scheduling limits, and other deterministic business constraints in code. Mechanical format parsing/validation is distinct from deciding the meaning of a user's request and must never be repurposed as an intent gate.
 
 When touching an existing heuristic decision path, replace it with model-based interpretation and test paraphrases and multi-turn clarifications rather than adding more trigger words. Do not introduce new heuristic decision gates to save model calls.
 
@@ -122,7 +122,9 @@ src/
                                per-modality switching (typing/upload_photo/record_voice), proactive typing pulse
   utils.ts                   ← atomicWriteFile(), withRetry(), env file parsing, misc helpers
   ai/
-    typesafe-classifier.ts    ← Optional typed group/image-edit classifier; bounded requests and confidence gates, with legacy fallback
+    typed-classifier.ts      ← Shared classification questions and confidence gates
+    decisions-classifier.ts  ← OpenAI Decision API transport for typed classifiers
+    typesafe-classifier.ts   ← Optional TypeSafe/Jev transport for typed classifiers
     core.ts                  ← generateResponse() + background work (Gemini, OpenAI or fal)
     google-client.ts         ← Gemini SDK client with operation cancellation and application-owned retries
     platform.ts              ← AI_PLATFORM + independent support-axis model/provider resolution
@@ -329,7 +331,8 @@ Requires a `.env` file (see `.env.sample`). Key variables:
 - `GOOGLE_API_KEY`: Optional if OpenAI is set. Still required for Gemini chat/support and YouTube analysis.
 - `GEMINI_MODEL`: Gemini chat model (default: `gemini-3.6-flash`)
 - `BACKGROUND_MODEL`: Pinned model for background memory work — fact extraction, narrative updates, janitor (defaults to `gpt-6-luna` or `gemini-3.6-flash` from `BACKGROUND_PROVIDER`)
-- `TYPESAFE_API_KEY` / `TYPESAFE_MODEL`: Optional routing/image-edit classification (default `jev-1.13.0`). Auto-selected if `CLASSIFIER_PROVIDER` is unset; explicit `typesafe` also selects it, while explicit openai/gemini/fal overrides it. Missing key, unavailable/invalid/uncertain results fall back to the existing AI-platform classifier and its `CLASSIFIER_MODEL`. Background memory generation is unchanged.
+- `CLASSIFIER_PROVIDER` defaults to OpenAI Decision API (`openai-decisions`, `gpt-6-luna`) with `OPENAI_API_KEY`. Use `typesafe` to select Jev or `openai`, `gemini`, or `fal` to select a text classifier. Set `openai-decisions` or remove the selector when migrating an explicit Jev configuration. Unavailable, invalid, or uncertain typed results use the existing text classifier (`AI_PLATFORM`, `CLASSIFIER_MODEL`) or the task-specific model fallback.
+- `TYPESAFE_API_KEY` and `TYPESAFE_MODEL` provide optional credentials and a model override for `CLASSIFIER_PROVIDER=typesafe` (default `jev-1.13.0`).
 - `OPENROUTER_API_KEY` / `OPENROUTER_MODEL`: Required if using OpenRouter (default model: `anthropic/claude-3.5-sonnet`)
 - `OPENROUTER_HTTP_REFERER` / `OPENROUTER_TITLE`: Optional attribution headers for OpenRouter requests
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL`: Required if using Anthropic (default model: `claude-sonnet-4-5-20250929`)

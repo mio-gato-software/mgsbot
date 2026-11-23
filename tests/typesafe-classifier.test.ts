@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	expect,
+	type Mock,
+	spyOn,
+	test,
+} from "bun:test";
 import {
 	classifyEditIntent,
 	classifyGroupSocialIntent,
@@ -9,15 +16,20 @@ import {
 	resolveClassifierModel,
 	resolveClassifierProvider,
 } from "../src/ai/platform.ts";
-import { creativeNoveltyWithTypeSafe } from "../src/ai/typesafe-classifier.ts";
+import { classifyCreativeNovelty } from "../src/ai/typed-classifier.ts";
 import {
 	formatProviderStartupSummary,
 	validateProviderConfiguration,
 } from "../src/provider-options.ts";
 
+type DecisionsCreate = ReturnType<
+	typeof getOpenAIClient
+>["decisions"]["create"];
+
 const originalEnv = { ...process.env };
 let fetchSpy: ReturnType<typeof spyOn> | undefined;
 let legacySpy: ReturnType<typeof spyOn> | undefined;
+let decisionsSpy: Mock<DecisionsCreate> | undefined;
 beforeEach(() => {
 	process.env.TYPESAFE_API_KEY = "test-typesafe-key";
 	process.env.CLASSIFIER_PROVIDER = "typesafe";
@@ -31,6 +43,8 @@ afterEach(() => {
 	fetchSpy = undefined;
 	legacySpy?.mockRestore();
 	legacySpy = undefined;
+	decisionsSpy?.mockRestore();
+	decisionsSpy = undefined;
 	process.env = { ...originalEnv };
 });
 
@@ -58,6 +72,9 @@ function mockFetch(
 		url: string | URL | Request,
 		init?: RequestInit,
 	) => Promise<Response>,
+	decide: (...args: Parameters<DecisionsCreate>) => unknown = () => {
+		throw new Error("Unexpected decision request");
+	},
 ) {
 	// Mock the SDK boundary: its singleton retains the fetch captured on creation.
 	const responses = getOpenAIClient().responses;
@@ -70,6 +87,11 @@ function mockFetch(
 	legacySpy = spyOn(responses, "create").mockImplementation(
 		create as unknown as typeof responses.create,
 	);
+	decisionsSpy = spyOn(
+		getOpenAIClient().decisions,
+		"create",
+	).mockImplementation((async (...args: Parameters<DecisionsCreate>) =>
+		decide(...args)) as unknown as DecisionsCreate);
 	fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
 		Object.assign(implementation, { preconnect: globalThis.fetch.preconnect }),
 	);
@@ -87,13 +109,22 @@ function legacyResponse(text: string) {
 	});
 }
 
-test("TypeSafe auto-selection respects explicit providers and is optional without its key", () => {
+test("classifiers default to Decisions with an OpenAI key and Jev requires explicit selection", () => {
 	const env = { OPENAI_API_KEY: "test", TYPESAFE_API_KEY: "test" };
-	expect(resolveClassifierProvider(env)).toBe("typesafe");
+	expect(resolveClassifierProvider(env)).toBe("openai-decisions");
 	expect(
 		resolveClassifierModel({ ...env, CLASSIFIER_MODEL: "legacy-model" }),
-	).toBe("jev-1.13.0");
-	expect(resolveClassifierModel({ ...env, TYPESAFE_MODEL: "custom-jev" })).toBe(
+	).toBe("gpt-6-luna");
+	expect(
+		resolveClassifierProvider({
+			GOOGLE_API_KEY: "test",
+			TYPESAFE_API_KEY: "test",
+		}),
+	).toBe("gemini");
+	const jev = { ...env, CLASSIFIER_PROVIDER: "typesafe" };
+	expect(resolveClassifierProvider(jev)).toBe("typesafe");
+	expect(resolveClassifierModel(jev)).toBe("jev-1.13.0");
+	expect(resolveClassifierModel({ ...jev, TYPESAFE_MODEL: "custom-jev" })).toBe(
 		"custom-jev",
 	);
 	for (const provider of ["openai", "gemini", "fal"] as const) {
@@ -111,7 +142,21 @@ test("TypeSafe auto-selection respects explicit providers and is optional withou
 		expect(validateProviderConfiguration(absent).errors).toEqual([]);
 	}
 	expect(formatProviderStartupSummary(env).join("\n")).toContain(
-		"Classifiers: typesafe (jev-1.13.0)",
+		"Classifiers: openai-decisions (gpt-6-luna)",
+	);
+});
+
+test("explicit Decisions without OpenAI credentials resolves to the platform classifier", () => {
+	const noOpenAI = {
+		CLASSIFIER_PROVIDER: "openai-decisions",
+		GOOGLE_API_KEY: "test-google-key",
+		TYPESAFE_API_KEY: "test-typesafe-key",
+	};
+	expect(resolveClassifierProvider(noOpenAI)).toBe("gemini");
+	const result = validateProviderConfiguration(noOpenAI);
+	expect(result.errors).toEqual([]);
+	expect(result.warnings).toContain(
+		"OpenAI Decision API requires OPENAI_API_KEY. Classifiers will use gemini.",
 	);
 });
 
@@ -125,17 +170,17 @@ test("typed creative novelty handles repetition, distinct ideas and uncertain re
 		});
 	});
 	expect(
-		await creativeNoveltyWithTypeSafe({ concept: "Same ring joke" }, [
+		await classifyCreativeNovelty({ concept: "Same ring joke" }, [
 			{ concept: "Ring joke" },
 		]),
 	).toBe(false);
 	answer = { choice: "distinct", confidence: 0.9 };
-	expect(
-		await creativeNoveltyWithTypeSafe({ concept: "Cooking joke" }, []),
-	).toBe(true);
+	expect(await classifyCreativeNovelty({ concept: "Cooking joke" }, [])).toBe(
+		true,
+	);
 	answer = { choice: "distinct", confidence: 0.5 };
 	expect(
-		await creativeNoveltyWithTypeSafe({ concept: "Unclear joke" }, []),
+		await classifyCreativeNovelty({ concept: "Unclear joke" }, []),
 	).toBeNull();
 });
 
@@ -169,6 +214,7 @@ test("typed group answers bypass the legacy model and bound the supplied context
 		}),
 	).toEqual({ addressing: "direct", action: "respond", confidence: 0.95 });
 	expect(calls).toBe(1);
+	expect(decisionsSpy).not.toHaveBeenCalled();
 });
 
 test.each(["typesafe", "openai"])(
@@ -345,6 +391,7 @@ test.each([
 			confidence: 0.9,
 		});
 		expect(calls).toHaveLength(scenario === "absent" ? 1 : 2);
+		expect(decisionsSpy).not.toHaveBeenCalled();
 	},
 );
 
@@ -408,4 +455,204 @@ test("the overlap classifier passes the request and clarification to Jev and fal
 		false,
 	);
 	expect(fallbackCalls).toBe(1);
+});
+
+function decisionChoice(name: string, choice: string, confidence = 0.95) {
+	return {
+		name,
+		type: "choice",
+		choice,
+		confidence,
+		probabilities: [{ value: choice, probability: confidence }],
+	};
+}
+
+function noTextFallback(): never {
+	throw new Error("Unexpected legacy or Jev classifier request");
+}
+
+test.each(["default", "openai-decisions"] as const)(
+	"Decisions with CLASSIFIER_PROVIDER=%s sends named choices and photo context in one request",
+	async (provider) => {
+		if (provider === "default") delete process.env.CLASSIFIER_PROVIDER;
+		else process.env.CLASSIFIER_PROVIDER = provider;
+		const currentMessage = "DemoBot. Te traje el dibujo que te debía.";
+		mockFetch(noTextFallback, () => ({
+			answers: [
+				decisionChoice("addressing", "direct", 0.97),
+				decisionChoice("action", "respond", 0.9),
+			],
+		}));
+
+		expect(
+			await classifyGroupSocialIntent({
+				...input,
+				mode: "message",
+				currentMessage,
+				imageAttached: true,
+			}),
+		).toEqual({ addressing: "direct", action: "respond", confidence: 0.9 });
+		expect(decisionsSpy).toHaveBeenCalledTimes(1);
+		const [request, options] = decisionsSpy?.mock.calls[0] ?? [];
+		expect(request).toMatchObject({
+			model: "gpt-6-luna",
+			input: [
+				{
+					type: "message",
+					role: "user",
+					content: [
+						{
+							type: "input_json",
+							data: { currentMessage, imageAttached: true },
+						},
+					],
+				},
+			],
+			questions: [
+				expect.objectContaining({
+					name: "addressing",
+					type: "choice",
+					instructions: expect.stringContaining(
+						"address the bot by name in its own sentence",
+					),
+					choices: expect.arrayContaining([
+						expect.objectContaining({ value: "direct" }),
+					]),
+				}),
+				expect.objectContaining({ name: "action", type: "choice" }),
+			],
+		});
+		expect(options).toMatchObject({
+			signal: expect.any(AbortSignal),
+			maxRetries: 0,
+		});
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(legacySpy).not.toHaveBeenCalled();
+	},
+);
+
+test.each([0.02, 0.98])(
+	"Decisions predicate probability %s resolves image edits and overlapping photo requests",
+	async (probability) => {
+		process.env.CLASSIFIER_PROVIDER = "openai-decisions";
+		mockFetch(noTextFallback, (request) => ({
+			answers: [
+				{ name: request.questions[0]?.name, type: "predicate", probability },
+			],
+		}));
+		const caption = "¿Me puedes cambiar el fondo a azul?";
+		const selfie = {
+			originalRequest: "Enséñame cómo te ves hoy",
+			currentMessage: "¿Va en camino?",
+			sameSpeaker: true,
+			recentMessages: ["Ada: una selfie"],
+		};
+		expect(await classifyEditIntent(caption)).toBe(probability >= 0.8);
+		expect(await classifyRepeatedSelfie(selfie)).toBe(probability >= 0.8);
+		const requests = decisionsSpy?.mock.calls.map(([request]) => request);
+		expect(requests?.map(({ questions }) => questions)).toMatchObject([
+			[{ name: "edit", type: "predicate" }],
+			[{ name: "repeat", type: "predicate" }],
+		]);
+		expect(requests?.[0]?.input[0]).toMatchObject({
+			content: [{ type: "input_json", data: { caption, imageAttached: true } }],
+		});
+		expect(requests?.[1]?.input[0]).toMatchObject({
+			content: [{ type: "input_json", data: selfie }],
+		});
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(legacySpy).not.toHaveBeenCalled();
+	},
+);
+
+test("Decisions compares novelty from the actual image brief and keeps uncertain cases available for fallback", async () => {
+	delete process.env.CLASSIFIER_PROVIDER;
+	const candidate = {
+		concept: "New joke",
+		imagePrompt: "A rabbit drops a trophy",
+	};
+	const previous = [
+		{ concept: "Old joke", imagePrompt: "A rabbit drops a trophy" },
+	];
+	let choice = decisionChoice("novelty", "repetitive");
+	mockFetch(noTextFallback, () => ({ answers: [choice] }));
+
+	expect(await classifyCreativeNovelty(candidate, previous)).toBe(false);
+	const [request] = decisionsSpy?.mock.calls[0] ?? [];
+	expect(request).toMatchObject({
+		input: [
+			{ content: [{ type: "input_json", data: { candidate, previous } }] },
+		],
+		questions: [{ name: "novelty", type: "choice" }],
+	});
+	choice = decisionChoice("novelty", "distinct", 0.5);
+	expect(await classifyCreativeNovelty(candidate, previous)).toBeNull();
+	expect(fetchSpy).not.toHaveBeenCalled();
+	expect(legacySpy).not.toHaveBeenCalled();
+});
+
+test.each([
+	["refusal", { name: "addressing", type: "refusal" }],
+	["unknown label", decisionChoice("addressing", "invented")],
+	["duplicate answer", decisionChoice("action", "respond")],
+	["invalid confidence", decisionChoice("addressing", "direct", 2)],
+	["low confidence", decisionChoice("addressing", "direct", 0.4)],
+	["unavailable", undefined],
+] as const)(
+	"Decisions %s falls back to the configured legacy model without contacting Jev",
+	async (_scenario, addressing) => {
+		delete process.env.CLASSIFIER_PROVIDER;
+		mockFetch(
+			async (url, init) => {
+				expect(String(url)).toBe("https://api.openai.com/v1/responses");
+				expect(JSON.parse(String(init?.body)).model).toBe("gpt-4.1-mini");
+				return legacyResponse(
+					'{"addressing":"ambient","action":"silence","confidence":0.9}',
+				);
+			},
+			() => {
+				if (!addressing) throw new Error("Decision service unavailable");
+				return { answers: [addressing, decisionChoice("action", "respond")] };
+			},
+		);
+		expect(await classifyGroupSocialIntent(input)).toEqual({
+			addressing: "ambient",
+			action: "silence",
+			confidence: 0.9,
+		});
+		expect(decisionsSpy).toHaveBeenCalledTimes(1);
+		expect(legacySpy).toHaveBeenCalledTimes(1);
+		expect(fetchSpy).not.toHaveBeenCalled();
+	},
+);
+
+test("uncertain Decisions predicates use text fallbacks without contacting Jev", async () => {
+	process.env.CLASSIFIER_PROVIDER = "openai-decisions";
+	mockFetch(
+		async (url) => {
+			expect(String(url)).toBe("https://api.openai.com/v1/responses");
+			return legacyResponse("no");
+		},
+		(request) => ({
+			answers: [
+				{
+					name: request.questions[0]?.name,
+					type: "predicate",
+					probability: 0.5,
+				},
+			],
+		}),
+	);
+	expect(await classifyEditIntent("¿Se ve bien el fondo?")).toBe(false);
+	expect(
+		await classifyRepeatedSelfie({
+			originalRequest: "Enséñame cómo te ves hoy",
+			currentMessage: "Y después otra desde más lejos",
+			sameSpeaker: true,
+			recentMessages: [],
+		}),
+	).toBe(false);
+	expect(decisionsSpy).toHaveBeenCalledTimes(2);
+	expect(legacySpy).toHaveBeenCalledTimes(2);
+	expect(fetchSpy).not.toHaveBeenCalled();
 });

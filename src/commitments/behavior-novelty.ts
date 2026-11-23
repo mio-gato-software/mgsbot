@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { generateBackgroundResponse } from "../ai/core.ts";
-import { resolveClassifierProvider } from "../ai/platform.ts";
-import { creativeNoveltyWithTypeSafe } from "../ai/typesafe-classifier.ts";
+import { classifyCreativeNovelty } from "../ai/typed-classifier.ts";
 import { withDeadline } from "../operation-deadline.ts";
 
 export interface CreativeHistory {
@@ -21,10 +20,7 @@ export async function reviewCreativeNovelty(
 	fast: (
 		candidate: CreativeHistory,
 		previous: CreativeHistory[],
-	) => Promise<boolean | null> = (candidate, previous) =>
-		resolveClassifierProvider() === "typesafe"
-			? creativeNoveltyWithTypeSafe(candidate, previous)
-			: Promise.resolve(null),
+	) => Promise<boolean | null> = classifyCreativeNovelty,
 ): Promise<{ distinct: boolean; reason: string }> {
 	const previous = history.slice(-CREATIVE_HISTORY_LIMIT);
 	if (!previous.length)
