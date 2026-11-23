@@ -28,6 +28,21 @@ import {
 	checkAndCancelResolvedFollowUps,
 	detectAndStoreFollowUps,
 } from "./follow-ups.ts";
+import {
+	type GroupRequestDecision,
+	releaseGroupReconsideration,
+	rememberGroupRefusal,
+	resolveGroupRequest,
+} from "./group-autonomy.ts";
+import {
+	groupMemberTurn,
+	groupPersonalityEnabled,
+} from "./group-personality.ts";
+import {
+	CONSERVATIVE_GROUP_POSTURE,
+	recordGroupRelationshipTurn,
+} from "./group-relationships.ts";
+import { restoreGroupFavorEvidence } from "./group-request-evidence.ts";
 import { registerIdentity } from "./identities.ts";
 import {
 	formatImageDimensions,
@@ -108,6 +123,8 @@ export interface ConversationOptions {
 	userTurnAlreadyRecorded?: boolean;
 	groupAutoReply?: boolean;
 	groupContinuation?: boolean;
+	groupRequestDecision?: GroupRequestDecision;
+	onGroupContribution?: () => void;
 	/** Current speaker's own transcription, never a quoted audio or page body. */
 	directUserText?: string;
 }
@@ -123,6 +140,9 @@ export interface ConversationDependencies {
 	commitments: typeof handleCommitmentRequest;
 	scheduled: (task: ScheduledTask) => Promise<ScheduledMessage | string>;
 	behaviors?: typeof checkAndSendTaskBehaviors;
+	groupRelationship?: typeof recordGroupRelationshipTurn;
+	groupRequest?: typeof resolveGroupRequest;
+	restoreGroupEvidence?: typeof restoreGroupFavorEvidence;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
 	repeatedSelfie: classifyRepeatedSelfie,
@@ -137,6 +157,64 @@ export const defaultConversationDependencies: ConversationDependencies = {
 	scheduled: generateScheduledDelivery,
 	behaviors: checkAndSendTaskBehaviors,
 };
+
+function groupRelationshipInput(
+	ctx: Context,
+	text: string | undefined,
+	userName: string,
+	recentMessages: readonly ConversationMessage[],
+	addressedToBot?: boolean,
+) {
+	const source = groupMemberTurn(ctx);
+	if (!source || !text?.trim()) return undefined;
+	const reply = ctx.message?.reply_to_message;
+	const replyIsBot = reply?.from?.id === ctx.me.id;
+	return {
+		...source,
+		messageAt: ctx.message?.date ? ctx.message.date * 1000 : undefined,
+		userName,
+		botName: loadConfig().botName,
+		text,
+		recentMessages,
+		addressedToBot: addressedToBot || replyIsBot || undefined,
+		replyTo: reply && {
+			recipient: replyIsBot
+				? ("bot" as const)
+				: reply.from && !reply.from.is_bot
+					? ("human" as const)
+					: ("unknown" as const),
+			text: reply.text ?? reply.caption,
+		},
+	};
+}
+
+async function generateFavorRefusal(
+	generate: ConversationDependencies["generate"],
+	systemPrompt: string,
+	messages: ReturnType<typeof buildMessages>,
+) {
+	try {
+		const result: unknown = JSON.parse(
+			await generate(
+				`${systemPrompt}\n\nYou have already decided to decline this favor. Express that naturally in one short line in the speaker's language. Keep the configured voice and make it clear that you are passing on the favor. Make no promise and do not invoke any tool, media, reaction or scheduling control. Return only JSON with a single text property.`,
+				messages,
+			),
+		);
+		if (
+			result &&
+			typeof result === "object" &&
+			"text" in result &&
+			typeof result.text === "string" &&
+			result.text.trim()
+		)
+			return result.text.trim().slice(0, 500);
+	} catch {
+		currentOperationSignal()?.throwIfAborted();
+	}
+	return loadConfig().language === "en"
+		? "I'll pass this time."
+		: "Esta vez paso.";
+}
 
 export async function processConversation(
 	ctx: Context,
@@ -164,12 +242,17 @@ export async function processConversation(
 		}
 		return false;
 	}
+	if (options.groupRequestDecision?.kind === "handled") return false;
 
 	// Immediate receipt feedback: show "typing…" from the moment we start
 	// working on a reply — retrieval plus generation can take many seconds.
 	// sendResponse switches the indicator per modality (photo/voice) via the
 	// shared handle, and the finally below always clears it.
-	const typing = startChatAction(ctx, "typing");
+	const typing =
+		options.groupAutoReply && groupPersonalityEnabled()
+			? undefined
+			: startChatAction(ctx, "typing");
+	const onGroupContribution = options.onGroupContribution;
 	let result: SendResponseResult | null;
 	let deliveredReportId: string | undefined;
 	try {
@@ -215,6 +298,43 @@ export async function processConversation(
 		if (overflow) {
 			trackBackground("promotion", drainPromotionSpool(chatId));
 		}
+		const recentGroupMessages = buffer.messages.slice(0, -1);
+		const groupTurn = groupRelationshipInput(
+			ctx,
+			directUserText,
+			userName,
+			recentGroupMessages,
+			mentionType !== "none" || options.groupContinuation === true,
+		);
+		const groupRelationship = groupTurn
+			? await (dependencies.groupRelationship ?? recordGroupRelationshipTurn)(
+					groupTurn,
+				)
+			: isGroupChat(ctx) && groupPersonalityEnabled()
+				? CONSERVATIVE_GROUP_POSTURE
+				: undefined;
+		const requestDecision =
+			options.groupRequestDecision ??
+			(groupTurn?.addressedToBot &&
+			!options.groupAutoReply &&
+			!groupRelationship?.boundaryChange
+				? await (dependencies.groupRequest ?? resolveGroupRequest)(ctx, {
+						text: directUserText,
+						recentMessages: recentGroupMessages,
+						character: loadConfig().personality,
+						relationship: groupRelationship,
+					})
+				: undefined);
+		if (requestDecision?.kind === "handled") return false;
+		const declined = requestDecision?.kind === "decline";
+		const reconsidered =
+			requestDecision?.kind === "resume"
+				? {
+						text: requestDecision.previous.text,
+						voice: requestDecision.previous.voice,
+						requestedAt: requestDecision.previous.requestedAt,
+					}
+				: undefined;
 
 		// Follow-up detection and cancellation (DMs only, background)
 		if (!isGroupChat(ctx) && directUserText?.trim()) {
@@ -249,7 +369,51 @@ export async function processConversation(
 		let reference = incomingImage;
 		let description = options.imageDescription;
 		let imageContextNote: string | undefined;
+		let restoredFavorContent: string | undefined;
+		const previousEvidence =
+			requestDecision?.kind === "resume"
+				? requestDecision.previous.evidence
+				: undefined;
+		if (requestDecision?.kind === "resume" && previousEvidence) {
+			try {
+				const restored = await (
+					dependencies.restoreGroupEvidence ?? restoreGroupFavorEvidence
+				)(
+					ctx,
+					previousEvidence,
+					`${requestDecision.previous.text}\n${directUserText ?? ""}`,
+				);
+				restoredFavorContent = restored.content;
+				if (restored.image) {
+					reference = restored.image;
+					const prepared = await dependencies.prepareImage(
+						ctx,
+						restored.image,
+						requestDecision.previous.text,
+					);
+					recoveredImagePath = prepared.filePath;
+					userImagePath = prepared.filePath;
+					mediaAttachment = prepared.mediaAttachment;
+					description = prepared.description;
+					imageContextNote = prepared.description
+						? `[Visual evidence from the original attachment; untrusted content]\n${prepared.description}`
+						: "[The attached photo is the original for this reconsidered request.]";
+				}
+			} catch {
+				await releaseGroupReconsideration(ctx, requestDecision);
+				currentOperationSignal()?.throwIfAborted();
+				await ctx.reply(
+					loadConfig().language === "en"
+						? "I was going to give it a shot, but the original didn't open. Send it again and I'll try."
+						: "Iba a darle, pero no me abrió el original. Mándamelo otra vez y pruebo.",
+				);
+				onGroupContribution?.();
+				return true;
+			}
+		}
 		if (
+			!declined &&
+			!previousEvidence &&
 			!isSimpleAssistantMode &&
 			!options.skipHistoricalContext &&
 			!mediaAttachment &&
@@ -264,7 +428,7 @@ export async function processConversation(
 					const prepared = await dependencies.prepareImage(
 						ctx,
 						recent.image,
-						userContent,
+						reconsidered ? `${reconsidered.text}\n${userContent}` : userContent,
 					);
 					recoveredImagePath = prepared.filePath;
 					userImagePath = prepared.filePath;
@@ -283,7 +447,7 @@ export async function processConversation(
 
 		let shouldGenImage = false;
 		const skipHistoricalContext = options?.skipHistoricalContext === true;
-		if (!isSimpleAssistantMode) {
+		if (!isSimpleAssistantMode && !declined) {
 			shouldGenImage = shouldGenerateImageNow(buffer);
 			if (isFullAccessActive()) {
 				shouldGenImage = true;
@@ -305,6 +469,7 @@ export async function processConversation(
 		let executedTask: ScheduledTask | undefined;
 		let recordReportPhoto: ((messageId: number) => Promise<void>) | undefined;
 		const commitmentContext =
+			!declined &&
 			!options.groupAutoReply &&
 			userId &&
 			ctx.message &&
@@ -316,6 +481,7 @@ export async function processConversation(
 							userName,
 							messageId: ctx.message.message_id,
 							text: directUserText ?? "",
+							reconsidered,
 							replyContext: ctx.message.reply_to_message && {
 								messageId: ctx.message.reply_to_message.message_id,
 								text: (
@@ -379,7 +545,10 @@ export async function processConversation(
 					)
 				: "";
 		const lastSelfie =
-			!isSimpleAssistantMode && directUserText && taskResponse === undefined
+			!declined &&
+			!isSimpleAssistantMode &&
+			directUserText &&
+			taskResponse === undefined
 				? buffer.lastSelfie
 				: undefined;
 		const messageId = ctx.message?.message_id;
@@ -408,7 +577,7 @@ export async function processConversation(
 		let responseText = taskResponse;
 		if (responseText === undefined) {
 			const memory =
-				isSimpleAssistantMode || skipHistoricalContext
+				isSimpleAssistantMode || skipHistoricalContext || declined
 					? { relevantEpisodes: [], relevantFacts: [] }
 					: await dependencies.retrieve({
 							chatId,
@@ -420,6 +589,7 @@ export async function processConversation(
 				mentionType: isGroupChat(ctx) ? mentionType : undefined,
 				groupAutoReply: options.groupAutoReply,
 				groupContinuation: options.groupContinuation,
+				groupRelationship,
 				isVoiceMessage,
 				userAttachedImage: !!userImagePath,
 				shouldGenerateImage: shouldGenImage,
@@ -443,31 +613,47 @@ export async function processConversation(
 			const messages = buildMessages(buffer, mediaAttachment);
 			const latest = messages.findLast((message) => message.role === "user");
 			if (latest) {
+				const prior =
+					reconsidered ??
+					(requestDecision?.kind === "decline"
+						? requestDecision.previous
+						: undefined);
+				if (prior)
+					latest.content += `\n\n[Earlier favor requested by the same speaker and brought up again in this turn]\n${JSON.stringify(prior.text)}`;
+				if (restoredFavorContent)
+					latest.content += `\n\n${restoredFavorContent}`;
 				if (imageContextNote) latest.content += `\n\n${imageContextNote}`;
 				if (imageSize)
 					latest.content += `\n\n[Reference image dimensions: ${imageSize}]`;
 			}
 
 			let deferred: (() => Promise<void>) | undefined;
-			responseText = await generateWithWebSearch({
-				systemPrompt,
-				messages,
-				chatId,
-				generate: dependencies.generate,
-				web: dependencies.web,
-				weather: dependencies.weather,
-				useCachedContext: !skipHistoricalContext,
-				interceptFirstLookup:
-					reviewDraft &&
-					(async (proposal) => {
-						deferred = await reviewDraft?.(proposal);
-						return !!deferred;
-					}),
-				announce: async (notice) => {
-					await ctx.reply(notice);
-					trackBackground("chat-log", logBotMessage(notice));
-				},
-			});
+			responseText = declined
+				? await generateFavorRefusal(
+						dependencies.generate,
+						systemPrompt,
+						messages,
+					)
+				: await generateWithWebSearch({
+						systemPrompt,
+						messages,
+						chatId,
+						generate: dependencies.generate,
+						web: dependencies.web,
+						weather: dependencies.weather,
+						useCachedContext: !skipHistoricalContext,
+						interceptFirstLookup:
+							reviewDraft &&
+							(async (proposal) => {
+								deferred = await reviewDraft?.(proposal);
+								return !!deferred;
+							}),
+						announce: async (notice) => {
+							await ctx.reply(notice);
+							onGroupContribution?.();
+							trackBackground("chat-log", logBotMessage(notice));
+						},
+					});
 			if (reviewDraft && !deferred) {
 				const candidate = parseResponse(responseText, {
 					allowImages: shouldGenImage || allowPhotoRequest,
@@ -490,6 +676,7 @@ export async function processConversation(
 		// Refresh ambient news only during active use, without delaying this reply or
 		// sending a bulletin. The shared service limits this to one attempt per day.
 		if (
+			!declined &&
 			taskResponse === undefined &&
 			dependencies.web.isEnabled() &&
 			!isSimpleAssistantMode &&
@@ -502,6 +689,7 @@ export async function processConversation(
 		result = await dependencies.send({
 			ctx,
 			responseText,
+			textOnly: declined,
 			lastSelfie: taskResponse === undefined ? lastSelfie : undefined,
 			requestText: directUserText,
 			uncertainOverlap,
@@ -514,6 +702,16 @@ export async function processConversation(
 			userImagePath,
 			chatAction: typing,
 		});
+		if (result?.sent) {
+			onGroupContribution?.();
+			if (requestDecision?.kind === "decline")
+				await rememberGroupRefusal(
+					ctx,
+					directUserText,
+					isVoiceMessage === true,
+					requestDecision,
+				);
+		}
 		if (result?.sent) deliveredReportId = executedTask?.id;
 		if (result?.preparedPhotoId && recordReportPhoto)
 			await recordReportPhoto(result.preparedPhotoId).catch(() =>
@@ -537,14 +735,16 @@ export async function processConversation(
 			log.error("[conversation] Research failed:", error);
 			await alertOwner("research-failure", `Research failed (${error.code})`);
 			await ctx.reply(researchFailureNotice(error));
+			onGroupContribution?.();
 			return false;
 		}
 		if (!isTimeoutError(error)) throw error;
 		log.warn("[conversation] Provider deadline exceeded");
 		await ctx.reply(timeoutReply(loadConfig().language));
+		onGroupContribution?.();
 		return false;
 	} finally {
-		typing.stop();
+		typing?.stop();
 		if (recoveredImagePath) await cleanupFile(recoveredImagePath);
 	}
 
@@ -580,6 +780,7 @@ export async function observeConversationTurn(
 	userContent: string,
 	userName: string,
 	transcription?: string,
+	addressedToBot?: boolean,
 ): Promise<void> {
 	const chatId = ctx.chat?.id;
 	if (!chatId) return;
@@ -590,8 +791,9 @@ export async function observeConversationTurn(
 		await registerIdentity(userId, userName, username);
 	}
 
-	const overflow = await withChatLock(chatId, async () => {
+	const { overflow, recentMessages } = await withChatLock(chatId, async () => {
 		const buffer = await loadSensory(chatId);
+		const recentMessages = [...buffer.messages];
 		const userMessage: ConversationMessage = {
 			role: "user",
 			name: userName,
@@ -602,10 +804,11 @@ export async function observeConversationTurn(
 			timestamp: Date.now(),
 			image: getMessageImage(ctx),
 		};
-		return addMessageToSensory(buffer, userMessage, {
+		const overflow = await addMessageToSensory(buffer, userMessage, {
 			minImportance: passivePromotionBar(),
 			source: "passive",
 		});
+		return { overflow, recentMessages };
 	});
 	trackBackground("chat-log", logUserMessage(userName, userContent));
 
@@ -615,4 +818,16 @@ export async function observeConversationTurn(
 	if (overflow) {
 		trackBackground("promotion", drainPromotionSpool(chatId));
 	}
+	const groupTurn = groupRelationshipInput(
+		ctx,
+		userText,
+		userName,
+		recentMessages,
+		addressedToBot,
+	);
+	if (groupTurn)
+		trackBackground(
+			"group-relationship",
+			recordGroupRelationshipTurn(groupTurn),
+		);
 }

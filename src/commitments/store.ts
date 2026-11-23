@@ -84,6 +84,8 @@ export interface RequestIdentity {
 	messageId: number;
 	text: string;
 	voice?: boolean;
+	/** A previously declined request explicitly resumed by its original sender. */
+	reconsidered?: { text: string; voice?: boolean; requestedAt?: number };
 	/** Bounded same-chat reference context, never authorization or evidence. */
 	replyContext?: { text: string; isBot: boolean; messageId?: number };
 	referenceImage?: { size?: string; description?: string };

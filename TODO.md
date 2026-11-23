@@ -39,7 +39,7 @@ Living document. Rules:
 ### Evaluate adaptive personality against actual conversation quality
 
 - **Why:** earlier adaptive updates could saturate traits and learn from interactions between other people. The implementation now requires direct, verbatim user evidence, uses bounded smoothing with 30-day half-life toward neutral, and keeps configured identity/context above adaptive tendencies. Unit tests establish these mechanics, not whether responses feel noticeably better. Keep any evaluation conversations and deployment-specific results private.
-- **What to do:** after deployment, compare matched serious, playful, repeated-question and explicit-boundary scenarios with adaptation enabled/disabled. Assess appropriateness and naturalness, not just trait movement. Monitor rejected/accepted evidence and repeated saturation; consider per-chat/person adaptation if global learning still transfers a relationship's tone to unrelated chats. Do not reset live personality history merely to demonstrate a difference.
+- **What to do:** after deployment, compare matched serious, playful, repeated-question and explicit-boundary scenarios with adaptation enabled and disabled. Include the group personality switch when evaluating the new member-specific rapport, boundaries and spontaneous cadence. Assess appropriateness and naturalness, and monitor rejected/accepted evidence, repeated saturation and cross-chat tone transfer. Preserve live personality history during comparisons.
 - **Size:** Medium; needs representative conversations and human evaluation. `ENABLE_ADAPTIVE_PERSONALITY=false` provides an operational comparison/disable switch.
 - Added 2026-10-22.
 

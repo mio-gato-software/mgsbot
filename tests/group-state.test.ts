@@ -1,20 +1,25 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
 	canAutoReplyInGroup,
-	canEvaluateSpontaneousReplyInGroup,
 	claimGroupContinuationSlot,
+	claimGroupSpontaneousReply,
 	openGroupContinuationWindow,
 	registerGroupAutoReply,
-	registerSpontaneousReplyEvaluation,
 	resetGroupState,
 } from "../src/group-state.ts";
 
 const CHAT = -100123;
-const HOUR = 60 * 60 * 1000;
+const MINUTE = 60_000;
 const T0 = 1_750_000_000_000;
+const originalEnv = { ...process.env };
 
 beforeEach(() => {
 	resetGroupState();
+	process.env.ENABLE_GROUP_PERSONALITY = "true";
+	delete process.env.GROUP_SPONTANEOUS_COOLDOWN_MINUTES;
+});
+afterEach(() => {
+	process.env = { ...originalEnv };
 });
 
 describe("spontaneous auto-replies", () => {
@@ -22,16 +27,35 @@ describe("spontaneous auto-replies", () => {
 		expect(canAutoReplyInGroup(CHAT, T0)).toBe(true);
 	});
 
-	test("blocked during the 4-hour cooldown after a reply", () => {
+	test("a delivered reply starts the default one-hour cooldown", () => {
 		registerGroupAutoReply(CHAT, T0);
-		expect(canAutoReplyInGroup(CHAT, T0 + 1 * HOUR)).toBe(false);
-		expect(canAutoReplyInGroup(CHAT, T0 + 3.9 * HOUR)).toBe(false);
+		expect(claimGroupSpontaneousReply(CHAT, T0 + 59 * MINUTE)).toBe(false);
+		expect(claimGroupSpontaneousReply(CHAT, T0 + 60 * MINUTE)).toBe(true);
 	});
 
-	test("allowed again after the cooldown expires", () => {
+	test("uses a valid custom cooldown", () => {
+		process.env.GROUP_SPONTANEOUS_COOLDOWN_MINUTES = "25";
 		registerGroupAutoReply(CHAT, T0);
-		expect(canAutoReplyInGroup(CHAT, T0 + 4 * HOUR + 1)).toBe(true);
+		expect(claimGroupSpontaneousReply(CHAT, T0 + 24 * MINUTE)).toBe(false);
+		expect(claimGroupSpontaneousReply(CHAT, T0 + 25 * MINUTE)).toBe(true);
 	});
+
+	test.each([
+		["without opt-in", undefined, "false"],
+		["with group personality disabled", "false", "false"],
+		["in simple assistant mode", "true", "true"],
+	] as const)(
+		"retains the four-hour attempt cadence %s",
+		(_mode, enabled, simple) => {
+			if (enabled === undefined) delete process.env.ENABLE_GROUP_PERSONALITY;
+			else process.env.ENABLE_GROUP_PERSONALITY = enabled;
+			process.env.SIMPLE_ASSISTANT_MODE = simple;
+			process.env.GROUP_SPONTANEOUS_COOLDOWN_MINUTES = "25";
+			expect(claimGroupSpontaneousReply(CHAT, T0)).toBe(true);
+			expect(claimGroupSpontaneousReply(CHAT, T0 + 239 * MINUTE)).toBe(false);
+			expect(claimGroupSpontaneousReply(CHAT, T0 + 240 * MINUTE)).toBe(true);
+		},
+	);
 
 	test("chats are tracked independently", () => {
 		registerGroupAutoReply(CHAT, T0);
@@ -39,17 +63,19 @@ describe("spontaneous auto-replies", () => {
 	});
 });
 
-describe("spontaneous evaluation cooldown", () => {
-	test("allowed initially, blocked for 10 minutes after evaluating", () => {
-		expect(canEvaluateSpontaneousReplyInGroup(CHAT, T0)).toBe(true);
-		registerSpontaneousReplyEvaluation(CHAT, T0);
-		expect(canEvaluateSpontaneousReplyInGroup(CHAT, T0 + 5 * 60 * 1000)).toBe(
-			false,
-		);
-		expect(canEvaluateSpontaneousReplyInGroup(CHAT, T0 + 10 * 60 * 1000)).toBe(
-			true,
-		);
-	});
+test("an undelivered attempt only starts a short generation backoff", () => {
+	expect(claimGroupSpontaneousReply(CHAT, T0)).toBe(true);
+	expect(canAutoReplyInGroup(CHAT, T0 + 1)).toBe(true);
+	expect(claimGroupSpontaneousReply(CHAT, T0 + 5 * MINUTE)).toBe(false);
+	expect(claimGroupSpontaneousReply(CHAT, T0 + 10 * MINUTE)).toBe(true);
+});
+
+test("an ongoing exchange cannot start again when its continuation budget is exhausted", () => {
+	openGroupContinuationWindow(CHAT, T0);
+	for (let i = 0; i < 6; i++) claimGroupContinuationSlot(CHAT, T0 + i);
+	expect(claimGroupContinuationSlot(CHAT, T0 + 7)).toBe(false);
+	expect(claimGroupSpontaneousReply(CHAT, T0 + 14 * MINUTE)).toBe(false);
+	expect(claimGroupSpontaneousReply(CHAT, T0 + 15 * MINUTE)).toBe(true);
 });
 
 describe("continuation windows", () => {

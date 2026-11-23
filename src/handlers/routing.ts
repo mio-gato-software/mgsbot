@@ -9,7 +9,11 @@ import {
 } from "../ai/classifiers.ts";
 import { getBotName } from "../config.ts";
 import { isGroupChat, processConversation } from "../conversation.ts";
-import { openGroupContinuationWindow } from "../group-state.ts";
+import { groupPersonalityEnabled } from "../group-personality.ts";
+import {
+	openGroupContinuationWindow,
+	registerGroupAutoReply,
+} from "../group-state.ts";
 import { loadSensory } from "../memory/index.ts";
 import type { MentionType } from "../types.ts";
 
@@ -211,11 +215,31 @@ export function buildUntranscribedVoiceContent(
 export async function processConversationAndTrackGroupContinuation(
 	...args: Parameters<typeof processConversation>
 ): Promise<boolean> {
-	const [ctx] = args;
-	const didRespond = await processConversation(...args);
+	const [ctx, content, userName, options, dependencies] = args;
 	const chatId = ctx.chat?.id;
-	if (didRespond && chatId && isGroupChat(ctx)) {
+	if (!chatId || !isGroupChat(ctx)) return processConversation(...args);
+
+	const spontaneous = options?.groupAutoReply && groupPersonalityEnabled();
+	let recorded = false;
+	const onGroupContribution = () => {
+		if (!recorded) {
+			recorded = true;
+			registerGroupAutoReply(chatId);
+		}
 		openGroupContinuationWindow(chatId);
+		options?.onGroupContribution?.();
+	};
+
+	const didRespond = await processConversation(
+		ctx,
+		content,
+		userName,
+		spontaneous ? { ...options, onGroupContribution } : options,
+		dependencies,
+	);
+	if (didRespond && !recorded) {
+		if (spontaneous) onGroupContribution();
+		else openGroupContinuationWindow(chatId);
 	}
 	return didRespond;
 }

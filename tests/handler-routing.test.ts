@@ -2,7 +2,17 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isGroupChat } from "../src/conversation.ts";
+import {
+	defaultConversationDependencies,
+	isGroupChat,
+} from "../src/conversation.ts";
+import { CONSERVATIVE_GROUP_POSTURE } from "../src/group-relationships.ts";
+import {
+	canAutoReplyInGroup,
+	claimGroupContinuationSlot,
+	claimGroupSpontaneousReply,
+} from "../src/group-state.ts";
+import { processConversationAndTrackGroupContinuation } from "../src/handlers/routing.ts";
 import {
 	buildGroupResponseOptions,
 	buildPassiveVoiceContent,
@@ -261,6 +271,60 @@ describe("group response memory context", () => {
 			groupContinuation: true,
 		});
 	});
+});
+
+test("only publicly delivered spontaneous output starts the long cooldown and continuation", async () => {
+	const previous = process.env.ENABLE_GROUP_PERSONALITY;
+	process.env.ENABLE_GROUP_PERSONALITY = "true";
+	try {
+		const cases = [
+			{ chatId: -100561, draft: "[SILENCE]", sent: false, fails: false },
+			{ chatId: -100562, draft: "[REACT:😁]", sent: true, fails: false },
+			{
+				chatId: -100563,
+				draft: "Mucho pronóstico para tan poco gol.",
+				sent: true,
+				fails: false,
+			},
+			{
+				chatId: -100564,
+				draft: "Todavía falta el segundo tiempo.",
+				sent: false,
+				fails: true,
+			},
+		];
+		for (const { chatId, draft, sent, fails } of cases) {
+			const { ctx } = makeMockContext({
+				chatType: "group",
+				chatId,
+				text: "Ya ganamos",
+			});
+			if (fails)
+				ctx.reply = async () => {
+					throw new Error("connection reset");
+				};
+			expect(claimGroupSpontaneousReply(chatId)).toBe(true);
+			const run = processConversationAndTrackGroupContinuation(
+				ctx,
+				"Ya ganamos",
+				"Ana",
+				{ groupAutoReply: true, skipHistoricalContext: true },
+				{
+					...defaultConversationDependencies,
+					assemble: async () => "Group test prompt",
+					generate: async () => draft,
+					groupRelationship: async () => CONSERVATIVE_GROUP_POSTURE,
+				},
+			);
+			if (fails) await expect(run).rejects.toThrow("connection reset");
+			else expect(await run).toBe(sent);
+			expect(canAutoReplyInGroup(chatId)).toBe(!sent);
+			expect(claimGroupContinuationSlot(chatId)).toBe(sent);
+		}
+	} finally {
+		if (previous === undefined) delete process.env.ENABLE_GROUP_PERSONALITY;
+		else process.env.ENABLE_GROUP_PERSONALITY = previous;
+	}
 });
 
 describe("group message helpers", () => {

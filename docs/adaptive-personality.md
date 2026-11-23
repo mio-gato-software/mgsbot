@@ -13,4 +13,16 @@ The implementation now:
 - Keeps configured identity, explicit boundaries, chat preferences and the current situation above adaptive tendencies. High humor does not require jokes in a serious exchange.
 - Supports `ENABLE_ADAPTIVE_PERSONALITY=false` to stop new adaptive signals, their application and their prompt section while retaining configured personality and existing history.
 
-These are behavioral steering instructions, not model fine-tuning or human emotional development. Unit tests validate convergence, decay, reversal, provenance and replay safety. They cannot demonstrate that users will perceive better or more natural conversations. A production comparison with adaptation on/off remains in `TODO.md`; global trait state still spans chats, so relationship-specific adaptation is a possible later improvement if real evaluation supports it. The correction preserves existing personality history instead of resetting it.
+These behavioral instructions preserve existing personality history. Unit tests validate convergence, decay, reversal, provenance and replay safety. A production comparison for conversational quality remains in `TODO.md`.
+
+## Group relationships and initiative
+
+Set `ENABLE_GROUP_PERSONALITY=true` to enable relationship-aware tone, spontaneous participation and willingness decisions in Telegram groups. Existing installations keep their previous four-hour spontaneous reply cadence by default.
+
+Group members start with a neutral relationship. The bot learns familiarity from reciprocal exchanges and adjusts its tone based on the member's observed treatment of the bot and other participants. It applies personal or topic-specific limits immediately. Relationship state is saved under `memory/group-relationships/` by chat and Telegram member ID. The conversation prompt receives only the current speaker's tone cues. Sensitive or serious moments call for restraint at every level.
+
+The group router can admit an unprompted comment or playful quip. A successful intervention starts the `GROUP_SPONTANEOUS_COOLDOWN_MINUTES` pause, which defaults to 60 minutes. A separate 10-minute attempt limit covers silence and failed deliveries. Existing exchanges use the continuation window.
+
+The bot can decline a new favor before carrying out the work. The original requester can bring it up again within 15 minutes. The decision uses the original request and the new reason, with the existing creator and chat permissions applied at execution. Recent refusals and retry receipts are stored under `memory/group-requests/` by chat for recovery across a restart.
+
+Enabling the feature adds a model assessment for authored group messages and can add a willingness check for requests. A low-confidence proposed change may trigger a focused confirmation. With an OpenAI key, `CLASSIFIER_PROVIDER` defaults to OpenAI Decisions. Set `CLASSIFIER_PROVIDER=typesafe` to select Jev with a TypeSafe key. Relationship and willingness assessments can fall back to the configured background model under a separate deadline.

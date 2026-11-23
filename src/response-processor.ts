@@ -42,6 +42,8 @@ export interface SendResponseOptions {
 	buffer: SensoryBuffer;
 	isGroup: boolean;
 	userImagePath?: string;
+	/** An ordinary text reply with all response controls disabled. */
+	textOnly?: boolean;
 	/** Already generated for an explicitly requested saved task. */
 	preparedImage?: Buffer;
 	preparedImageOnly?: boolean;
@@ -164,6 +166,12 @@ export async function sendResponse(
 		shouldGenImage,
 		allowPhotoRequest,
 	} = options;
+	if (options.textOnly) {
+		const text = options.responseText.trim();
+		if (!text) return null;
+		await sendTextReply(ctx, text);
+		return { sent: true, cleanedText: text, bufferDirty: false };
+	}
 	const plan = parseResponse(options.responseText, {
 		allowImages: shouldGenImage || allowPhotoRequest,
 		allowImageEdits: !!userImagePath,

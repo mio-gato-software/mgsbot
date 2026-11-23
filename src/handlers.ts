@@ -19,16 +19,14 @@ import {
 	observeConversationTurn,
 } from "./conversation.ts";
 import {
-	canAutoReplyInGroup,
-	canEvaluateSpontaneousReplyInGroup,
 	claimGroupContinuationSlot,
-	registerGroupAutoReply,
-	registerSpontaneousReplyEvaluation,
+	claimGroupSpontaneousReply,
 } from "./group-state.ts";
 import {
 	handleDocument,
 	registerDocumentHandler,
 } from "./handlers/document.ts";
+import { preflightGroupWork } from "./handlers/group-preflight.ts";
 import { handlePhoto, registerPhotoHandler } from "./handlers/photo.ts";
 import {
 	buildGroupResponseOptions,
@@ -209,6 +207,14 @@ export function registerHandlers(bot: Bot): void {
 				await observeConversationTurn(ctx, replyAwareText, userName);
 				return;
 			}
+			const preflight = await preflightGroupWork(ctx, {
+				requestKind: "link",
+				text,
+				content: replyAwareText,
+				userName,
+				options: { mentionType },
+			});
+			if (preflight.handled) return;
 			const analysis = await analyzeYouTube(
 				yt.url,
 				yt.remainingText || undefined,
@@ -222,6 +228,7 @@ export function registerHandlers(bot: Bot): void {
 				userName,
 				{
 					mentionType,
+					groupRequestDecision: preflight.groupRequestDecision,
 					botOff: isBotOff(),
 					isSleepingHour: isSleepingHour(),
 				},
@@ -237,6 +244,14 @@ export function registerHandlers(bot: Bot): void {
 				await observeConversationTurn(ctx, replyAwareText, userName);
 				return;
 			}
+			const preflight = await preflightGroupWork(ctx, {
+				requestKind: "link",
+				text,
+				content: replyAwareText,
+				userName,
+				options: { mentionType },
+			});
+			if (preflight.handled) return;
 
 			const evidence = await withChatAction(ctx, "typing", () =>
 				worldContext.read(ctx.chat.id, webLink.url, "shared-link"),
@@ -258,6 +273,7 @@ export function registerHandlers(bot: Bot): void {
 				userName,
 				{
 					mentionType,
+					groupRequestDecision: preflight.groupRequestDecision,
 					botOff: isBotOff(),
 					isSleepingHour: isSleepingHour(),
 				},
@@ -303,6 +319,14 @@ export function registerHandlers(bot: Bot): void {
 					const fileId = replyVoice ? replyVoice.file_id : replyAudio?.file_id;
 					const replyMessageId = replyMsg?.message_id;
 					if (!fileId || replyMessageId === undefined) return;
+					const preflight = await preflightGroupWork(ctx, {
+						requestKind: "media",
+						text,
+						content: replyAwareText,
+						userName,
+						options: { mentionType },
+					});
+					if (preflight.handled) return;
 					const mimeType = replyVoice
 						? "audio/ogg"
 						: (replyAudio?.mime_type ?? "audio/mp3");
@@ -344,6 +368,7 @@ export function registerHandlers(bot: Bot): void {
 						userName,
 						{
 							mentionType,
+							groupRequestDecision: preflight.groupRequestDecision,
 							botOff: isBotOff(),
 							isSleepingHour: isSleepingHour(),
 						},
@@ -369,7 +394,13 @@ export function registerHandlers(bot: Bot): void {
 
 		// In groups, observe everything and occasionally evaluate whether to join.
 		if (isGroupChat(ctx) && mentionType === "none") {
-			await observeConversationTurn(ctx, replyAwareText, userName);
+			await observeConversationTurn(
+				ctx,
+				replyAwareText,
+				userName,
+				undefined,
+				groupDecision?.addressing === "continuation" || undefined,
+			);
 			if (replyContext && !replyContext.isBot) return;
 			if (groupDecision?.action !== "respond") return;
 
@@ -378,16 +409,11 @@ export function registerHandlers(bot: Bot): void {
 				claimGroupContinuationSlot(ctx.chat.id);
 			const canStartSpontaneously =
 				groupDecision.addressing !== "continuation" &&
-				canAutoReplyInGroup(ctx.chat.id) &&
-				canEvaluateSpontaneousReplyInGroup(ctx.chat.id);
+				claimGroupSpontaneousReply(ctx.chat.id);
 
 			if (canContinue || canStartSpontaneously) {
 				const botOff = isBotOff();
 				const sleeping = isSleepingHour();
-				if (canStartSpontaneously) {
-					registerSpontaneousReplyEvaluation(ctx.chat.id);
-					registerGroupAutoReply(ctx.chat.id);
-				}
 				await processConversationAndTrackGroupContinuation(
 					ctx,
 					replyAwareText,

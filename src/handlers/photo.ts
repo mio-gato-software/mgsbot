@@ -9,6 +9,7 @@ import {
 	isGroupChat,
 	observeConversationTurn,
 } from "../conversation.ts";
+import { releaseGroupReconsideration } from "../group-autonomy.ts";
 import { claimGroupContinuationSlot } from "../group-state.ts";
 import { getMessageImage } from "../image-context.ts";
 import { log } from "../logger.ts";
@@ -21,6 +22,7 @@ import {
 	supportsInlineImages,
 } from "../providers/types.ts";
 import type { MentionType } from "../types.ts";
+import { preflightGroupWork } from "./group-preflight.ts";
 import {
 	classifyGroupTurn,
 	detectMentionType,
@@ -64,14 +66,22 @@ export async function handlePhoto(
 			? ctx.message
 			: ctx.message?.reply_to_message;
 	const imageName = sanitizeBracketText(source?.from?.first_name ?? userName);
+	const marker = requestText
+		? `[Image from ${imageName}, caption: "${sanitizeBracketText(requestText)}"]`
+		: `[Image from ${imageName}]`;
 	if (group && mentionType === "none" && !groupContinuation) {
-		const caption = requestText;
-		const observedContent = caption
-			? `[Image from ${imageName}, caption: "${sanitizeBracketText(caption)}"]`
-			: `[Image from ${imageName}]`;
-		await observeConversationTurn(ctx, observedContent, userName);
+		await observeConversationTurn(ctx, marker, userName);
 		return;
 	}
+	const preflight = await preflightGroupWork(ctx, {
+		requestKind: "media",
+		text: requestText,
+		content: marker,
+		userName,
+		options: { mentionType, groupContinuation },
+	});
+	if (preflight.handled) return;
+
 	// Receipt feedback while the image downloads and gets pre-analyzed.
 	// Stopped right before processConversation, which runs its own
 	// indicator (and may switch it to upload_photo for edit requests).
@@ -127,6 +137,7 @@ export async function handlePhoto(
 					groupContinuation,
 					botOff: isBotOff(),
 					isSleepingHour: isSleepingHour(),
+					groupRequestDecision: preflight.groupRequestDecision,
 					mediaAttachment,
 					imageDescription: description,
 					userImagePath: filePath,
@@ -136,6 +147,8 @@ export async function handlePhoto(
 			await cleanupFile(filePath);
 		}
 	} catch (error) {
+		if (!responding)
+			await releaseGroupReconsideration(ctx, preflight.groupRequestDecision);
 		if (isTimeoutError(error)) throw error;
 		log.error("[photo handler] Error:", error);
 		await ctx

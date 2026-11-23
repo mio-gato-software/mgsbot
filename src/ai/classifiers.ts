@@ -1,4 +1,5 @@
 import { createUserContent, type GoogleGenAI } from "@google/genai";
+import { groupPersonalityEnabled } from "../group-personality.ts";
 import { log } from "../logger.ts";
 import { FalChatProvider } from "../providers/fal.ts";
 import { createChatProvider } from "../providers/index.ts";
@@ -19,6 +20,7 @@ import {
 	editIntentWithTypedProvider,
 	groupExchangeGuidance,
 	groupImageGuidance,
+	groupSpontaneousGuidance,
 	repeatedSelfieWithTypedProvider,
 } from "./typed-classifier.ts";
 
@@ -134,6 +136,9 @@ function buildGroupMessageIntentPrompt(input: GroupMessageIntentInput): string {
 		: "(none)";
 	const currentMessage = groupMessageExcerpt(input.currentMessage);
 	const replyContext = formatReplyContext(input.replyContext);
+	const spontaneousGuidance = groupPersonalityEnabled()
+		? `\n- ${groupSpontaneousGuidance}`
+		: "";
 
 	return `You are a lightweight multilingual router for a Telegram group chat bot named ${input.botName}.
 
@@ -156,10 +161,10 @@ Action rules:
 - A Telegram reply to someone other than the bot is strong evidence the latest message is for that person. Choose "ambient"/"silence" unless the latest text explicitly addresses the bot.
 - Short acknowledgements, reactions, laughter, or agreement after another member's message are ambient unless they clearly answer the bot.
 - This must work across languages. Do not rely on language-specific keywords.
-- ${groupExchangeGuidance}${input.imageAttached ? `\n- ${groupImageGuidance}` : ""}
+- ${groupExchangeGuidance}${input.imageAttached ? `\n- ${groupImageGuidance}` : ""}${spontaneousGuidance}
 
 Mode-specific guidance:
-- message: Interpret any group message with the supplied context. A direct request can address the bot without its name. Choose respond for a direct request or clear continuation, or when an ambient invitation makes participation natural.
+- message: Interpret any group message with the supplied context. A direct request can address the bot without its name. Choose respond for a direct request or clear continuation, or when ${spontaneousGuidance ? "there is a clear opening to join the public exchange" : "an ambient invitation makes participation natural"}.
 - name: The latest message contains the bot's name. Classify whether it is direct, about_bot, continuation, or ambient.
 - spontaneous: The bot has not been directly addressed. Allow a reply only if the latest message creates a clear opening where a normal group member could add value.
 - continuation: The bot recently spoke. Allow a reply only when the latest message likely engages with the bot's last message, answers a question the bot asked, shares a reciprocal status/activity after the bot shared one, or asks the bot to continue. If it best fits the immediately previous non-bot message, or people are talking among themselves, choose silence.

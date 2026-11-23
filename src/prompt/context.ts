@@ -1,4 +1,5 @@
 import { type BotRules, loadBotRules } from "../bot-rules.ts";
+import type { GroupRelationshipPosture } from "../group-relationships.ts";
 import type { MentionType } from "../handlers.ts";
 import type {
 	Episode,
@@ -21,6 +22,7 @@ export interface PromptContextInput {
 	mentionType?: MentionType;
 	groupAutoReply?: boolean;
 	groupContinuation?: boolean;
+	groupRelationship?: GroupRelationshipPosture;
 	isVoiceMessage?: boolean;
 	userAttachedImage?: boolean;
 	shouldGenerateImage?: boolean;
@@ -41,6 +43,7 @@ export function buildPromptContext(input: PromptContextInput): PromptContext {
 		mentionType: input.mentionType,
 		groupAutoReply: input.groupAutoReply === true,
 		groupContinuation: input.groupContinuation === true,
+		groupRelationship: input.groupRelationship,
 		isVoiceMessage: input.isVoiceMessage === true,
 		userAttachedImage: input.userAttachedImage === true,
 		shouldGenerateImage: input.shouldGenerateImage === true,

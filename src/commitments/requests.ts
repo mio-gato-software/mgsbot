@@ -88,6 +88,7 @@ A direct request to repeat the last delivered report, including after a successf
 To execute an EXISTING saved task now, return actions:[] and run:{taskId:"exact saved ID",evidence:"exact quote from latestMessage"}. Requests such as "intenta el reporte de nuevo", "corre el reporte ahora" or "como si fueran las 7am para ver cómo queda" mean run now when recent conversation identifies the saved report. Requests to show, preview, test, reproduce or send the usual report as an image now also execute that report, even when the user names only its league, sections or scheduled time. A direct affirmative answer to the bot offering that report is a request. An independently requested picture on the same subject is separate. They do NOT create, edit, renew or advance the task. Use the current date/time and fresh evidence, never pretend current observations were collected at 7am. No new schedule or confirmation is needed. If several tasks fit or the reference is unclear, return clarification and omit run. Quoted requests, forwarded messages, hypothetical capability questions and acknowledgments do not authorize a run. Do not combine run with mutations; ask to separate those requests if necessary. Omit run otherwise.
 Ordinary scheduled reminders and reports require an explicit unambiguous time and objective. For a one-off conditional action tied to a public event, use watch_event below and choose a sensible first check yourself. Resolve relative dates against now; first run must be future. For ordinary schedules, missing/ambiguous time, purpose, AM/PM, target task, or unclear voice transcription requires clarification and NO actions. Never guess a web address. For dictated web addresses, set needsWrittenConfirmation=true and ask for written links. Input voice=${input.voice === true}.
 Make this conversational, not a form. Bare domains such as pelotainvernal.com are complete written addresses; never demand https://, a repeated link, or that all details be in one message. Use the accumulated pending request and writtenText from THIS user. A correction like "las URLs ya están arriba" continues that pending request. Treat latestMessage as the user's current intent: unrelated chat, waiting, or withdrawing the request does NOT authorize executing the pending request.
+When reconsideredRequest is supplied, the current sender explicitly asked the bot to reconsider that sender's earlier request and the bot agreed. Use its scope and details with the current message, preserving any clarification or correction in latestMessage. Resolve dates relative to the original wording against requestDate. For a manual run, still take the evidence from latestMessage.
 Ask only for genuinely missing material details. In a LIDOM daily 7 AM report, "estado del juego" reasonably means the latest results/status of the league's games; use that interpretation and describe it in the confirmation. Missing optional report details or an explicit end date are not blockers. A named source like "la página oficial de LIDOM" is a research requirement: preserve it in instruction/searchQuery, without inventing its domain or requiring the user to look up its URL. Put only explicitly supplied/previously validated domains in domains. needsWrittenConfirmation is only for unresolved dictated addresses, never for text already typed in writtenText.
 Attributions such as "lo que dijo alguien del chat" only identify who recommended the sources. Chat participants are NOT the subject of the research: omit attribution names from both the task objective and the public searchQuery. For this example, a suitable searchQuery is "LIDOM resultados últimos juegos página oficial". Preserve the named official-source requirement and supplied domains.
 Recurring schedules have a maximum term of one calendar month starting now. If no end date, omit endDate and the service supplies that term. If requested forever or longer, use the requested schedule; the service caps its deadline and the reply MUST disclose the cap. Respect explicit weekdays/exclusions; daily without exclusions means all seven days. once uses the specified date. weekly uses specified weekday(s). Two times/objectives mean two tasks. No automatic renewal.
@@ -222,10 +223,21 @@ export async function handleCommitmentRequest(
 	},
 ): Promise<string> {
 	if (!commitmentsEnabled() || !allowedCommitmentChat(input.chatId)) return "";
-	let requestText = input.text;
-	let requestDate = getDateString(services.now());
-	let writtenText = input.voice ? "" : input.text;
-	let requireWritten = input.voice === true;
+	const reconsidered = input.reconsidered;
+	const request = reconsidered
+		? `${reconsidered.text}\nRenewed by the same sender: ${input.text}`
+		: input.text;
+	const hasVoice = input.voice === true || reconsidered?.voice === true;
+	const currentWrittenText = [
+		reconsidered?.voice ? undefined : reconsidered?.text,
+		input.voice ? undefined : input.text,
+	]
+		.filter(Boolean)
+		.join("\n");
+	let requestText = request;
+	let requestDate = getDateString(reconsidered?.requestedAt ?? services.now());
+	let writtenText = currentWrittenText;
+	let requireWritten = hasVoice;
 	let pendingQuestion: string | undefined;
 	const savePending = async () =>
 		services.store.transaction((current) => {
@@ -310,19 +322,19 @@ export async function handleCommitmentRequest(
 				`\nPreviously committed result for this exact message (do not duplicate): ${receipt.result}`
 			);
 		const text = pending
-			? `${pending.text}\nClarification from the same user: ${input.text}`
-			: input.text;
+			? `${pending.text}\nClarification from the same user: ${request}`
+			: request;
 		requestText = text;
 		// Legacy pending records with requireWritten have unknown modality: do not
 		// silently promote old dictated addresses into verified written evidence.
 		writtenText = [
 			pending?.writtenText ??
 				(pending && !pending.requireWritten ? pending.text : ""),
-			input.voice ? "" : input.text,
+			currentWrittenText,
 		]
 			.filter(Boolean)
 			.join("\n");
-		requireWritten = !!pending?.requireWritten || input.voice === true;
+		requireWritten = !!pending?.requireWritten || hasVoice;
 		pendingQuestion = pending?.question;
 		const tasks = agendaTasks(state.tasks, input.chatId, services.now());
 		const replyPhoto =
@@ -333,6 +345,7 @@ export async function handleCommitmentRequest(
 				personality: loadConfig().personality,
 			},
 			latestMessage: input.text,
+			reconsideredRequest: reconsidered?.text,
 			replyContext: input.replyContext,
 			repliedReportId: replyPhoto
 				? tasks.findLast((t) => t.reportPhotoIds?.includes(replyPhoto))?.id
@@ -501,7 +514,7 @@ export async function handleCommitmentRequest(
 		const unresolvedDomains = proposedDomains.filter(
 			(domain) => !containsDomain(writtenText, domain),
 		);
-		const hasDictatedDomain = input.voice && unresolvedDomains.length > 0;
+		const hasDictatedDomain = hasVoice && unresolvedDomains.length > 0;
 		const needsWritten =
 			hasDictatedDomain ||
 			(plan.needsWrittenConfirmation &&
@@ -582,7 +595,7 @@ export async function handleCommitmentRequest(
 				...input,
 				text,
 				domainEvidenceText:
-					pending?.requireWritten || input.voice ? writtenText : undefined,
+					pending?.requireWritten || hasVoice ? writtenText : undefined,
 			},
 			plan,
 		);

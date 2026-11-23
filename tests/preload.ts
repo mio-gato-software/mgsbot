@@ -15,6 +15,7 @@ process.env.FULL_ACCESS_MODE = "false";
 process.env.SHOW_TRANSCRIPTION = "false";
 process.env.ENABLE_CHAT_LOG = "false";
 process.env.ENABLE_GROUP_VOICE_CONTEXT = "true";
+process.env.ENABLE_GROUP_PERSONALITY = "false";
 process.env.GROUP_PASSIVE_VOICE_MAX_SECONDS = "120";
 process.env.GROUP_PASSIVE_VOICE_TRANSCRIPT_MAX_CHARS = "1200";
 // Optional internet features must never spend inherited API credentials in tests.
