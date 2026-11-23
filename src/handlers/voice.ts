@@ -94,6 +94,7 @@ async function routeGroupTranscribedVoice(
 		passiveContent,
 		userName,
 		truncatePassiveVoiceTranscript(transcription),
+		decision?.addressing === "continuation" || undefined,
 	);
 	if (replyContext && !replyContext.isBot) return;
 	if (decision?.addressing !== "continuation" || decision.action !== "respond")

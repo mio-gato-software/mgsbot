@@ -3,6 +3,7 @@ import {
 	timeAwareness,
 	weatherCurrent,
 } from "./sections/activity.ts";
+import { groupRelationship } from "./sections/group-relationship.ts";
 import { headerDatetime } from "./sections/header.ts";
 import { identityPersonality } from "./sections/identity.ts";
 import {
@@ -30,6 +31,7 @@ export const PIPELINE: ReadonlyArray<PromptSection> = [
 	identityPersonality,
 	rulesBehavior,
 	rulesGroup,
+	groupRelationship,
 	rulesNewPerson,
 	headerDatetime,
 	personalityTraits,

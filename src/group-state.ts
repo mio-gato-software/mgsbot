@@ -1,60 +1,67 @@
 /**
  * In-memory rate-limit and continuation-window state for group chats.
  * Governs when the bot may reply in a group without being directly
- * addressed: spontaneous replies (heavily rate-limited) and continuation
+ * addressed: spontaneous replies and continuation
  * windows opened after the bot participates in a conversation.
  */
 
-const GROUP_SPONTANEOUS_COOLDOWN_MS = 4 * 60 * 60 * 1000;
-const GROUP_SPONTANEOUS_EVALUATION_COOLDOWN_MS = 10 * 60 * 1000;
-const MAX_SPONTANEOUS_REPLIES_PER_WINDOW = 1;
-const GROUP_CONTINUATION_WINDOW_MS = 15 * 60 * 1000;
+import { groupPersonalityEnabled } from "./group-personality.ts";
+
+const MINUTE_MS = 60_000;
+const GROUP_SPONTANEOUS_DEFAULT_COOLDOWN_MINUTES = 60;
+const GROUP_SPONTANEOUS_LEGACY_COOLDOWN_MINUTES = 240;
+const GROUP_SPONTANEOUS_ATTEMPT_COOLDOWN_MS = 10 * MINUTE_MS;
+const GROUP_CONTINUATION_WINDOW_MS = 15 * MINUTE_MS;
 const GROUP_CONTINUATION_MAX_MESSAGES = 6;
 
-const groupAutoReplyTimestamps = new Map<number, number[]>();
-const groupSpontaneousEvaluationTimestamps = new Map<number, number>();
+const groupAutoReplyTimestamps = new Map<number, number>();
+const groupSpontaneousAttemptTimestamps = new Map<number, number>();
 const groupContinuationWindows = new Map<
 	number,
 	{ expiresAt: number; remainingMessages: number }
 >();
 
-export function canAutoReplyInGroup(chatId: number, now = Date.now()): boolean {
-	const recent = (groupAutoReplyTimestamps.get(chatId) ?? []).filter(
-		(ts) => now - ts <= GROUP_SPONTANEOUS_COOLDOWN_MS,
-	);
-	const last = recent[recent.length - 1];
-	if (last && now - last < GROUP_SPONTANEOUS_COOLDOWN_MS) {
-		groupAutoReplyTimestamps.set(chatId, recent);
-		return false;
-	}
-	if (recent.length >= MAX_SPONTANEOUS_REPLIES_PER_WINDOW) {
-		groupAutoReplyTimestamps.set(chatId, recent);
-		return false;
-	}
-	return true;
+function groupSpontaneousCooldownMs(): number {
+	if (!groupPersonalityEnabled())
+		return GROUP_SPONTANEOUS_LEGACY_COOLDOWN_MINUTES * MINUTE_MS;
+	const configured = Number(process.env.GROUP_SPONTANEOUS_COOLDOWN_MINUTES);
+	const milliseconds = configured * MINUTE_MS;
+	if (
+		Number.isInteger(configured) &&
+		Number.isSafeInteger(milliseconds) &&
+		milliseconds > 0
+	)
+		return milliseconds;
+	return GROUP_SPONTANEOUS_DEFAULT_COOLDOWN_MINUTES * MINUTE_MS;
 }
 
-export function canEvaluateSpontaneousReplyInGroup(
+export function canAutoReplyInGroup(chatId: number, now = Date.now()): boolean {
+	const last = groupAutoReplyTimestamps.get(chatId);
+	return last === undefined || now - last >= groupSpontaneousCooldownMs();
+}
+
+export function claimGroupSpontaneousReply(
 	chatId: number,
 	now = Date.now(),
 ): boolean {
-	const last = groupSpontaneousEvaluationTimestamps.get(chatId);
-	return !last || now - last >= GROUP_SPONTANEOUS_EVALUATION_COOLDOWN_MS;
-}
+	if (!canAutoReplyInGroup(chatId, now)) return false;
+	const lastAttempt = groupSpontaneousAttemptTimestamps.get(chatId);
+	if (
+		lastAttempt !== undefined &&
+		now - lastAttempt < GROUP_SPONTANEOUS_ATTEMPT_COOLDOWN_MS
+	)
+		return false;
+	const personalityEnabled = groupPersonalityEnabled();
+	if (personalityEnabled && getActiveContinuationWindow(chatId, now))
+		return false;
 
-export function registerSpontaneousReplyEvaluation(
-	chatId: number,
-	now = Date.now(),
-): void {
-	groupSpontaneousEvaluationTimestamps.set(chatId, now);
+	groupSpontaneousAttemptTimestamps.set(chatId, now);
+	if (!personalityEnabled) registerGroupAutoReply(chatId, now);
+	return true;
 }
 
 export function registerGroupAutoReply(chatId: number, now = Date.now()): void {
-	const recent = (groupAutoReplyTimestamps.get(chatId) ?? []).filter(
-		(ts) => now - ts <= GROUP_SPONTANEOUS_COOLDOWN_MS,
-	);
-	recent.push(now);
-	groupAutoReplyTimestamps.set(chatId, recent);
+	groupAutoReplyTimestamps.set(chatId, now);
 }
 
 export function openGroupContinuationWindow(
@@ -67,28 +74,25 @@ export function openGroupContinuationWindow(
 	});
 }
 
+function getActiveContinuationWindow(chatId: number, now: number) {
+	const window = groupContinuationWindows.get(chatId);
+	if (!window || window.expiresAt > now) return window;
+	groupContinuationWindows.delete(chatId);
+}
+
 export function claimGroupContinuationSlot(
 	chatId: number,
 	now = Date.now(),
 ): boolean {
-	const window = groupContinuationWindows.get(chatId);
-	if (!window || window.expiresAt <= now || window.remainingMessages <= 0) {
-		groupContinuationWindows.delete(chatId);
-		return false;
-	}
-
+	const window = getActiveContinuationWindow(chatId, now);
+	if (!window || window.remainingMessages <= 0) return false;
 	window.remainingMessages--;
-	if (window.remainingMessages <= 0) {
-		groupContinuationWindows.delete(chatId);
-	} else {
-		groupContinuationWindows.set(chatId, window);
-	}
 	return true;
 }
 
 /** Clear all in-memory group state (used by tests). */
 export function resetGroupState(): void {
 	groupAutoReplyTimestamps.clear();
-	groupSpontaneousEvaluationTimestamps.clear();
+	groupSpontaneousAttemptTimestamps.clear();
 	groupContinuationWindows.clear();
 }

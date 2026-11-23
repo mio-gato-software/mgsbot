@@ -44,6 +44,14 @@ export async function withRelationshipLock<T>(
 	return withKeyLock(`relationship:${chatId}`, fn);
 }
 
+export async function withGroupMemberLock<T>(
+	chatId: number,
+	userId: number,
+	fn: () => Promise<T>,
+): Promise<T> {
+	return withKeyLock(`group-member:${chatId}:${userId}`, fn);
+}
+
 export async function withChapterLock<T>(
 	chatId: number,
 	fn: () => Promise<T>,

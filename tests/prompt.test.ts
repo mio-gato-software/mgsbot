@@ -144,6 +144,7 @@ describe("pipeline structure", () => {
 			"identity.personality",
 			"rules.behavior",
 			"rules.group",
+			"rules.groupRelationship",
 			"rules.newPerson",
 			"header.datetime",
 			"personality.traits",
@@ -233,6 +234,33 @@ describe("section: rules.group", () => {
 		expect(out).toContain("several consecutive messages");
 		expect(out).toContain("play along");
 		expect(out).toContain("[QUOTE_REPLY]");
+	});
+
+	test("teammate voice applies to group replies, continuations and initiative", async () => {
+		const previous = process.env.ENABLE_GROUP_PERSONALITY;
+		process.env.ENABLE_GROUP_PERSONALITY = "true";
+		try {
+			for (const context of [
+				makeCtx({ mentionType: "reply" }),
+				makeCtx({ groupContinuation: true }),
+				makeCtx({ groupAutoReply: true }),
+			]) {
+				const out = await rulesGroup.render(context);
+				expect(out).toContain("push back naturally when you disagree");
+				expect(out).toContain("warm, dry sarcasm");
+				expect(out).toContain("If someone asks you to stop");
+			}
+			expect(await rulesGroup.render(makeCtx())).not.toContain(
+				"warm, dry sarcasm",
+			);
+			process.env.ENABLE_GROUP_PERSONALITY = "false";
+			expect(
+				await rulesGroup.render(makeCtx({ mentionType: "reply" })),
+			).not.toContain("warm, dry sarcasm");
+		} finally {
+			if (previous === undefined) delete process.env.ENABLE_GROUP_PERSONALITY;
+			else process.env.ENABLE_GROUP_PERSONALITY = previous;
+		}
 	});
 
 	test("a socially direct turn does not require a literal name mention", async () => {

@@ -1,4 +1,5 @@
 import type { BotRules } from "../bot-rules.ts";
+import type { GroupRelationshipPosture } from "../group-relationships.ts";
 import type { MentionType } from "../handlers.ts";
 import type {
 	Episode,
@@ -25,6 +26,7 @@ export interface PromptContext {
 	mentionType?: MentionType;
 	groupAutoReply: boolean;
 	groupContinuation: boolean;
+	groupRelationship?: GroupRelationshipPosture;
 	isVoiceMessage: boolean;
 	userAttachedImage: boolean;
 	shouldGenerateImage: boolean;

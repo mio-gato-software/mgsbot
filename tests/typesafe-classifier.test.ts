@@ -334,6 +334,64 @@ test("confident silence is preserved and both confidence values are respected", 
 	expect(legacySpy).not.toHaveBeenCalled();
 });
 
+test.each(["openai-decisions", "openai"])(
+	"%s can give an ambient playful opening permission without treating it as a direct address",
+	async (provider) => {
+		process.env.CLASSIFIER_PROVIDER = provider;
+		process.env.ENABLE_GROUP_PERSONALITY = "true";
+		let action = "respond";
+		const prompts: string[] = [];
+		mockFetch(
+			async (_url, init) => {
+				const body = JSON.parse(String(init?.body));
+				prompts.push(body.input[0].content);
+				return legacyResponse(
+					JSON.stringify({ addressing: "ambient", action, confidence: 0.95 }),
+				);
+			},
+			(request) => {
+				const instructions = request.questions.find(
+					({ name }) => name === "action",
+				)?.instructions;
+				if (typeof instructions === "string") prompts.push(instructions);
+				return {
+					answers: [
+						decisionChoice("addressing", "ambient"),
+						decisionChoice("action", action),
+					],
+				};
+			},
+		);
+		for (const currentMessage of [
+			"El equipo no pierde, solo regala puntos por solidaridad.",
+			"Lo nuestro no es perder, es hacer obras de caridad en la tabla.",
+		]) {
+			expect(
+				await classifyGroupSocialIntent({
+					...input,
+					mode: "message",
+					currentMessage,
+				}),
+			).toMatchObject({ addressing: "ambient", action: "respond" });
+		}
+		action = "silence";
+		expect(
+			await classifyGroupSocialIntent({
+				...input,
+				mode: "message",
+				currentMessage: "Hoy llegaron malas noticias del hospital.",
+			}),
+		).toMatchObject({ addressing: "ambient", action: "silence" });
+		expect(prompts).toHaveLength(3);
+		for (const prompt of prompts) {
+			expect(prompt).toContain(
+				"playful opening can justify a reply without an invitation",
+			);
+			expect(prompt).toContain("Stay quiet during side exchanges");
+		}
+	},
+);
+
 test.each([0.03, 0.97])(
 	"image-edit probability %s maps to a boolean",
 	async (value) => {
