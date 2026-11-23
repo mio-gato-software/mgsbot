@@ -402,7 +402,7 @@ export async function promoteToMemory(
 	for (;;) {
 		try {
 			result = await dependencies.evaluate(recentText, existingFacts, {
-				recoverMalformed: initialParseError !== undefined,
+				recoverMalformed: retried,
 			});
 			break;
 		} catch (error) {
@@ -432,6 +432,7 @@ export async function promoteToMemory(
 			if (unresolved) {
 				log.warn(
 					`[promote] Extraction from ${unresolved.model} was unparseable for chat ${chatId}; the chunk remains queued.`,
+					unresolved.diagnostic,
 				);
 				await alertOwner(
 					"memory-extraction",

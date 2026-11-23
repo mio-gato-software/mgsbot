@@ -25,7 +25,14 @@ const VALID_CATEGORIES = new Set(["person", "group", "rule", "event"]);
 export class ExtractionParseError extends Error {
 	readonly model: string;
 
-	constructor(model: string) {
+	constructor(
+		model: string,
+		readonly diagnostic?: {
+			reason: "missing_object" | "invalid_json" | "invalid_schema";
+			outputChars: number;
+			field?: string;
+		},
+	) {
 		super(
 			`Extraction returned unparseable output from ${model || "unknown model"}`,
 		);
@@ -70,18 +77,16 @@ export function validateLongTermMemoryUpdate(
 	return narrativeSchema.parse(raw);
 }
 
+const factConfirmationSchema = z.object({
+	id: z.string().min(1),
+	evidence: z.string().trim().min(8).max(2000),
+});
+
 const extractionSchema = z.object({
 	summary: shortText,
 	importance: z.number().int().min(1).max(5),
 	facts: z.array(z.unknown()),
-	confirmedFacts: z
-		.array(
-			z.object({
-				id: z.string().min(1),
-				evidence: z.string().trim().min(8).max(2000),
-			}),
-		)
-		.optional(),
+	confirmedFacts: z.array(z.unknown()).optional(),
 });
 
 export function validatePromotionResult(
@@ -90,6 +95,19 @@ export function validatePromotionResult(
 ): PromotionResult {
 	const checked = extractionSchema.parse(raw);
 	const { summary, importance } = checked;
+
+	// An invalid confirmation cannot renew a fact or invalidate the rest of the episode.
+	const confirmedFacts = checked.confirmedFacts?.flatMap((entry) => {
+		const confirmation = factConfirmationSchema.safeParse(entry);
+		return confirmation.success ? [confirmation.data] : [];
+	});
+	if (checked.confirmedFacts && confirmedFacts) {
+		const discarded = checked.confirmedFacts.length - confirmedFacts.length;
+		if (discarded)
+			log.debug(
+				`[extraction] Discarded ${discarded} invalid fact confirmations.`,
+			);
+	}
 
 	const rawFacts = raw.facts ?? [];
 	const facts = rawFacts
@@ -159,7 +177,7 @@ export function validatePromotionResult(
 		summary,
 		importance,
 		facts,
-		confirmedFacts: checked.confirmedFacts,
+		confirmedFacts,
 		personalitySignals,
 		extraction: { model, droppedFacts: rawFacts.length - facts.length },
 	};
@@ -239,7 +257,7 @@ ${existingFactSummary}
    - Mood, opinions
    Be VERY selective: only data that will NEVER change in the person's life.
 5. **Supersession**: If a new fact replaces or contradicts an older mutable saved fact, set "supersedes" to the old fact id(s). If unsure, leave it empty.
-6. **Confirmations**: Return "confirmedFacts": [{"id": "saved fact id", "evidence": "verbatim user quote"}] for explicit user reconfirmations; otherwise []. A quote must affirm the fact, not ask about it or contradict it. Extract facts only from user-provided evidence, never from the bot repeating its memories.
+6. **Confirmations**: Return "confirmedFacts": [{"id": "saved fact id", "evidence": "verbatim user quote"}] for explicit user reconfirmations; otherwise []. A quote must be at least 8 characters after trimming and affirm the fact, not ask about it or contradict it. Omit any confirmation without a qualifying quote. Extract facts only from user-provided evidence, never from the bot repeating its memories.
 7. **Personality signals**: Extract only clear feedback or treatment DIRECTED AT THE BOT by a user that supports a lasting adjustment. Include "directToBot": true and "evidence": an exact verbatim user quote (at least 8 characters). Other people's affection, jokes or opinions toward each other are NOT evidence about the bot. The bot's own replies and quoted bot text are NEVER evidence. Do not infer growth just because a conversation was funny or pleasant. Most chunks should have no signals. Explicit requests for less humor/teasing, more restraint, patience or directness can justify negative as well as positive deltas. A temporary serious topic alone is not personality change. Do not manufacture balance or changes.
 ${process.env.ENABLE_ADAPTIVE_PERSONALITY === "false" ? "Adaptive personality is disabled: return no traitChanges." : ""}
 You can ONLY use these EXACT trait names (do not invent others):
@@ -267,27 +285,50 @@ ${recentMessages}`;
 	// from a boring conversation, and the chunk was lost silently. Throw instead:
 	// the promotion worker can retry against the original evidence and record
 	// the failure in the extraction-quality metrics.
-	const jsonMatch = text.match(/\{[\s\S]*\}/);
-	if (!jsonMatch) {
-		throw new ExtractionParseError(model);
-	}
-	try {
-		const parsed = JSON.parse(jsonMatch[0]) as PromotionResult;
-		const result = validatePromotionResult(parsed, model);
-		result.confirmedFacts = result.confirmedFacts?.flatMap((confirmation) => {
-			const id = factIds.get(confirmation.id);
-			return id === undefined ? [] : [{ ...confirmation, id }];
+	const outputChars = text.length;
+	const json = text.match(/\{[\s\S]*\}/)?.[0];
+	if (!json) {
+		throw new ExtractionParseError(model, {
+			reason: "missing_object",
+			outputChars,
 		});
-		for (const fact of result.facts) {
-			fact.supersedes = fact.supersedes?.flatMap((reference) => {
-				const id = factIds.get(reference);
-				return id === undefined ? [] : [id];
-			});
-		}
-		return result;
-	} catch {
-		throw new ExtractionParseError(model);
 	}
+	let parsed: PromotionResult;
+	try {
+		parsed = JSON.parse(json);
+	} catch {
+		throw new ExtractionParseError(model, {
+			reason: "invalid_json",
+			outputChars,
+		});
+	}
+	let result: PromotionResult;
+	try {
+		result = validatePromotionResult(parsed, model);
+	} catch (error) {
+		const field =
+			error instanceof z.ZodError ? error.issues[0]?.path[0] : undefined;
+		throw new ExtractionParseError(model, {
+			reason: "invalid_schema",
+			outputChars,
+			field:
+				typeof field === "string" &&
+				Object.hasOwn(extractionSchema.shape, field)
+					? field
+					: undefined,
+		});
+	}
+	result.confirmedFacts = result.confirmedFacts?.flatMap((confirmation) => {
+		const id = factIds.get(confirmation.id);
+		return id === undefined ? [] : [{ ...confirmation, id }];
+	});
+	for (const fact of result.facts) {
+		fact.supersedes = fact.supersedes?.flatMap((reference) => {
+			const id = factIds.get(reference);
+			return id === undefined ? [] : [id];
+		});
+	}
+	return result;
 }
 
 export async function summarizeConversation(

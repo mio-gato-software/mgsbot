@@ -198,7 +198,7 @@ test("a second malformed extraction alerts and leaves the original chunk queued"
 	]);
 	expect((await loadWorkingMemory(chatId)).episodes).toEqual([]);
 	await drainPromotionSpool(chatId, dependencies);
-	expect(recoveries).toEqual([false, true, false]);
+	expect(recoveries).toEqual([false, true, true]);
 });
 
 test("failure after a fact write replays checkpoints without duplicate episodes, facts, or confirmations", async () => {

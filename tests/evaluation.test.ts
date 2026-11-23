@@ -109,12 +109,60 @@ test("extraction shortens saved references and resolves only references in the r
 	);
 });
 
-for (const raw of [
-	"not JSON",
-	"{broken}",
-	JSON.stringify({ ...extraction, importance: 0 }),
-	JSON.stringify({ ...extraction, summary: " " }),
-]) {
+test("short confirmation evidence is dropped without losing the episode or valid facts", async () => {
+	const newFact = {
+		content: "Ana works as a nurse",
+		category: "person",
+		subject: "Ana",
+	};
+	const savedFact = {
+		id: "saved-pottery-fact",
+		content: "Ana enjoys pottery",
+		category: "person",
+		subject: "Ana",
+	} as const;
+	background.mockResolvedValue({
+		text: JSON.stringify({
+			...extraction,
+			facts: [newFact],
+			confirmedFacts: [
+				{ id: "F1", evidence: "   Yes   " },
+				null,
+				{ id: "F1", evidence: "I still enjoy pottery" },
+			],
+		}),
+		model: "cheap-model",
+	});
+	const result = await evaluateConversationChunk(
+		"Ana: Yes. I still enjoy pottery. I now work as a nurse.",
+		[savedFact],
+	);
+	expect(result).toMatchObject({
+		summary: extraction.summary,
+		importance: extraction.importance,
+		facts: [newFact],
+	});
+	expect(result.confirmedFacts).toEqual([
+		{ id: savedFact.id, evidence: "I still enjoy pottery" },
+	]);
+});
+
+for (const [raw, diagnostic] of [
+	["not JSON", { reason: "missing_object" }],
+	["{broken}", { reason: "invalid_json" }],
+	[
+		JSON.stringify({ ...extraction, importance: 0 }),
+		{ reason: "invalid_schema", field: "importance" },
+	],
+	[
+		JSON.stringify({ ...extraction, summary: " " }),
+		{ reason: "invalid_schema", field: "summary" },
+	],
+	[
+		JSON.stringify({ ...extraction, confirmedFacts: {} }),
+		{ reason: "invalid_schema", field: "confirmedFacts" },
+	],
+] as const) {
 	test(`unusable extraction fails closed: ${raw}`, async () => {
 		background.mockResolvedValue({ text: raw, model: "model-a" });
 		try {
@@ -123,6 +171,10 @@ for (const raw of [
 		} catch (error) {
 			expect(error).toBeInstanceOf(ExtractionParseError);
 			expect((error as ExtractionParseError).model).toBe("model-a");
+			expect((error as ExtractionParseError).diagnostic).toMatchObject({
+				...diagnostic,
+				outputChars: raw.length,
+			});
 			expect((error as Error).message).not.toContain(raw);
 		}
 	});
