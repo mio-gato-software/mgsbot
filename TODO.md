@@ -43,6 +43,12 @@ Living document. Rules:
 - **Size:** Medium; needs representative conversations and human evaluation. `ENABLE_ADAPTIVE_PERSONALITY=false` provides an operational comparison/disable switch.
 - Added 2026-10-22.
 
+### Keep declined group favors from changing character preferences
+
+- **Why:** group willingness and lasting character preferences both run before ordinary reply generation. A mixed request that ends with a refusal must leave character preferences alone.
+- **What to do:** when combining the two features, skip preference updates on the group refusal path and test a declined request that also asks the character to pick a favorite.
+- **Size:** Small. Added 2026-11-23.
+
 ### Calibrate the promotion bars from recorded data
 
 - **Why:** `PROMOTION_MIN_IMPORTANCE` (2) and `PASSIVE_PROMOTION_MIN_IMPORTANCE` (3) were picked a priori. Every promotion decision is now recorded to `memory/metrics/promotion-YYYY-MM.jsonl`, so the bars can be set from what they actually dropped instead of intuition — a bar that's too high silently loses context whose value only shows up weeks later.

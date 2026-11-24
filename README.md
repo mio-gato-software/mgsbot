@@ -44,12 +44,14 @@ Weather uses Open-Meteo and needs no extra key. YouTube analysis requires `GOOGL
 
 ## Profile, rules, and character image
 
-To set up the persona before the first chat, run `bun run profile:init` and edit `memory/bot_profile.json`. For custom conversation rules, run `bun run rules:init` and edit `memory/bot_rules.json`. To give generated character photos a consistent appearance, place a reference image at `memory/base.png`, `memory/base.jpg`, or `memory/base.jpeg`. [How personality adapts](docs/adaptive-personality.md)
+To set up the persona before the first chat, run `bun run profile:init` and edit `memory/bot_profile.json`. For custom conversation rules, run `bun run rules:init` and edit `memory/bot_rules.json`. To give generated character photos a consistent appearance, place a reference image at `memory/base.png`, `memory/base.jpg`, or `memory/base.jpeg`.
+
+Ask the character about a favorite film, a team it supports, or a belief. It can choose a lasting answer and carry that preference across DMs and the group. A later conversation can change its mind if it finds the reason persuasive. [How personality adapts](docs/adaptive-personality.md)
 
 ## Operating the bot
 
 - **Telegram controls.** In the owner's DM, use `/off` and `/on` to pause and resume replies. Use `/provider` to inspect the current configuration, or `/provider <name> [model]` to switch the chat provider until restart.
-- **Persistent data.** Back up `memory/` and keep it across upgrades. It holds conversation memory, profiles and scheduled tasks. Run one bot process per store. Docker mounts `memory/`, `audios/` and `logs/` from the host. [Backups and recovery](docs/maintenance.md)
+- **Persistent data.** Back up `memory/` and keep it across upgrades. It holds conversation memory, profiles, character preferences and scheduled tasks. Run one bot process per store. Docker mounts `memory/`, `audios/` and `logs/` from the host. [Backups and recovery](docs/maintenance.md)
 - **Development.** Use `bun run dev` for watch mode. Check changes with `bun run lint`, `bun run typecheck` and `bun test --coverage`. [Architecture and repository guide](AGENTS.md)
 
 Forks are welcome. This project is closed to contributions. [MIT license](LICENSE)

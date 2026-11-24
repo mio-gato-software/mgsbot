@@ -14,3 +14,9 @@ The implementation now:
 - Supports `ENABLE_ADAPTIVE_PERSONALITY=false` to stop new adaptive signals, their application and their prompt section while retaining configured personality and existing history.
 
 These are behavioral steering instructions, not model fine-tuning or human emotional development. Unit tests validate convergence, decay, reversal, provenance and replay safety. They cannot demonstrate that users will perceive better or more natural conversations. A production comparison with adaptation on/off remains in `TODO.md`; global trait state still spans chats, so relationship-specific adaptation is a possible later improvement if real evaluation supports it. The correction preserves existing personality history instead of resetting it.
+
+## Lasting character preferences
+
+When someone asks the character about a lasting taste or belief for the first time, it can decide what it likes or believes. This applies to topics such as music, films, sports teams and religious beliefs. The bot uses its configured character and rules when choosing. It remembers the answer across DMs, group chats and restarts. A later conversation can change an established answer when the character finds the reason persuasive. Casual opinions and hypothetical answers apply to the conversation where they come up.
+
+The configured profile and operator rules take priority. Each instance saves up to 48 established choices in `memory/character-preferences.json`, or under the configured `MEMORY_DIR`. At capacity, the store keeps every existing choice and can still revise one. Ordinary memory backups include the file. The feature is enabled by default in character mode. Set `ENABLE_CHARACTER_PREFERENCES=false` to pause learning and recall. Simple assistant mode skips character preferences.

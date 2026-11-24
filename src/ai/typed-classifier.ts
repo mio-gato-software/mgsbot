@@ -39,7 +39,7 @@ export async function classifyCreativeNovelty(
 	previous: unknown[],
 ): Promise<boolean | null> {
 	const result = noveltyResponse.safeParse(
-		await evaluate(
+		await evaluateTypedQuestions(
 			{ candidate, previous },
 			{
 				novelty: {
@@ -75,7 +75,7 @@ export type ClassifierQuestions = Record<
 	| { type: "noul"; instructions: string }
 >;
 
-async function evaluate(
+export async function evaluateTypedQuestions(
 	state: Record<string, unknown>,
 	questions: ClassifierQuestions,
 ): Promise<unknown> {
@@ -104,7 +104,7 @@ export async function classifyWithTypedProvider(state: {
 		? `${socialRules} ${groupImageGuidance}`
 		: socialRules;
 	const result = groupResponse.safeParse(
-		await evaluate(state, {
+		await evaluateTypedQuestions(state, {
 			addressing: {
 				type: "choice",
 				instructions: `${rules} How does the latest message address the bot?`,
@@ -145,7 +145,7 @@ export async function editIntentWithTypedProvider(
 	caption: string,
 ): Promise<boolean | null> {
 	const result = editResponse.safeParse(
-		await evaluate(
+		await evaluateTypedQuestions(
 			{ caption, imageAttached: true },
 			{
 				edit: {
@@ -174,7 +174,9 @@ export async function repeatedSelfieWithTypedProvider(
 			}),
 		})
 		.safeParse(
-			await evaluate(state, { repeat: { type: "noul", instructions } }),
+			await evaluateTypedQuestions(state, {
+				repeat: { type: "noul", instructions },
+			}),
 		);
 	if (!result.success) return null;
 	const score = result.data.answers.repeat.noul;

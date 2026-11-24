@@ -1,4 +1,5 @@
 import type { BotRules } from "../bot-rules.ts";
+import type { CharacterPreferencePromptContext } from "../character-preference-turn.ts";
 import type { MentionType } from "../handlers.ts";
 import type {
 	Episode,
@@ -20,6 +21,7 @@ export interface PromptContext {
 	relationshipMemory?: RelationshipMemory | null;
 	recentChapters?: MemoryChapter[];
 	botRules?: BotRules;
+	characterPreferences?: CharacterPreferencePromptContext;
 	activeNames?: string[];
 	mentionedNames?: string[];
 	mentionType?: MentionType;
