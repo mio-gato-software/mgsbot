@@ -1,4 +1,5 @@
 import { type BotRules, loadBotRules } from "../bot-rules.ts";
+import type { CharacterPreferencePromptContext } from "../character-preference-turn.ts";
 import type { MentionType } from "../handlers.ts";
 import type {
 	Episode,
@@ -16,6 +17,7 @@ export interface PromptContextInput {
 	relationshipMemory?: RelationshipMemory | null;
 	recentChapters?: MemoryChapter[];
 	botRules?: BotRules;
+	characterPreferences?: CharacterPreferencePromptContext;
 	activeNames?: string[];
 	mentionedNames?: string[];
 	mentionType?: MentionType;
@@ -36,6 +38,7 @@ export function buildPromptContext(input: PromptContextInput): PromptContext {
 		relationshipMemory: input.relationshipMemory,
 		recentChapters: input.recentChapters,
 		botRules: input.botRules ?? loadBotRules(),
+		characterPreferences: input.characterPreferences,
 		activeNames: input.activeNames,
 		mentionedNames: input.mentionedNames,
 		mentionType: input.mentionType,

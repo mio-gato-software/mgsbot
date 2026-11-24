@@ -13,6 +13,12 @@ import { classifyRepeatedSelfie } from "./ai/classifiers.ts";
 import { generateResponse } from "./ai/core.ts";
 import { describeImage } from "./ai/vision.ts";
 import { alertOwner, errorSummary } from "./alerts.ts";
+import { loadBotRules } from "./bot-rules.ts";
+import {
+	type CharacterPreferenceTurn,
+	characterPreferencesEnabled,
+	resolveCharacterPreferenceTurn,
+} from "./character-preference-turn.ts";
 import { startChatAction } from "./chat-actions.ts";
 import { logBotMessage, logUserMessage } from "./chat-logger.ts";
 import { checkAndSendTaskBehaviors } from "./commitments/behavior-runner.ts";
@@ -61,7 +67,11 @@ import { type SendResponseResult, sendResponse } from "./response-processor.ts";
 import { crossedSelfieDelivery, selfieContext } from "./selfie-continuity.ts";
 import { timeoutReply } from "./telegram-delivery.ts";
 import { isTtsAvailable } from "./tts/index.ts";
-import type { ConversationMessage, MentionType } from "./types.ts";
+import type {
+	ConversationMessage,
+	MentionType,
+	SensoryBuffer,
+} from "./types.ts";
 import { type ConversationWeatherContext, weatherService } from "./weather.ts";
 import {
 	type ConversationWebContext,
@@ -123,6 +133,7 @@ export interface ConversationDependencies {
 	commitments: typeof handleCommitmentRequest;
 	scheduled: (task: ScheduledTask) => Promise<ScheduledMessage | string>;
 	behaviors?: typeof checkAndSendTaskBehaviors;
+	characterPreferenceTurn?: typeof resolveCharacterPreferenceTurn;
 }
 export const defaultConversationDependencies: ConversationDependencies = {
 	repeatedSelfie: classifyRepeatedSelfie,
@@ -137,6 +148,66 @@ export const defaultConversationDependencies: ConversationDependencies = {
 	scheduled: generateScheduledDelivery,
 	behaviors: checkAndSendTaskBehaviors,
 };
+
+function characterPreferenceInput(
+	ctx: Context,
+	text: string | undefined,
+	options: ConversationOptions,
+	buffer: SensoryBuffer,
+): CharacterPreferenceTurn | undefined {
+	const { from, message, chat } = ctx;
+	if (
+		!characterPreferencesEnabled() ||
+		!text?.trim() ||
+		!chat ||
+		!message ||
+		!from ||
+		from.is_bot ||
+		message.sender_chat ||
+		options.groupAutoReply ||
+		(isGroupChat(ctx) &&
+			(!options.mentionType || options.mentionType === "none") &&
+			!options.groupContinuation)
+	)
+		return undefined;
+	const config = loadConfig();
+	const recent = buffer.messages
+		.slice(-7, -1)
+		.flatMap<CharacterPreferenceTurn["recent"][number]>((message) => {
+			if (message.role === "model")
+				return [{ role: "bot" as const, text: message.content }];
+			if (message.userTextVerified !== true || !message.userText) return [];
+			return [
+				{
+					role:
+						message.userId === from.id
+							? ("speaker" as const)
+							: ("other" as const),
+					text: message.userText,
+				},
+			];
+		});
+	const reply = message.reply_to_message;
+	if (reply?.from?.id === ctx.me.id) {
+		const replyText = reply.text ?? reply.caption;
+		if (
+			replyText &&
+			!recent.some((turn) => turn.role === "bot" && turn.text === replyText)
+		)
+			recent.push({ role: "bot", text: replyText });
+	}
+	return {
+		chatId: chat.id,
+		messageId: message.message_id,
+		text,
+		profile: {
+			name: config.botName,
+			personality: config.personality,
+			rules: loadBotRules(),
+		},
+		recent,
+	};
+}
 
 export async function processConversation(
 	ctx: Context,
@@ -407,6 +478,18 @@ export async function processConversation(
 		}
 		let responseText = taskResponse;
 		if (responseText === undefined) {
+			const preferenceInput = characterPreferenceInput(
+				ctx,
+				directUserText,
+				options,
+				buffer,
+			);
+			const characterPreferences = preferenceInput
+				? await (
+						dependencies.characterPreferenceTurn ??
+						resolveCharacterPreferenceTurn
+					)(preferenceInput)
+				: undefined;
 			const memory =
 				isSimpleAssistantMode || skipHistoricalContext
 					? { relevantEpisodes: [], relevantFacts: [] }
@@ -417,6 +500,8 @@ export async function processConversation(
 						});
 			const promptCtx = buildPromptContext({
 				...memory,
+				botRules: preferenceInput?.profile.rules,
+				characterPreferences,
 				mentionType: isGroupChat(ctx) ? mentionType : undefined,
 				groupAutoReply: options.groupAutoReply,
 				groupContinuation: options.groupContinuation,

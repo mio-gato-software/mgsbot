@@ -22,6 +22,7 @@ process.env.ENABLE_WEB_SEARCH = "false";
 process.env.ENABLE_WEB_READING = "false";
 process.env.ENABLE_WEATHER_LOOKUP = "false";
 process.env.ENABLE_COMMITMENTS = "false";
+process.env.ENABLE_CHARACTER_PREFERENCES = "false";
 // Typed classifier tests select their provider explicitly and mock its transport.
 process.env.CLASSIFIER_PROVIDER = resolveLegacyClassifierProvider();
 delete process.env.TYPESAFE_API_KEY;

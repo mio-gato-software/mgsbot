@@ -1,6 +1,10 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { z } from "zod";
+import {
+	CHARACTER_PREFERENCES_FILE,
+	characterPreferenceStateSchema,
+} from "../src/character-preferences.ts";
 import { COMMITMENTS_VERSION, stateSchema } from "../src/commitments/schema.ts";
 import {
 	chaptersSchema,
@@ -16,6 +20,7 @@ import { readStore } from "../src/memory/storage.ts";
 import { verifyMemoryBackup } from "../src/memory-backup.ts";
 
 const stores = new Map<string, { schema: z.ZodType; version?: number }>([
+	[CHARACTER_PREFERENCES_FILE, { schema: characterPreferenceStateSchema }],
 	["semantic.json", { schema: factsSchema }],
 	["identities.json", { schema: identitiesSchema }],
 	["follow-ups.json", { schema: followUpsSchema }],

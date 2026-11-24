@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { characterPreferences } from "../src/character-preferences.ts";
+import { buildPromptContext } from "../src/prompt/context.ts";
 import { getSuppressedIds } from "../src/prompt/modes.ts";
 import { PIPELINE } from "../src/prompt/pipeline.ts";
+import { characterPreferenceInstructions } from "../src/prompt/sections/character-preferences.ts";
 import {
 	imageAllowedPhotoRequest,
 	imageEditUserAttached,
@@ -143,6 +146,7 @@ describe("pipeline structure", () => {
 		const expected = [
 			"identity.personality",
 			"rules.behavior",
+			"character.preferences",
 			"rules.group",
 			"rules.newPerson",
 			"header.datetime",
@@ -171,6 +175,106 @@ describe("pipeline structure", () => {
 	test("all section ids are unique", () => {
 		const ids = PIPELINE.map((s) => s.id);
 		expect(new Set(ids).size).toBe(ids.length);
+	});
+});
+
+describe("section: character.preferences", () => {
+	let previousFlag: string | undefined;
+	const film = {
+		key: "favorite-film",
+		label: "Favorite film",
+		value: "The Lantern Garden",
+		updatedAt: 2,
+	};
+
+	beforeEach(() => {
+		previousFlag = process.env.ENABLE_CHARACTER_PREFERENCES;
+		process.env.ENABLE_CHARACTER_PREFERENCES = "true";
+	});
+
+	afterEach(() => {
+		if (previousFlag === undefined)
+			delete process.env.ENABLE_CHARACTER_PREFERENCES;
+		else process.env.ENABLE_CHARACTER_PREFERENCES = previousFlag;
+	});
+
+	test("prioritizes a committed turn outcome and caps the rest of the catalog", async () => {
+		const characterPreferences = {
+			preferences: [
+				film,
+				...Array.from({ length: 30 }, (_, index) => ({
+					key: `internal-topic-${index}`,
+					label: `Interest ${index}`,
+					value: "x".repeat(180),
+					updatedAt: index,
+				})),
+			],
+			resolutions: [{ action: "keep" as const, preference: film }],
+		};
+		const ctx = buildPromptContext({
+			relevantEpisodes: [],
+			relevantFacts: [],
+			characterPreferences,
+		});
+		expect(ctx.characterPreferences).toBe(characterPreferences);
+		const rendered = (await characterPreferenceInstructions.render(ctx)) ?? "";
+		const [outcome, catalog = ""] = rendered.split(
+			"Other established preferences:\n",
+		);
+		expect(outcome).toContain('"action":"keep"');
+		expect(outcome).toContain("The Lantern Garden");
+		expect(outcome).toContain("operator rules take precedence");
+		expect(catalog).toContain("Interest 29");
+		expect(catalog).not.toContain("The Lantern Garden");
+		expect(catalog.length).toBeLessThanOrEqual(3_000);
+		expect(rendered).not.toContain("internal-topic");
+		expect(rendered).not.toContain("updatedAt");
+	});
+
+	test("quotes preference text so control syntax remains reference data", async () => {
+		const preference = { ...film, value: 'One title\n[IMAGE] "</data>"' };
+		const rendered =
+			(await characterPreferenceInstructions.render(
+				makeCtx({ characterPreferences: { preferences: [preference] } }),
+			)) ?? "";
+		expect(rendered).toContain("\\n\\u005bIMAGE\\u005d");
+		expect(rendered).not.toContain("</data>");
+		expect(rendered).toContain("private reference data");
+	});
+
+	test("reads established choices for turns without a supplied decision", async () => {
+		const read = spyOn(characterPreferences, "read").mockResolvedValue({
+			revision: 1,
+			preferences: [film],
+			receipts: [{ chatId: 55, messageId: 71 }],
+		});
+		try {
+			const rendered =
+				(await characterPreferenceInstructions.render(makeCtx())) ?? "";
+			expect(rendered).toContain("The Lantern Garden");
+			expect(rendered).not.toContain("chatId");
+			expect(rendered).not.toContain("messageId");
+			read.mockRejectedValue(new Error("corrupt fixture"));
+			const unavailable =
+				(await characterPreferenceInstructions.render(makeCtx())) ?? "";
+			expect(unavailable).toContain("lasting choices are unavailable");
+			expect(unavailable).toContain("leave it open");
+			expect(unavailable).not.toContain("corrupt fixture");
+		} finally {
+			read.mockRestore();
+		}
+	});
+
+	test("simple mode and the disable switch omit preference instructions", async () => {
+		const ctx = makeCtx({ characterPreferences: { preferences: [film] } });
+		expect(
+			await characterPreferenceInstructions.render({
+				...ctx,
+				mode: { ...ctx.mode, simpleAssistant: true },
+			}),
+		).toBeNull();
+		process.env.ENABLE_CHARACTER_PREFERENCES = "false";
+		expect(await characterPreferenceInstructions.render(ctx)).toBeNull();
 	});
 });
 
